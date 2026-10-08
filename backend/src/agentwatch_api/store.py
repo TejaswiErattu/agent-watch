@@ -24,6 +24,27 @@ def event_sk(ts: str, event_id: str) -> str:
     return f"{ts}#{event_id}"
 
 
+def classify_cancellation(reasons: list[dict]) -> RecordResult:
+    """Map a 2-item TransactWriteItems CancellationReasons list to a result.
+
+    Item 0 is the event Put (attribute_not_exists(sk)); item 1 is the META Update
+    (keyVerifier = :kv). A non-failing item is reported as {"Code": "None"}.
+
+    - item 1 failed -> wrong verifier -> "forbidden"
+    - only item 0 failed -> duplicate SK -> "duplicate"
+    - anything else (throttling, conflict, validation, no failure) -> raise
+    """
+    if len(reasons) != 2:
+        raise RuntimeError(f"expected 2 cancellation reasons, got {len(reasons)}")
+    code0 = reasons[0].get("Code", "None")
+    code1 = reasons[1].get("Code", "None")
+    if code1 == "ConditionalCheckFailed":
+        return "forbidden"
+    if code0 == "ConditionalCheckFailed" and code1 == "None":
+        return "duplicate"
+    raise RuntimeError(f"unexpected cancellation reasons: {code0!r}, {code1!r}")
+
+
 @dataclass
 class AgentRecord:
     agent_id: str

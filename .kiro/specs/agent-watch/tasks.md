@@ -76,7 +76,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.4, 6.1, 24.1_
     - Commit: `feat(backend): in-memory event and owner queries`
 
-  - [ ] 1.11 Implement classify_cancellation
+  - [x] 1.11 Implement classify_cancellation
     - Write the failing tests first. In `backend/tests/test_store_classify.py`, one example per row of the design's cancellation table. Add `backend/tests/test_properties_store.py` with the classification clause of Property 28 over 2-item reason lists drawn from `{None, "ConditionalCheckFailed", "TransactionConflict", "ThrottlingError", "ValidationError"}`.
     - Add `classify_cancellation(reasons)` to `backend/src/agentwatch_api/store.py` (forbidden if item 1 failed, duplicate if only item 0 failed, else raise).
     - Property test: **Property 28: Transaction outcomes are classified correctly** (classification clause, required; service clause in 2.3).
