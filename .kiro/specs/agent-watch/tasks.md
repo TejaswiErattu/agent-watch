@@ -51,7 +51,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 21.6, 22.4_
     - Commit: `feat(backend): guardrail config parsing`
 
-  - [ ] 1.7 Implement credential parsing and matching
+  - [x] 1.7 Implement credential parsing and matching
     - Write the failing tests first. In `backend/tests/test_auth.py`, cover: headers are read case-insensitively; missing or malformed `x-agentwatch-owner` (1 to 64 of `[A-Za-z0-9._-]`) or `x-agentwatch-key-hash` (64 lowercase hex) returns `None`; `key_verifier` equals `sha256(key_hash.encode("ascii")).hexdigest()` on a known vector; `matches` uses `hmac.compare_digest` (patch and assert called). Add a Hypothesis test in `backend/tests/test_properties_auth.py` for the `auth.matches` clause of Property 14: true exactly when ownerId and verifier both equal.
     - Create `backend/src/agentwatch_api/auth.py`: `Credentials`, `parse_credentials(headers)`, `key_verifier(key_hash)`, `matches(record, creds)`. `Credentials.__repr__` hides the Key_Hash.
     - Property test: **Property 14: Authorization gate** (`auth.matches` clause, required; route clauses are added in 2.7).

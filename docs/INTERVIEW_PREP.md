@@ -48,3 +48,11 @@ Format per task:
 
 **Q:** Why would an empty string in a blocklist be dangerous? **A:** Depending on the matcher, `""` could match nothing (a silent no-op) or everything. Rejecting it removes the ambiguity.
 **Q:** What does a round-trip property test buy you? **A:** It proves serialize and parse are inverses over thousands of generated configs, which catches type drift such as tuple vs list or int vs float.
+
+## 1.7 Credential parsing and constant-time matching
+**Conceptual:** There's no full auth in the MVP, so each agent is bound to the ownerId plus key that first registered it. The server never stores anything that could be replayed as a credential. A database leak exposes only verifiers, not usable keys.
+**Technical:** Clients send `sha256(api_key)` as the Key_Hash. The server stores `sha256(key_hash)` as the Key_Verifier and compares with `hmac.compare_digest`, at a single call site. Headers are read case-insensitively because HTTP API lowercases them. `Credentials.key_hash` is `repr=False`, so it can't leak into logs through an f-string. Tradeoff: the Key_Hash is a bearer token, which is acceptable over HTTPS for an MVP. Real auth (Cognito) is a next step.
+
+**Q:** Why hash twice? **A:** If the DB stored the Key_Hash, anyone who read the DB could replay it. Storing a hash of it means a leaked value is useless as a credential.
+**Q:** Why constant-time comparison? **A:** `==` can return early on the first differing byte. Timing then leaks how much of a guess is right, and `compare_digest` removes that signal.
+**Q:** Is unsalted SHA-256 OK here? **A:** Yes for high-entropy random API keys, where brute force isn't feasible. For human passwords you'd use a slow salted KDF like Argon2 or bcrypt.
