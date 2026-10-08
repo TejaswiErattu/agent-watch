@@ -196,7 +196,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 8.8, 21.1, 21.2, 21.3, 21.4, 21.5_
     - Commit: `feat(sdk): watcher init and config cache with 60s sync`
 
-  - [ ] 3.8 Implement path forms and entry classification
+  - [x] 3.8 Implement path forms and entry classification
     - Write the failing tests first. In `sdk/tests/test_guardrails_paths.py`, cover: `absolute_path` resolves `./x` and `a/../x` lexically and keeps symlinks; `normalize_path` resolves symlinks (skip if `os.symlink` is not permitted); `path_forms` returns casefolded values; `~` expands; `is_directory_entry` is true for `"~/.ssh"` and `"/a/b"` and false for `".env"`.
     - Implement `_seps`, `absolute_path`, `normalize_path`, `path_forms`, `is_directory_entry` in `sdk/agentwatch/guardrails.py`.
     - _Requirements: 8.4_

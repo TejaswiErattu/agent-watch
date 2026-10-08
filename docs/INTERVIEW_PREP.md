@@ -234,3 +234,14 @@ Format per task:
 **Q:** Is starting with no rules (fail-open) safe? **A:** It's a deliberate availability tradeoff for a student tool and it's documented. A stricter product could refuse to start, or cache the last config on disk.
 
 **Q:** Why validate the config response on the client? **A:** It's input from the network. A malformed payload must not crash the agent or install a broken rule set, so it's treated like a failed fetch.
+
+## 3.8 Path forms for blocklist matching
+**Conceptual:** The same file has many spellings: `./.env`, `a/../.env`, `~/proj/.env`, a symlink, or `.ENV` on a case-insensitive Mac. A blocklist that compares raw strings is trivially bypassed. So every path is turned into a small set of canonical forms before any comparison happens.
+
+**Technical:** `absolute_path` expands `~`, makes the path absolute, and removes `.` and `..` lexically, keeping symlinks. `normalize_path` uses `realpath`, which resolves symlinks. `path_forms` returns both, casefolded. Casefolding goes beyond lowercasing: `ß` becomes `ss`. An entry is a directory entry if it contains a separator, otherwise a file name that matches anywhere. Tradeoff: casefolding can over-block on case-sensitive Linux, which is the safe direction.
+
+**Q:** Why keep both the lexical and the resolved path? **A:** A symlink named `.env` pointing at `secrets.txt` is only caught by the lexical name. A harmless-looking alias pointing into `~/.ssh` is only caught by the resolved path. Checking both closes both gaps.
+
+**Q:** Why `casefold()` instead of `lower()`? **A:** It's Unicode-aware caseless matching. `lower()` misses cases like `ß` vs `SS`, which an attacker could use to slip past a blocklist.
+
+**Q:** Is this a TOCTOU risk? **A:** Yes. A symlink can be swapped between the check and the open. The SDK is a guardrail against accidents, not a sandbox, and the README says so.
