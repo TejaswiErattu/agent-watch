@@ -162,3 +162,9 @@ Format per task:
 **Q:** Why check auth before validating the body? **A:** It denies unauthenticated callers a free validation oracle and avoids spending CPU parsing attacker-supplied payloads.
 **Q:** How can secrets leak through logs even if you never log them directly? **A:** Through exception messages, request dumps, or header logging. Log structured, allowlisted fields and only the exception type.
 **Q:** What's the difference between 401 and 403 here? **A:** 401 means no usable credentials were presented. 403 means valid-looking credentials that don't own this agent.
+
+## 3.1 Scaffold the SDK package
+**Conceptual:** The SDK runs inside a student's own project, so every dependency we add is one more thing that can break their install or bloat their environment. Tests that lock the dependency list to `requests` alone make "lightweight SDK" an enforced rule, not a promise.
+**Technical:** `test_packaging.py` parses `pyproject.toml` with `tomllib` and asserts exactly one runtime dependency with a bounded range (`requests>=2.31,<3`). It also walks every file under `sdk/agentwatch/` with `ast` and fails on imports of `boto3`, `botocore`, `numpy`, `pandas`, or `torch`. Tradeoff: an AST scan is static, so it misses dynamic imports via `importlib`. It's cheap and catches the common accident of a stray import.
+**Q:** Why keep boto3 out of the SDK? **A:** It's a heavy dependency, and it would need AWS credentials on the student's machine. The SDK only talks HTTPS to our API with an owner id and a key hash, so the AWS surface stays server-side.
+**Q:** Why an upper bound like `<3` on requests? **A:** It allows minor and patch updates but blocks a future major release with breaking changes from silently entering a user's environment.

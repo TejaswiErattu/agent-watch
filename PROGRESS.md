@@ -6,11 +6,13 @@ Last updated: 2026-10-08 by Kiro session
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
 - Group 2 (2.1–2.8) Service layer and API: `service.py` (`Result`, `authorize`, `authorize_or_register`, `ingest_event`, `get_config`, `put_config`, `NullPublisher`) and `handlers/api.py` (route table, 401 gate, 400/404/500 mapping, structured secret-free logs). Properties 4, 5, 6 (config clause), 7, 10, 12, 14 (route clauses), 15, 28 (service clause) added. Backend suite: 370 passed.
 
+- Task 3.1 SDK scaffold: `sdk/pyproject.toml` (requests-only), `agentwatch/__init__.py` with `__version__`, stub `client.py`/`guardrails.py`/`pricing.py`, `tests/conftest.py`, `tests/test_packaging.py` (3 passed).
+
 ## In progress
 - (none)
 
 ## Next step
-- Task 3.1: create `sdk/tests/test_packaging.py` (failing), then scaffold `sdk/pyproject.toml` (runtime `requests>=2.31,<3`), `sdk/agentwatch/__init__.py` with `__version__`, empty `client.py`/`guardrails.py`/`pricing.py`, and `sdk/tests/conftest.py`.
+- Task 3.2: write failing `sdk/tests/test_credentials.py` (known SHA-256 vector for `key_hash`, `GuardrailBlocked` with `violation_type`/`detail`, `SpendCapExceeded`/`PathBlocked` subclasses, credentials `repr` hides key and hash). Then implement `key_hash` and the exceptions in `sdk/agentwatch/client.py` and export the exceptions from `__init__.py`.
 
 ## Blocked
 - (none)
