@@ -70,7 +70,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.5, 4.6, 4.8, 23.2, 23.3_
     - Commit: `feat(backend): in-memory event writes with duplicate/forbidden results`
 
-  - [ ] 1.10 Implement InMemoryStore event and owner queries
+  - [x] 1.10 Implement InMemoryStore event and owner queries
     - Write the failing tests first. Extend `backend/tests/test_store_memory.py`: `query_events` returns events by SK in asc/desc, respects `limit`, applies a type filter after the page is read (pages can be short), and returns a `last_sk` for pagination; `list_by_owner` returns only META records with that ownerId; `sum_spend(agent_id, start_sk, end_sk)` sums `costUsd` over the SK range.
     - Implement `query_events`, `list_by_owner`, `sum_spend` in `InMemoryStore`.
     - _Requirements: 4.4, 6.1, 24.1_

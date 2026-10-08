@@ -70,3 +70,10 @@ Format per task:
 
 **Q:** How do you make ingestion idempotent? **A:** Use a client-generated eventId in the sort key and a conditional put on `attribute_not_exists(sk)`. A retry hits the condition and changes nothing.
 **Q:** Why a transaction instead of two writes? **A:** Without one, a crash between "store event" and "add cost" leaves the total wrong forever. A transaction makes them succeed or fail together.
+
+## 1.10 InMemoryStore event and owner queries
+**Conceptual:** Three read patterns cover the product. The timeline is one agent's events in time order, the inventory is every agent for one owner, and the spend window is one agent's events in a time range. Each maps to a single DynamoDB Query, with no scans.
+**Technical:** `query_events` reads `limit` items past the cursor, then applies the type filter. That matches DynamoDB, where `Limit` caps items read before the `FilterExpression`, so pages can come back short and the client keeps following the cursor. `sum_spend` uses an inclusive SK range, like `BETWEEN`. Tradeoff: filtering after the read wastes some read capacity versus a per-type index, but it avoids a second GSI at MVP scale.
+
+**Q:** Why can a DynamoDB page with a filter return fewer items than `Limit`? **A:** `Limit` counts items evaluated, not items returned. The filter runs afterward, so you paginate on `LastEvaluatedKey`, not on page size.
+**Q:** Why avoid Scan? **A:** A Scan reads the whole table and costs capacity in proportion to table size. A Query on a partition key reads only the matching items.

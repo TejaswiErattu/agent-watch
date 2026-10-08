@@ -186,3 +186,98 @@ def test_bump_last_seen_missing_agent_noop():
     s = InMemoryStore()
     s.bump_last_seen("ghost", "2026-10-08T10:00:00.000Z")
     assert s.items == {}
+
+
+# ---- 1.10 event and owner queries ----
+
+
+def seeded(n=5):
+    """Agent with n events at minutes 0..n-1, alternating llm_call / tool_call, cost = 0.01 * (i+1)."""
+    s = store_with_agent()
+    for i in range(n):
+        t = "llm_call" if i % 2 == 0 else "tool_call"
+        s.record_event(ev(ts=f"2026-10-08T10:0{i}:00.000Z", eid=f"{i:032x}", type_=t), 0.01 * (i + 1), KV)
+    return s
+
+
+def sks(items):
+    return [i["sk"] for i in items]
+
+
+def test_query_events_ascending_and_descending():
+    s = seeded()
+    asc, _ = s.query_events("bot", ascending=True, limit=50)
+    desc, _ = s.query_events("bot", ascending=False, limit=50)
+    assert sks(asc) == sorted(sks(asc))
+    assert len(asc) == 5
+    assert sks(desc) == list(reversed(sks(asc)))
+
+
+def test_query_events_excludes_meta():
+    items, _ = seeded().query_events("bot")
+    assert all(i["sk"] != META_SK for i in items)
+
+
+def test_query_events_limit_and_pagination():
+    s = seeded()
+    page1, cur = s.query_events("bot", limit=2)
+    assert len(page1) == 2 and cur == page1[-1]["sk"]
+    page2, cur = s.query_events("bot", limit=2, start_after=cur)
+    page3, cur = s.query_events("bot", limit=2, start_after=cur)
+    assert cur is None
+    assert sks(page1 + page2 + page3) == sks(s.query_events("bot")[0])
+
+
+def test_query_events_desc_pagination():
+    s = seeded()
+    page1, cur = s.query_events("bot", ascending=False, limit=3)
+    page2, cur2 = s.query_events("bot", ascending=False, limit=3, start_after=cur)
+    assert cur2 is None
+    assert sks(page1 + page2) == sks(s.query_events("bot", ascending=False)[0])
+
+
+def test_type_filter_applied_after_page_read():
+    s = seeded()  # types: llm, tool, llm, tool, llm
+    page, cur = s.query_events("bot", limit=2, type_filter="tool_call")
+    # Read 2 items (llm, tool), filter leaves 1: pages can be short.
+    assert [i["type"] for i in page] == ["tool_call"]
+    assert cur is not None
+    all_tools = []
+    cur = None
+    while True:
+        page, cur = s.query_events("bot", limit=2, type_filter="tool_call", start_after=cur)
+        all_tools += page
+        if cur is None:
+            break
+    assert len(all_tools) == 2 and all(i["type"] == "tool_call" for i in all_tools)
+
+
+def test_query_events_other_agent_isolated():
+    s = seeded()
+    s.create_agent_if_absent(rec(agent_id="other"))
+    assert s.query_events("other") == ([], None)
+    assert s.query_events("ghost") == ([], None)
+
+
+def test_list_by_owner_returns_meta_records_only():
+    s = seeded()
+    s.create_agent_if_absent(rec(agent_id="bot2"))
+    s.create_agent_if_absent(rec(agent_id="theirs", owner="someone"))
+    got = sorted(r.agent_id for r in s.list_by_owner("tejaswi"))
+    assert got == ["bot", "bot2"]
+    assert all(isinstance(r, AgentRecord) for r in s.list_by_owner("tejaswi"))
+    assert s.list_by_owner("nobody") == []
+
+
+def test_sum_spend_inclusive_sk_range():
+    s = seeded()  # costs 0.01..0.05 at minutes 0..4
+    lo = "2026-10-08T10:01:00.000Z#"
+    hi = "2026-10-08T10:03:00.000Z#g"  # 'g' sorts after any hex eventId
+    assert s.sum_spend("bot", lo, hi) == pytest.approx(0.02 + 0.03 + 0.04)
+
+
+def test_sum_spend_empty_and_all():
+    s = seeded()
+    assert s.sum_spend("bot", "2000", "2001") == 0.0
+    assert s.sum_spend("ghost", "0", "9") == 0.0
+    assert s.sum_spend("bot", "0", "9") == pytest.approx(0.15)

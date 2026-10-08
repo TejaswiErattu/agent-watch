@@ -144,14 +144,38 @@ class InMemoryStore:
         if "lastSeen" not in meta or meta["lastSeen"] < ts:
             meta["lastSeen"] = ts
 
+    def _event_items(self, agent_id: str) -> list[dict]:
+        return sorted(
+            (v for (aid, sk), v in self.items.items() if aid == agent_id and sk != META_SK),
+            key=lambda i: i["sk"],
+        )
+
     def query_events(self, agent_id, *, ascending=True, limit=50, type_filter=None, start_after=None):
-        raise NotImplementedError
+        """Like a DynamoDB Query: read up to `limit` items past the cursor, THEN filter by type.
+
+        Returns (items, last_sk). last_sk is None when the partition is exhausted.
+        """
+        items = self._event_items(agent_id)
+        if not ascending:
+            items.reverse()
+        if start_after is not None:
+            items = [i for i in items if (i["sk"] > start_after if ascending else i["sk"] < start_after)]
+        page, rest = items[:limit], items[limit:]
+        last_sk = page[-1]["sk"] if page and rest else None
+        if type_filter is not None:
+            page = [i for i in page if i["type"] == type_filter]
+        return copy.deepcopy(page), last_sk
 
     def list_by_owner(self, owner_id: str) -> list[AgentRecord]:
-        raise NotImplementedError
+        return [
+            item_to_record(v)
+            for (aid, sk), v in sorted(self.items.items())
+            if sk == META_SK and v.get("gsiOwnerId") == owner_id
+        ]
 
     def sum_spend(self, agent_id: str, start_sk: str, end_sk: str) -> float:
-        raise NotImplementedError
+        """Sum costUsd over events with start_sk <= sk <= end_sk (DynamoDB BETWEEN is inclusive)."""
+        return float(sum(i["costUsd"] for i in self._event_items(agent_id) if start_sk <= i["sk"] <= end_sk))
 
     def snapshot(self) -> dict:
         """Deep copy of all items, for 'store unchanged' assertions in tests."""
