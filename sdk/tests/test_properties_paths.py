@@ -126,12 +126,33 @@ from agentwatch.client import Response  # noqa: E402
 from fakes import FakeTransport  # noqa: E402
 
 
+def _ref_fold(s):
+    import unicodedata
+    return unicodedata.normalize("NFC", s).casefold()
+
+
 def _ref_forms(x):
-    """Independent reference: F(x) = {A(x).casefold(), N(x).casefold()} written from scratch."""
+    """Independent reference: F(x) = {fold(A(x)), fold(N(x))} written from scratch."""
     x = os.path.expanduser(x)
     a = os.path.normpath(os.path.join(os.getcwd(), x)) if not os.path.isabs(x) else os.path.normpath(x)
     n = os.path.realpath(x)
-    return {a.casefold(), n.casefold()}
+    return {_ref_fold(a), _ref_fold(n)}
+
+
+def _ref_ids(x):
+    """(st_dev, st_ino) of x and of every existing ancestor of x."""
+    x = os.path.abspath(os.path.expanduser(x))
+    ids = set()
+    while True:
+        try:
+            st = os.stat(x)
+            ids.add((st.st_dev, st.st_ino))
+        except OSError:
+            pass
+        parent = os.path.dirname(x)
+        if parent == x:
+            return ids
+        x = parent
 
 
 def reference_blocked(p, entries):
@@ -142,8 +163,14 @@ def reference_blocked(p, entries):
                 for a in pf:
                     if a == f or a.startswith(f.rstrip(os.sep) + os.sep):
                         return True
+            try:
+                st = os.stat(os.path.expanduser(e))
+            except OSError:
+                continue
+            if (st.st_dev, st.st_ino) in _ref_ids(p):
+                return True
         else:
-            if any(a.rsplit(os.sep, 1)[-1] == e.casefold() for a in pf):
+            if any(_ref_fold(e) in a.split(os.sep) for a in pf):
                 return True
     return False
 

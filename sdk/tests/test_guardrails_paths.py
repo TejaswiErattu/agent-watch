@@ -90,3 +90,59 @@ def test_blocked_entry_for_returns_first_match_or_none():
     assert blocked_entry_for("/a/b/notes", entries) == "/a/b"
     assert blocked_entry_for("/home/me/notes.md", entries) is None
     assert blocked_entry_for("/home/me/notes.md", []) is None
+
+
+# ---- 3.18 NFC folding, any-component names, inode directory match ----
+
+import unicodedata  # noqa: E402
+
+from agentwatch import guardrails  # noqa: E402
+from agentwatch.guardrails import blocked_entry_for  # noqa: E402
+
+NFC_E = unicodedata.normalize("NFC", "é")
+NFD_E = unicodedata.normalize("NFD", "é")
+
+
+def test_nfd_path_matches_nfc_name_entry():
+    assert NFC_E != NFD_E
+    assert blocked_entry_for(f"x/caf{NFD_E}.txt", [f"caf{NFC_E}.txt"]) is not None
+    assert blocked_entry_for(f"x/caf{NFC_E}.txt", [f"caf{NFD_E}.txt"]) is not None
+
+
+def test_nfd_path_matches_nfc_directory_entry(tmp_path):
+    root = os.path.realpath(tmp_path)
+    entry = os.path.join(root, f"r{NFC_E}sum{NFC_E}")
+    attempted = os.path.join(root, f"r{NFD_E}sum{NFD_E}", "cv.pdf")
+    assert blocked_entry_for(attempted, [entry]) == entry
+
+
+@pytest.mark.parametrize("p", [".git/config", "a/.git/hooks/pre-commit", "/x/.GIT/HEAD", ".git"])
+def test_name_entry_matches_any_component(p):
+    assert blocked_entry_for(p, [".git"]) == ".git"
+
+
+@pytest.mark.parametrize("p", ["a/.github/workflows/ci.yml", "a/my.git/x", "gitignore"])
+def test_name_entry_needs_whole_component(p):
+    assert blocked_entry_for(p, [".git"]) is None
+
+
+def test_directory_entry_matches_by_inode_when_strings_differ(tmp_path, monkeypatch):
+    # Simulate a firmlink/bind mount: an alias for a directory that realpath does NOT resolve.
+    root = os.path.realpath(tmp_path)
+    real = os.path.join(root, "secrets")
+    os.mkdir(real)
+    alias = os.path.join(root, "alias")
+    _symlink_or_skip(real, alias)
+    monkeypatch.setattr(guardrails, "normalize_path", guardrails.absolute_path)
+    attempted = os.path.join(alias, "key.pem")  # file need not exist; its parent does
+    assert real.casefold() not in {f for f in guardrails.path_forms(attempted)}
+    assert blocked_entry_for(attempted, [real]) == real
+    assert blocked_entry_for(alias, [real]) == real  # the directory itself
+    assert blocked_entry_for(os.path.join(root, "other.txt"), [real]) is None
+
+
+def test_missing_directory_entry_falls_back_to_strings(tmp_path):
+    root = os.path.realpath(tmp_path)
+    missing = os.path.join(root, "not-there")
+    assert blocked_entry_for(os.path.join(missing, "f"), [missing]) == missing
+    assert blocked_entry_for(os.path.join(root, "f"), [missing]) is None
