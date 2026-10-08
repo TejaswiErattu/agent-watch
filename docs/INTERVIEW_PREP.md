@@ -303,3 +303,10 @@ Format per task:
 **Q:** Why not raise on an unknown model? **A:** Observability shouldn't break the agent. A missing price is a reporting gap, not a safety failure, so warn and keep going.
 **Q:** How do you avoid log flooding from a hot loop? **A:** Deduplicate on a key (the model name) and warn once. In production you might rate-limit or emit a metric instead.
 **Q:** What's the risk of a $0 cost for unknown models with a spend cap? **A:** The cap could under-count. The warning makes it visible, and the fix is adding the model to the server-side price table, which every SDK picks up on the next sync.
+## 3.15 Verify the 3-line integration
+**Conceptual:** The pitch is "wrap your agent in 3 lines". This test pastes those exact lines from the design doc, makes one model call and one tool call, and checks that two events reach the API. If anyone changes the public API in a way that breaks the pitch, this test fails.
+
+**Technical:** The snippet passes no transport, so the test sets `AGENTWATCH_ENDPOINT` and `AGENTWATCH_KEY` with `monkeypatch` and swaps `RequestsTransport` for a `FakeTransport`. It uses a fake Anthropic client, flushes the sender, and asserts the order (`llm_call`, then `tool_call`) and identity fields. No SDK changes were needed. Tradeoff: patching a module attribute couples the test to the default transport's name, but it keeps the snippet verbatim.
+**Q:** Why test documentation snippets? **A:** Docs drift. A test that runs the README code keeps the onboarding promise true.
+**Q:** How do you test code that makes network calls without a network? **A:** Inject a transport seam, and for code that can't take an argument, patch the default at the module boundary.
+**Q:** What does this test not prove? **A:** That the real API accepts the events. That's covered by the end-to-end deploy check in group 4.

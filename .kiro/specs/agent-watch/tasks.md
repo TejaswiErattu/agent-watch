@@ -243,7 +243,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 3.4, 3.10_
     - Commit: `feat(sdk): warn once per unknown model`
 
-  - [ ] 3.15 Verify the 3-line integration
+  - [x] 3.15 Verify the 3-line integration
     - Write the failing tests first. Add `sdk/tests/test_integration_snippet.py` that runs the exact 3-line snippet from the design against a fake transport and fake Anthropic client, makes one LLM call and one tool call, flushes, and sees two events.
     - Fix any gaps in `sdk/agentwatch/__init__.py` or `client.py`.
     - _Requirements: 1.5_
