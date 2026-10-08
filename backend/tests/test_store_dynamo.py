@@ -58,6 +58,12 @@ class FakeClient:
         self._record("get_item", kwargs)
         return {}
 
+    def query(self, **kwargs):
+        self._record("query", kwargs)
+        if self.query_pages:
+            return self.query_pages.pop(0)
+        return {"Items": []}
+
 
 def make_record(**over):
     base = dict(agent_id="agent-1", owner_id="owner-1", key_verifier=KV, guardrails=EMPTY_CONFIG)
@@ -193,3 +199,103 @@ def test_put_config_returns_false_on_conditional_failure():
     )
     store = DynamoStore(TABLE, client=c)
     assert store.put_config("agent-1", EMPTY_CONFIG, KV) is False
+
+
+# ---- queries (task 1.13) ----
+
+
+def ev_item_av(sk, type_="tool_call", cost=0.0):
+    return {
+        "agentId": {"S": "agent-1"},
+        "sk": {"S": sk},
+        "type": {"S": type_},
+        "costUsd": {"N": str(Decimal(str(round(cost, 6))))},
+    }
+
+
+def test_query_events_builds_sk_between_excluding_meta():
+    c = FakeClient()
+    c.query_pages = [{"Items": [ev_item_av("2026-10-08T00:00:00.000Z#" + "a" * 32)]}]
+    store = DynamoStore(TABLE, client=c)
+    items, last_sk = store.query_events("agent-1", ascending=True, limit=10)
+    name, kwargs = c.calls[-1]
+    assert name == "query"
+    assert kwargs["TableName"] == TABLE
+    kce = kwargs["KeyConditionExpression"]
+    assert "agentId = :pk" in kce
+    assert "sk BETWEEN :lo AND :hi" in kce
+    # High bound must sort below META so events only come back.
+    assert kwargs["ExpressionAttributeValues"][":hi"]["S"] < META_SK
+    assert kwargs["ScanIndexForward"] is True
+    assert kwargs["Limit"] == 10
+    assert items[0]["sk"] == "2026-10-08T00:00:00.000Z#" + "a" * 32
+    assert last_sk is None
+
+
+def test_query_events_descending_and_cursor_and_type_filter():
+    c = FakeClient()
+    c.query_pages = [
+        {
+            "Items": [ev_item_av("s1", "llm_call"), ev_item_av("s2", "tool_call")],
+            "LastEvaluatedKey": {"agentId": {"S": "agent-1"}, "sk": {"S": "s2"}},
+        }
+    ]
+    store = DynamoStore(TABLE, client=c)
+    items, last_sk = store.query_events(
+        "agent-1", ascending=False, limit=2, type_filter="llm_call", start_after="s9"
+    )
+    _, kwargs = c.calls[-1]
+    assert kwargs["ScanIndexForward"] is False
+    assert kwargs["ExclusiveStartKey"]["sk"] == {"S": "s9"}
+    assert "#t = :type" in kwargs["FilterExpression"] or "type = :type" in kwargs["FilterExpression"]
+    assert last_sk == "s2"
+    # DynamoDB applies the FilterExpression server-side, so the store returns the service's items as-is.
+    assert all(set(i) >= {"sk", "type"} for i in items)
+
+
+def test_list_by_owner_queries_owner_index():
+    c = FakeClient()
+    c.query_pages = [
+        {
+            "Items": [
+                {
+                    "agentId": {"S": "agent-1"},
+                    "sk": {"S": META_SK},
+                    "ownerId": {"S": "owner-1"},
+                    "gsiOwnerId": {"S": "owner-1"},
+                    "keyVerifier": {"S": KV},
+                    "guardrails": {"M": {"dailySpendCapUsd": {"NULL": True}, "blockedPaths": {"L": []}}},
+                    "totalSpendUsd": {"N": "1.5"},
+                }
+            ]
+        }
+    ]
+    store = DynamoStore(TABLE, client=c)
+    records = store.list_by_owner("owner-1")
+    name, kwargs = c.calls[-1]
+    assert name == "query"
+    assert kwargs["IndexName"] == "ownerIndex"
+    assert "gsiOwnerId = :owner" in kwargs["KeyConditionExpression"]
+    assert kwargs["ExpressionAttributeValues"][":owner"] == {"S": "owner-1"}
+    assert len(records) == 1
+    assert records[0].owner_id == "owner-1"
+    assert records[0].total_spend_usd == 1.5
+
+
+def test_sum_spend_pages_and_converts_decimal():
+    c = FakeClient()
+    c.query_pages = [
+        {
+            "Items": [ev_item_av("s1", cost=0.25), ev_item_av("s2", cost=0.75)],
+            "LastEvaluatedKey": {"agentId": {"S": "agent-1"}, "sk": {"S": "s2"}},
+        },
+        {"Items": [ev_item_av("s3", cost=1.0)]},
+    ]
+    store = DynamoStore(TABLE, client=c)
+    total = store.sum_spend("agent-1", "s0", "s9")
+    assert total == 2.0
+    assert isinstance(total, float)
+    # Paged twice: second call carried ExclusiveStartKey.
+    query_calls = [k for n, k in c.calls if n == "query"]
+    assert len(query_calls) == 2
+    assert query_calls[1]["ExclusiveStartKey"]["sk"] == {"S": "s2"}

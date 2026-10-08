@@ -367,3 +367,73 @@ class DynamoStore:
             if _is_conditional_failure(err):
                 return
             raise
+
+    # ---- queries (task 1.13) ----
+
+    # Event SKs are "{ts}#{eventId}"; ts starts with a digit, so this range sits below "META".
+    _SK_LO = "0"
+    _SK_HI = "9999999999"  # below "META" lexicographically (digit < 'M')
+
+    def query_events(self, agent_id, *, ascending=True, limit=50, type_filter=None, start_after=None):
+        values = {
+            ":pk": {"S": agent_id},
+            ":lo": {"S": self._SK_LO},
+            ":hi": {"S": self._SK_HI},
+        }
+        kwargs = {
+            "TableName": self.table_name,
+            "KeyConditionExpression": "agentId = :pk AND sk BETWEEN :lo AND :hi",
+            "ScanIndexForward": ascending,
+            "Limit": limit,
+            "ExpressionAttributeValues": values,
+        }
+        if start_after is not None:
+            kwargs["ExclusiveStartKey"] = {"agentId": {"S": agent_id}, "sk": {"S": start_after}}
+        if type_filter is not None:
+            kwargs["FilterExpression"] = "#t = :type"
+            kwargs["ExpressionAttributeNames"] = {"#t": "type"}
+            values[":type"] = {"S": type_filter}
+        resp = self.client.query(**kwargs)
+        items = [av_to_item(i) for i in resp.get("Items", [])]
+        last_sk = resp.get("LastEvaluatedKey", {}).get("sk", {}).get("S")
+        return items, last_sk
+
+    def list_by_owner(self, owner_id: str) -> list[AgentRecord]:
+        records: list[AgentRecord] = []
+        start_key = None
+        while True:
+            kwargs = {
+                "TableName": self.table_name,
+                "IndexName": "ownerIndex",
+                "KeyConditionExpression": "gsiOwnerId = :owner",
+                "ExpressionAttributeValues": {":owner": {"S": owner_id}},
+            }
+            if start_key is not None:
+                kwargs["ExclusiveStartKey"] = start_key
+            resp = self.client.query(**kwargs)
+            records.extend(item_to_record(av_to_item(i)) for i in resp.get("Items", []))
+            start_key = resp.get("LastEvaluatedKey")
+            if not start_key:
+                return records
+
+    def sum_spend(self, agent_id: str, start_sk: str, end_sk: str) -> float:
+        total = 0.0
+        start_key = None
+        while True:
+            kwargs = {
+                "TableName": self.table_name,
+                "KeyConditionExpression": "agentId = :pk AND sk BETWEEN :lo AND :hi",
+                "ExpressionAttributeValues": {
+                    ":pk": {"S": agent_id},
+                    ":lo": {"S": start_sk},
+                    ":hi": {"S": end_sk},
+                },
+            }
+            if start_key is not None:
+                kwargs["ExclusiveStartKey"] = start_key
+            resp = self.client.query(**kwargs)
+            for i in resp.get("Items", []):
+                total += float(from_av(i["costUsd"]))
+            start_key = resp.get("LastEvaluatedKey")
+            if not start_key:
+                return float(total)

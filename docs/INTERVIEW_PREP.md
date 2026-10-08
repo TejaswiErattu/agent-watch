@@ -94,3 +94,12 @@ Format per task:
 **Q:** Why wrap the event write and the spend increment in a transaction? **A:** They must be atomic. Separately, a crash between them leaves `totalSpendUsd` permanently wrong. A transaction makes both apply or neither.
 **Q:** Why `Decimal(str(round(x,6)))` instead of passing a float? **A:** DynamoDB rejects native floats and stores numbers as decimals. Converting through a rounded string avoids binary-float artifacts like 0.1+0.2 and caps precision at 6 places.
 **Q:** How does the write guard against a record whose key was replaced mid-flight? **A:** The META Update carries `ConditionExpression keyVerifier = :kv`. If the stored verifier changed, item 1 fails with ConditionalCheckFailed and we return "forbidden".
+
+## 1.13 DynamoStore queries
+**Conceptual:** Three reads back the product: a timeline (one agent's events in order), an inventory (all agents for one owner), and a rolling spend sum (one agent's events in a time window). All three are single-partition or single-GSI Queries, never Scans, so cost scales with the data returned, not the table size.
+**Technical:** `query_events` uses `KeyConditionExpression sk BETWEEN :lo AND :hi` where `:hi` sorts below the reserved `META` sort key, so events come back but the agent record never does. Type filtering uses a server-side `FilterExpression` with a `#t` alias because `type` is reserved. `list_by_owner` queries the sparse `ownerIndex`, and `sum_spend` pages via `ExclusiveStartKey`, converting `Decimal` to `float`. Tradeoff: filtering by type after the read can return short pages, so callers follow the cursor instead of trusting page size, which matches how DynamoDB counts `Limit`.
+
+**Q:** Why does the SK high bound sort below "META"? **A:** Event SKs start with a digit and META starts with 'M'. A `BETWEEN` ending below "META" returns only events, so the agent record is never mixed into a timeline.
+**Q:** Why page with `ExclusiveStartKey` for the spend sum? **A:** A single Query returns at most 1 MB. For a correct total you must follow `LastEvaluatedKey` until it's absent, otherwise you'd undercount a busy day.
+**Q:** Why alias `type` as `#t`? **A:** `type` is a DynamoDB reserved word. Using an `ExpressionAttributeNames` placeholder is the supported way to reference it in a FilterExpression.
+**Q:** Why a sparse GSI for inventory instead of filtering the base table? **A:** Only agent records carry `gsiOwnerId`, so the index holds one item per agent. The owner query reads exactly those, with no event noise and no Scan.

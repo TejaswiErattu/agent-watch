@@ -89,7 +89,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.1, 4.2, 4.3, 4.6, 4.7, 4.8, 14.3, 23.5_
     - Commit: `feat(backend): DynamoStore writes with transactional event recording`
 
-  - [ ] 1.13 Implement DynamoStore queries
+  - [x] 1.13 Implement DynamoStore queries
     - Write the failing tests first. Extend `backend/tests/test_store_dynamo.py` with the fake client: `query_events` builds `KeyConditionExpression` on `sk` between event bounds (excluding `META`), sets `ScanIndexForward`, `Limit`, `ExclusiveStartKey`, and a `FilterExpression` on `type`; `list_by_owner` queries `ownerIndex` on `gsiOwnerId`; `sum_spend` pages through and converts `Decimal` to `float`.
     - Implement `query_events`, `list_by_owner`, `sum_spend` in `DynamoStore`.
     - _Requirements: 4.4, 5.3, 6.1, 24.1_
