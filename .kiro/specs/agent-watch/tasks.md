@@ -229,7 +229,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 8.1, 8.2, 8.3, 8.7, 8.8, 10.2, 16.3, 20.4_
     - Commit: `feat(sdk): enforce path blocklist with synchronous blocked event`
 
-  - [ ] 3.13 Implement the LLM wrapper event capture
+  - [x] 3.13 Implement the LLM wrapper event capture
     - Write the failing tests first. In `sdk/tests/test_llm_wrapper.py`, with fake Bedrock (`converse` returning `usage.inputTokens/outputTokens`) and fake Anthropic (`messages.create` returning `usage.input_tokens/output_tokens`) clients, cover: `aw.wrap` detects each client; other attributes pass through; an `llm_call` event has model, tokens, and `meta = {provider, messageCount, promptChars, maxTokens, stopReason, latencyMs}` and no prompt text; a provider exception propagates with no event. Add `sdk/tests/test_properties_capture.py` with Property 18 (mixed LLM and tool calls).
     - Implement `Watcher.wrap` and the Bedrock/Anthropic wrappers in `sdk/agentwatch/client.py` (no spend check yet).
     - Property test: **Property 18: Every wrapped call yields one well-formed event** (required).

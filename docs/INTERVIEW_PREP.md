@@ -289,3 +289,10 @@ Format per task:
 **Q:** What if the report fails? **A:** The block still happens. Failing closed on the action matters more than the telemetry, and retries cover brief outages.
 
 **Q:** Why test against an independently written reference? **A:** Comparing code to itself proves nothing. A second implementation from the spec catches shared misunderstandings.
+## 3.13 LLM wrapper event capture
+**Conceptual:** One line, `client = aw.wrap(client)`, makes every model call show up on the timeline with model, tokens, and latency. Students keep using the Bedrock or Anthropic client exactly as before. The prompt itself is never sent, only its shape (message count, character count), so watching an agent doesn't create a new data leak.
+
+**Technical:** `wrap` duck-types: a callable `converse` means Bedrock, a `messages.create` means Anthropic. A small proxy overrides only that method and forwards everything else through `__getattr__`. After a successful call it reads `usage` and queues an `llm_call` event with `meta = {provider, messageCount, promptChars, maxTokens, stopReason, latencyMs}`. Provider exceptions propagate and record nothing. Property 18 checks one well-formed event per call across mixed LLM and tool sequences. Tradeoff: streaming APIs aren't wrapped yet.
+**Q:** Why duck typing instead of `isinstance` checks on SDK classes? **A:** It avoids importing `boto3` or `anthropic` into the SDK, keeps the dependency footprint to `requests`, and works with fakes in tests.
+**Q:** How do you observe LLM usage without logging prompts? **A:** Record metadata only: token counts from the provider's usage block, message count, and character length. That's enough for cost and behavior, with no content to protect.
+**Q:** Why no event when the provider call fails? **A:** No tokens were billed and there's no usage to report. The exception still reaches the agent unchanged, so error handling isn't altered.

@@ -331,6 +331,22 @@ class Watcher:
                                 meta={"tool": tool_name[:200], "entry": entry[:200]})
         raise PathBlocked(path)
 
+    # ---- LLM wrapper (task 3.13) ----
+
+    def wrap(self, client):
+        """Duck-type the client: Bedrock runtime (converse) or Anthropic (messages.create)."""
+        if callable(getattr(client, "converse", None)):
+            return _BedrockProxy(client, self)
+        messages = getattr(client, "messages", None)
+        if messages is not None and callable(getattr(messages, "create", None)):
+            return _AnthropicProxy(client, self)
+        raise TypeError("aw.wrap expects a Bedrock runtime client (converse) or an Anthropic client "
+                        "(messages.create)")
+
+    def _record_llm(self, provider: str, model: str, in_tok: int, out_tok: int, meta: dict) -> None:
+        self._sender.enqueue(self._new_event("llm_call", model=model, inputTokens=in_tok,
+                                             outputTokens=out_tok, meta={"provider": provider, **meta}))
+
     # ---- tool wrapper ----
 
     def tool(self, fn=None, *, name: str | None = None, path_arg: str | None = None):
@@ -439,3 +455,84 @@ def init(agent_id: str, owner_id: str, api_key: str, endpoint: str | None = None
     w = Watcher(agent_id, owner_id, api, sender, clock or time.monotonic)
     w._maybe_refresh_config()
     return w
+
+
+# ---- LLM client proxies (task 3.13) ----
+
+
+def _text_chars(content) -> int:
+    """Characters of text in a message's content: a string, or a list of text blocks. Never the text itself."""
+    if isinstance(content, str):
+        return len(content)
+    n = 0
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                n += len(block["text"])
+    return n
+
+
+def _int_or_zero(v) -> int:
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else 0
+
+
+class _Proxy:
+    """Forward every attribute except the wrapped method."""
+
+    def __init__(self, inner, watcher: Watcher) -> None:
+        object.__setattr__(self, "_inner", inner)
+        object.__setattr__(self, "_watcher", watcher)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self._inner!r})"
+
+
+class _BedrockProxy(_Proxy):
+    def converse(self, **kwargs):
+        model = kwargs.get("modelId", "")
+        msgs = kwargs.get("messages") or []
+        system = kwargs.get("system") or []
+        max_tokens = (kwargs.get("inferenceConfig") or {}).get("maxTokens")
+        start = time.monotonic()
+        resp = self._inner.converse(**kwargs)  # provider errors propagate, no event
+        latency = int((time.monotonic() - start) * 1000)
+        usage = resp.get("usage", {}) if isinstance(resp, dict) else {}
+        self._watcher._record_llm("bedrock", model, _int_or_zero(usage.get("inputTokens")),
+                                  _int_or_zero(usage.get("outputTokens")), {
+            "messageCount": len(msgs),
+            "promptChars": sum(_text_chars(m.get("content")) for m in msgs if isinstance(m, dict))
+                           + _text_chars(system),
+            "maxTokens": max_tokens,
+            "stopReason": resp.get("stopReason") if isinstance(resp, dict) else None,
+            "latencyMs": latency,
+        })
+        return resp
+
+
+class _AnthropicMessagesProxy(_Proxy):
+    def create(self, **kwargs):
+        model = kwargs.get("model", "")
+        msgs = kwargs.get("messages") or []
+        start = time.monotonic()
+        msg = self._inner.create(**kwargs)
+        latency = int((time.monotonic() - start) * 1000)
+        usage = getattr(msg, "usage", None)
+        self._watcher._record_llm("anthropic", model, _int_or_zero(getattr(usage, "input_tokens", 0)),
+                                  _int_or_zero(getattr(usage, "output_tokens", 0)), {
+            "messageCount": len(msgs),
+            "promptChars": sum(_text_chars(m.get("content")) for m in msgs if isinstance(m, dict))
+                           + _text_chars(kwargs.get("system")),
+            "maxTokens": kwargs.get("max_tokens"),
+            "stopReason": getattr(msg, "stop_reason", None),
+            "latencyMs": latency,
+        })
+        return msg
+
+
+class _AnthropicProxy(_Proxy):
+    @property
+    def messages(self):
+        return _AnthropicMessagesProxy(self._inner.messages, self._watcher)
