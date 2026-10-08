@@ -10,6 +10,7 @@ import atexit
 import hashlib
 import json as _json
 import logging
+import os
 import queue
 import threading
 import time
@@ -219,3 +220,96 @@ class Sender:
 
     def _atexit_flush(self) -> None:
         self.flush(timeout=ATEXIT_FLUSH_S)
+
+
+# ---- config cache and Watcher (task 3.7) ----
+
+SYNC_INTERVAL_S = 60.0
+
+
+@dataclass(frozen=True)
+class ConfigResponse:
+    daily_spend_cap_usd: float | None
+    blocked_paths: tuple[str, ...]
+    pricing: dict
+
+
+# Before any successful fetch: no cap, no paths, every cost 0.0 (Req 21.4).
+EMPTY = ConfigResponse(None, (), {})
+
+
+def parse_config_response(body) -> ConfigResponse | None:
+    """Defensive parse of a Config_Response. None if anything is malformed (treated as a failed fetch)."""
+    if not isinstance(body, dict):
+        return None
+    g, p = body.get("guardrails"), body.get("pricing")
+    if not isinstance(g, dict) or not isinstance(p, dict) or not isinstance(p.get("models", {}), dict):
+        return None
+    cap, paths = g.get("dailySpendCapUsd"), g.get("blockedPaths")
+    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, (int, float)) or cap < 0):
+        return None
+    if not isinstance(paths, list) or not all(isinstance(x, str) and x for x in paths):
+        return None
+    return ConfigResponse(None if cap is None else float(cap), tuple(paths), p)
+
+
+class Watcher:
+    """One per agent. Holds credentials, the cached config, and the sender."""
+
+    def __init__(self, agent_id: str, owner_id: str, api: ApiClient, sender: Sender,
+                 clock: Callable[[], float]) -> None:
+        self.agent_id = agent_id
+        self.owner_id = owner_id
+        self._api = api
+        self._sender = sender
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._config: ConfigResponse = EMPTY
+        self._last_config_ok: float | None = None
+        self._last_config_attempt: float | None = None
+
+    def __repr__(self) -> str:
+        return f"Watcher(agent_id={self.agent_id!r}, owner_id={self.owner_id!r})"
+
+    @property
+    def config(self) -> ConfigResponse:
+        return self._config
+
+    def _fetch_config(self) -> None:
+        self._last_config_attempt = self._clock()
+        try:
+            resp = self._api.get_config(self.agent_id)
+        except TransportError as e:
+            _log.warning("agentwatch: config fetch failed (%s); keeping last good config", e)
+            return
+        except Exception as e:
+            _log.warning("agentwatch: config fetch failed (%s); keeping last good config", type(e).__name__)
+            return
+        parsed = parse_config_response(resp.body) if 200 <= resp.status < 300 else None
+        if parsed is None:
+            _log.warning("agentwatch: config fetch failed (status %s); keeping last good config", resp.status)
+            return
+        self._config = parsed
+        self._last_config_ok = self._last_config_attempt
+
+    def _maybe_refresh_config(self) -> None:
+        """Refetch when a Sync_Interval has passed since the last attempt (Req 21.2, 21.5)."""
+        with self._lock:
+            last = self._last_config_attempt
+            if last is not None and self._clock() - last < SYNC_INTERVAL_S:
+                return
+            self._fetch_config()
+
+
+def init(agent_id: str, owner_id: str, api_key: str, endpoint: str | None = None, *,
+         transport: Transport | None = None, clock: Callable[[], float] | None = None,
+         sleep: Callable[[float], None] | None = None) -> Watcher:
+    """Create a Watcher: hash the key, fetch config once, start the sender thread."""
+    endpoint = endpoint or os.environ.get("AGENTWATCH_ENDPOINT")
+    if not endpoint:
+        raise ValueError("agentwatch.init needs endpoint= or the AGENTWATCH_ENDPOINT env var")
+    api = ApiClient(endpoint, owner_id, key_hash(api_key), transport=transport)
+    sender = Sender(api, sleep=sleep or time.sleep)
+    w = Watcher(agent_id, owner_id, api, sender, clock or time.monotonic)
+    w._maybe_refresh_config()
+    return w

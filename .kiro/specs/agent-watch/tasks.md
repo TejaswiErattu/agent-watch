@@ -189,7 +189,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 3.8, 3.9, 17.4_
     - Commit: `feat(sdk): cost math over fetched pricing table`
 
-  - [ ] 3.7 Implement Watcher init and config fetch/cache/sync
+  - [x] 3.7 Implement Watcher init and config fetch/cache/sync
     - Write the failing tests first. In `sdk/tests/test_config_sync.py`, with a fake clock and `FakeTransport`, cover: `init` without `endpoint` and without `AGENTWATCH_ENDPOINT` raises `ValueError`; `init` fetches config once; a failing first fetch leaves `EMPTY` (no cap, no paths, empty pricing); a failure after a success keeps the last good config and logs a warning; refresh is attempted only when 60 s have passed since the last attempt. Add `sdk/tests/test_properties_sync.py` with the config clauses of Property 23.
     - Implement `agentwatch.init(agent_id, owner_id, api_key, endpoint=None, *, transport=None, clock=None, sleep=None)`, `Watcher`, `EMPTY`, and `_maybe_refresh_config` in `sdk/agentwatch/client.py` and `__init__.py`.
     - Property test: **Property 23: Sync timing and last-good cache** (config clauses, required; spend clause is added in 6.2).

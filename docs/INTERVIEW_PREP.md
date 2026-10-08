@@ -223,3 +223,14 @@ Format per task:
 **Q:** Why duplicate the formula instead of sharing a package? **A:** The SDK must stay requests-only and installable on its own. Four lines plus a property test is cheaper than a third package.
 
 **Q:** What happens before the first config fetch? **A:** The table is empty, so estimates are 0.0 and a cap can't block. That's the fail-open choice for availability, and it's documented.
+
+## 3.7 Watcher init and config sync
+**Conceptual:** When a student adds `.env` to the blocklist in the dashboard, the running agent should pick it up within a minute, without a restart. When the API is down, the agent should keep working with the last rules it saw, not crash and not silently drop its guardrails.
+
+**Technical:** `init` resolves the endpoint (argument, else `AGENTWATCH_ENDPOINT`), hashes the key, starts the `Sender`, and fetches config once. `_maybe_refresh_config` refetches when 60 s have passed since the last attempt, not the last success, so a failing API sees at most one request per minute. Any non-2xx, network error, or malformed body counts as a failure and keeps the last good `ConfigResponse`. Before any success it's `EMPTY`. Tradeoff: up to 60 s of staleness after a rule change.
+
+**Q:** Why time refreshes from the last attempt and not the last success? **A:** Timing from success would retry on every guardrail check during an outage, hammering a struggling API. Timing from the attempt caps it at once per interval.
+
+**Q:** Is starting with no rules (fail-open) safe? **A:** It's a deliberate availability tradeoff for a student tool and it's documented. A stricter product could refuse to start, or cache the last config on disk.
+
+**Q:** Why validate the config response on the client? **A:** It's input from the network. A malformed payload must not crash the agent or install a broken rule set, so it's treated like a failed fetch.
