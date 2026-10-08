@@ -190,3 +190,14 @@ Format per task:
 **Q:** Why strip the exception message from network errors? **A:** Library errors often embed the URL or request details. Keeping only the type means a logged error can't leak a credential.
 
 **Q:** Why a short 2 s timeout? **A:** The SDK runs inside someone else's agent. A slow monitoring backend must never stall the agent, so we fail fast and retry in the background.
+
+## 3.4 Send-with-retries policy
+**Conceptual:** Networks fail, and a monitoring SDK must never take the agent down with it. Some failures are temporary and worth retrying, like timeouts, 429s, and 5xx. Others won't change on retry, like a bad request or a wrong key, so retrying them only wastes time and hammers the server.
+
+**Technical:** `send_with_retries` makes up to 4 attempts with 0.5, 1, and 2 s sleeps through an injected `sleep`, so tests run instantly. It stops on 2xx, 400, 401, 403, or any other 4xx. A 401 or 403 logs one fixed message per process. Every failure path returns False, and nothing raises. Property 20 checks attempt counts and sleeps against random outcome sequences. Tradeoff: there's no jitter, which is fine for one client but would cause synchronized retries at scale.
+
+**Q:** Which HTTP statuses are safe to retry? **A:** Timeouts, connection errors, 429, and 5xx. Here POST is also safe to retry because eventId makes the write idempotent, so a duplicate is detected and not double-counted.
+
+**Q:** Why log the auth failure only once? **A:** A wrong key fails every event. Logging each one floods the user's console and hides real problems.
+
+**Q:** What would you add for many clients? **A:** Exponential backoff with full jitter, plus honoring `Retry-After` on 429, so clients don't retry in lockstep.

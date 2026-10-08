@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import json as _json
+import logging
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 REQUEST_TIMEOUT_S = 2.0
+_log = logging.getLogger("agentwatch")
 
 
 def key_hash(api_key: str) -> str:
@@ -121,3 +123,46 @@ class ApiClient:
 
     def get_spend(self, agent_id: str) -> Response:
         return self._call("GET", f"/agents/{agent_id}/spend")
+
+
+# ---- retry policy (task 3.4) ----
+
+BACKOFF_S = (0.5, 1, 2)  # 3 retries after the first attempt
+AUTH_FAILED_MSG = "agentwatch: authorization failed (check owner_id/api_key)"
+_auth_warned = False  # per process: a wrong key would otherwise log on every event
+
+
+def _retryable(resp: Response) -> bool:
+    return resp.status == 429 or resp.status >= 500
+
+
+def send_with_retries(api, event: dict, sleep: Callable[[float], None]) -> bool:
+    """POST one event. True on 2xx. Never raises; the agent always continues (Req 2.3, 2.6)."""
+    global _auth_warned
+    event_id = event.get("eventId")
+    for attempt in range(len(BACKOFF_S) + 1):
+        if attempt:
+            sleep(BACKOFF_S[attempt - 1])
+        try:
+            resp = api.post_event(event)
+        except TransportError:
+            continue
+        except Exception as e:  # a bug in a transport must not crash the agent
+            _log.warning("agentwatch: unexpected send error %s for event %s", type(e).__name__, event_id)
+            return False
+        if 200 <= resp.status < 300:
+            return True
+        if resp.status in (401, 403):
+            if not _auth_warned:
+                _auth_warned = True
+                _log.warning(AUTH_FAILED_MSG)
+            return False
+        if resp.status == 400:
+            msg = resp.body.get("error") if isinstance(resp.body, dict) else None
+            _log.warning("agentwatch: event %s rejected: %s", event_id, msg)
+            return False
+        if not _retryable(resp):  # other 4xx (404, 413...): retrying will not help
+            _log.warning("agentwatch: event %s rejected with status %s", event_id, resp.status)
+            return False
+    _log.warning("agentwatch: giving up on event %s after %d attempts", event_id, len(BACKOFF_S) + 1)
+    return False

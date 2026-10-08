@@ -169,7 +169,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 2.4, 2.5, 14.2, 14.4_
     - Commit: `feat(sdk): api client with credential headers`
 
-  - [ ] 3.4 Implement the send-with-retries policy
+  - [x] 3.4 Implement the send-with-retries policy
     - Write the failing tests first. In `sdk/tests/test_sender.py`, cover: 5xx then 200 succeeds on attempt 2; 401/403 logs `agentwatch: authorization failed (check owner_id/api_key)` once and does not retry; 400 logs the server message and does not retry; four failures log a warning with the eventId. Use a fake sleep. Extend `sdk/tests/test_properties_transport.py` with Property 20.
     - Implement `send_with_retries(api, event, sleep)` in `sdk/agentwatch/client.py` (backoff 0.5, 1, 2 s; retry on connection error, timeout, 429, 5xx; never raises).
     - Property test: **Property 20: Retry policy** (required).

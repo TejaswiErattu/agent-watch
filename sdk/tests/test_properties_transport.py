@@ -41,3 +41,36 @@ def test_property_19_credentials_sent_secrets_never_leaked(caplog, api_key, step
         assert api_key not in blob
     assert api_key not in caplog.text
     assert api_key not in repr(c)
+
+
+retry_outcome = st.sampled_from(["200", "201", "net", "timeout", "500", "503", "429", "400", "401", "403"])
+STOP = {"200", "201", "400", "401", "403"}
+
+
+def _retry_make(o):
+    if o == "net":
+        return TransportError("ConnectionError")
+    if o == "timeout":
+        return TransportError("Timeout")
+    return Response(int(o), {"error": "x"} if o == "400" else None)
+
+
+# Feature: agent-watch, Property 20: Retry policy
+@settings(max_examples=100)
+@given(outcomes=st.lists(retry_outcome, min_size=1, max_size=8))
+def test_property_20_retry_policy(outcomes):
+    import agentwatch.client as c
+    from agentwatch.client import send_with_retries
+
+    c._auth_warned = False
+    t = FakeTransport([_retry_make(o) for o in outcomes], default=Response(500, None))
+    a = ApiClient("https://x", "tejaswi", key_hash("k"), transport=t)
+    sleeps = []
+    ok = send_with_retries(a, {"eventId": "e" * 32}, sleeps.append)  # never raises
+
+    # Expected attempts: up to and including the first stopping outcome, capped at 4.
+    padded = outcomes + ["500"] * 4
+    expected = next((i + 1 for i, o in enumerate(padded[:4]) if o in STOP), 4)
+    assert len(t.requests) == expected
+    assert sleeps == [0.5, 1, 2][: expected - 1]
+    assert ok == (padded[expected - 1] in {"200", "201"})
