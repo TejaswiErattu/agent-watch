@@ -236,7 +236,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 1.1, 1.3, 1.4, 20.2_
     - Commit: `feat(sdk): LLM wrapper for Bedrock and Anthropic clients`
 
-  - [ ] 3.14 Add the unknown-model warn-once
+  - [x] 3.14 Add the unknown-model warn-once
     - Write the failing tests first. In `sdk/tests/test_pricing.py`, add a fixture clearing `pricing._warned`; cover a single warning naming the model after two calls with a fetched table, and none with `EMPTY`. Add `sdk/tests/test_properties_pricing.py` with Property 29 using `caplog`.
     - Implement `_warned` and `warn_unknown_model` in `sdk/agentwatch/pricing.py`; call it from the LLM wrapper only when the config came from a successful fetch.
     - Property test: **Property 29: Unknown models warn once per process** (required).

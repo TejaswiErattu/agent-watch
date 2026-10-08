@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 from .guardrails import blocked_entry_for
+from .pricing import warn_unknown_model
 
 REQUEST_TIMEOUT_S = 2.0
 _log = logging.getLogger("agentwatch")
@@ -344,6 +345,9 @@ class Watcher:
                         "(messages.create)")
 
     def _record_llm(self, provider: str, model: str, in_tok: int, out_tok: int, meta: dict) -> None:
+        # Only warn once a real table was fetched; EMPTY would flag every model (Req 3.10, 21.4).
+        if self._last_config_ok is not None:
+            warn_unknown_model(self._config.pricing, model)
         self._sender.enqueue(self._new_event("llm_call", model=model, inputTokens=in_tok,
                                              outputTokens=out_tok, meta={"provider": provider, **meta}))
 

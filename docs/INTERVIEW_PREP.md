@@ -296,3 +296,10 @@ Format per task:
 **Q:** Why duck typing instead of `isinstance` checks on SDK classes? **A:** It avoids importing `boto3` or `anthropic` into the SDK, keeps the dependency footprint to `requests`, and works with fakes in tests.
 **Q:** How do you observe LLM usage without logging prompts? **A:** Record metadata only: token counts from the provider's usage block, message count, and character length. That's enough for cost and behavior, with no content to protect.
 **Q:** Why no event when the provider call fails? **A:** No tokens were billed and there's no usage to report. The exception still reaches the agent unchanged, so error handling isn't altered.
+## 3.14 Unknown-model warn-once
+**Conceptual:** If a student uses a model the price table doesn't know, its cost is recorded as $0. That's silent under-reporting, so the SDK warns. But a warning on every call would bury the logs in a loop, so each unknown model warns once per process. Before the first config fetch the table is empty by design, so warnings are skipped then; they'd flag every model.
+
+**Technical:** `pricing.py` keeps a module-level `_warned` set and `warn_unknown_model(table, model)` logs on the `agentwatch` logger the first time. The LLM wrapper calls it only when `_last_config_ok` is set, meaning a fetch succeeded. `cost_from_table` stays pure. Property 29 checks each unknown model warns exactly once, known ones never, and nothing with EMPTY. Tradeoff: module-level state is shared across Watchers, which matches "per process" but needs a test fixture to reset.
+**Q:** Why not raise on an unknown model? **A:** Observability shouldn't break the agent. A missing price is a reporting gap, not a safety failure, so warn and keep going.
+**Q:** How do you avoid log flooding from a hot loop? **A:** Deduplicate on a key (the model name) and warn once. In production you might rate-limit or emit a metric instead.
+**Q:** What's the risk of a $0 cost for unknown models with a spend cap? **A:** The cap could under-count. The warning makes it visible, and the fix is adding the model to the server-side price table, which every SDK picks up on the next sync.
