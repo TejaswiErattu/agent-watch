@@ -58,7 +58,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 14.8, 14.9, 25.1_
     - Commit: `feat(backend): credential parsing and constant-time matching`
 
-  - [ ] 1.8 Define the Store protocol and InMemoryStore agent records
+  - [x] 1.8 Define the Store protocol and InMemoryStore agent records
     - Write the failing tests first. In `backend/tests/test_store_memory.py`, cover: `event_sk(ts, eventId) == f"{ts}#{eventId}"`; `META_SK == "META"`; `create_agent_if_absent` returns True once then False for the same agentId; `get_agent` returns None for unknown ids; `put_config` with a wrong verifier returns False and changes nothing; new records have null `firstSeen`/`lastSeen`/`model` and `totalSpendUsd == 0.0`.
     - Create `backend/src/agentwatch_api/store.py`: `AgentRecord` dataclass, `Store` Protocol (`get_agent`, `create_agent_if_absent`, `put_config`, `record_event`, `bump_last_seen`, `query_events`, `list_by_owner`, `sum_spend`), key helpers, and `InMemoryStore` methods for agent records.
     - _Requirements: 4.2, 4.3, 4.7, 23.1_

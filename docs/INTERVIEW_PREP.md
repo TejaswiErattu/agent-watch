@@ -56,3 +56,10 @@ Format per task:
 **Q:** Why hash twice? **A:** If the DB stored the Key_Hash, anyone who read the DB could replay it. Storing a hash of it means a leaked value is useless as a credential.
 **Q:** Why constant-time comparison? **A:** `==` can return early on the first differing byte. Timing then leaks how much of a guess is right, and `compare_digest` removes that signal.
 **Q:** Is unsalted SHA-256 OK here? **A:** Yes for high-entropy random API keys, where brute force isn't feasible. For human passwords you'd use a slow salted KDF like Argon2 or bcrypt.
+
+## 1.8 Store protocol and InMemoryStore agent records
+**Conceptual:** The service layer talks to a `Store` interface, not to DynamoDB. One fake that mirrors DynamoDB's conditional semantics lets every business rule be tested in milliseconds without AWS, while the real `DynamoStore` stays a thin adapter.
+**Technical:** It's a single table. The Agent_Record lives at `sk="META"` and events at `sk="{ts}#{eventId}"`. Event SKs start with a digit, so `META` sorts after all of them and never collides. `create_agent_if_absent` mimics `attribute_not_exists(sk)`, and `put_config` mimics `keyVerifier = :kv`. `gsiOwnerId` is written only on META items, which makes the owner GSI sparse. Tradeoff: the fake can drift from real DynamoDB behavior, so 1.12 tests the adapter's exact request shapes and 7.4 adds optional moto tests.
+
+**Q:** What is a sparse GSI and why use one? **A:** DynamoDB indexes only items that have the GSI key attribute. Putting `gsiOwnerId` only on agent records means the inventory query reads agents, never millions of events.
+**Q:** Why a Protocol instead of a base class? **A:** Structural typing. Any object with the right methods works, so test fakes don't need inheritance, and `runtime_checkable` still lets a test assert conformance.
