@@ -77,3 +77,20 @@ Format per task:
 
 **Q:** Why can a DynamoDB page with a filter return fewer items than `Limit`? **A:** `Limit` counts items evaluated, not items returned. The filter runs afterward, so you paginate on `LastEvaluatedKey`, not on page size.
 **Q:** Why avoid Scan? **A:** A Scan reads the whole table and costs capacity in proportion to table size. A Query on a partition key reads only the matching items.
+
+## 1.11 Classify transaction cancellation reasons
+**Conceptual:** A transactional event write can fail two ways we care about: the event already exists (duplicate) or the caller's key doesn't match (forbidden). DynamoDB reports failures per item in a `CancellationReasons` list, so we need one function that turns that raw list into a clean result the service layer can act on.
+**Technical:** The 2-item transaction orders the event Put first and the META Update second. If item 1 (the `keyVerifier` condition) failed we return "forbidden"; forbidden wins even if item 0 also failed, so a wrong key never looks like a duplicate. If only item 0 failed we return "duplicate". Any other combination (throttling, conflict, no failure) raises so the caller retries or 500s. Tradeoff: matching exact `Code` strings is brittle if AWS renames them, but it keeps the mapping explicit and testable without AWS.
+
+**Q:** Why check the verifier failure before the duplicate failure? **A:** Security first. A caller with the wrong key must always get "forbidden", never leak that an eventId exists via a "duplicate" response.
+**Q:** How does DynamoDB signal which item in a transaction failed? **A:** `TransactionCanceledException` carries a `CancellationReasons` list positionally aligned with the `TransactItems`; non-failing items show `{"Code": "None"}`.
+**Q:** Why raise on unexpected codes instead of defaulting? **A:** Throttling and conflicts are retryable and distinct from business outcomes. Collapsing them into a result would hide real failures and corrupt the retry logic.
+
+## 1.12 DynamoStore agent-record and event writes
+**Conceptual:** This is the real AWS-backed store. It must guarantee exactly one agent record per agentId, never double-count spend on SDK retries, and reject a caller whose key no longer matches, all without locks. DynamoDB conditional writes and a two-item transaction give those guarantees in a single round trip each.
+**Technical:** `create_agent_if_absent` uses `attribute_not_exists(sk)` so a lost race returns False instead of overwriting. `record_event` runs one `TransactWriteItems`: a conditional event Put plus a META Update that does `ADD totalSpendUsd` and `if_not_exists(firstSeen)` under `keyVerifier = :kv`. On cancellation it maps `CancellationReasons` to duplicate/forbidden/raise. Numbers go in as `Decimal(str(round(x,6)))`. Tradeoff: I hand-wrote low-level AttributeValue (de)serialization instead of using the resource API, which is more code but lets tests use a tiny fake client with no moto dependency.
+
+**Q:** How do you prevent a retried request from charging twice? **A:** The event Put is conditional on `attribute_not_exists(sk)`, and the cost ADD lives in the same transaction. If the event already exists, the whole transaction cancels and no cost is added.
+**Q:** Why wrap the event write and the spend increment in a transaction? **A:** They must be atomic. Separately, a crash between them leaves `totalSpendUsd` permanently wrong. A transaction makes both apply or neither.
+**Q:** Why `Decimal(str(round(x,6)))` instead of passing a float? **A:** DynamoDB rejects native floats and stores numbers as decimals. Converting through a rounded string avoids binary-float artifacts like 0.1+0.2 and caps precision at 6 places.
+**Q:** How does the write guard against a record whose key was replaced mid-flight? **A:** The META Update carries `ConditionExpression keyVerifier = :kv`. If the stored verifier changed, item 1 fails with ConditionalCheckFailed and we return "forbidden".

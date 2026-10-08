@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal, Protocol, runtime_checkable
 
 from .rules import GuardrailConfig, parse_config, to_json
@@ -201,3 +202,168 @@ class InMemoryStore:
     def snapshot(self) -> dict:
         """Deep copy of all items, for 'store unchanged' assertions in tests."""
         return copy.deepcopy(self.items)
+
+
+# ---- low-level DynamoDB attribute-value (de)serialization ----
+
+
+def _num(x: float | int) -> str:
+    return str(Decimal(str(round(float(x), 6))))
+
+
+def to_av(value) -> dict:
+    """Serialize a plain Python value to a DynamoDB AttributeValue (low-level client)."""
+    if isinstance(value, bool):
+        return {"BOOL": value}
+    if value is None:
+        return {"NULL": True}
+    if isinstance(value, str):
+        return {"S": value}
+    if isinstance(value, (int, float, Decimal)):
+        return {"N": _num(value)}
+    if isinstance(value, dict):
+        return {"M": {k: to_av(v) for k, v in value.items()}}
+    if isinstance(value, (list, tuple)):
+        return {"L": [to_av(v) for v in value]}
+    raise TypeError(f"cannot serialize {type(value)!r} to AttributeValue")
+
+
+def from_av(av: dict):
+    (tag, raw), = av.items()
+    if tag == "S":
+        return raw
+    if tag == "N":
+        f = float(raw)
+        return int(f) if f.is_integer() and "." not in raw and "e" not in raw.lower() else f
+    if tag == "BOOL":
+        return raw
+    if tag == "NULL":
+        return None
+    if tag == "M":
+        return {k: from_av(v) for k, v in raw.items()}
+    if tag == "L":
+        return [from_av(v) for v in raw]
+    raise TypeError(f"unknown AttributeValue tag {tag!r}")
+
+
+def item_to_av(item: dict) -> dict:
+    return {k: to_av(v) for k, v in item.items()}
+
+
+def av_to_item(av_item: dict) -> dict:
+    return {k: from_av(v) for k, v in av_item.items()}
+
+
+def _is_conditional_failure(err) -> bool:
+    code = getattr(err, "response", {}).get("Error", {}).get("Code")
+    return code == "ConditionalCheckFailedException"
+
+
+def _cancellation_reasons(err):
+    return getattr(err, "response", {}).get("CancellationReasons")
+
+
+class DynamoStore:
+    """DynamoDB-backed Store using the boto3 low-level client (typed AttributeValues)."""
+
+    def __init__(self, table_name: str, client=None) -> None:
+        self.table_name = table_name
+        if client is None:  # pragma: no cover - exercised only on AWS
+            import boto3
+
+            client = boto3.client("dynamodb")
+        self.client = client
+
+    def get_agent(self, agent_id: str) -> AgentRecord | None:
+        resp = self.client.get_item(
+            TableName=self.table_name,
+            Key={"agentId": {"S": agent_id}, "sk": {"S": META_SK}},
+            ConsistentRead=True,
+        )
+        item = resp.get("Item")
+        return item_to_record(av_to_item(item)) if item else None
+
+    def create_agent_if_absent(self, record: AgentRecord) -> bool:
+        try:
+            self.client.put_item(
+                TableName=self.table_name,
+                Item=item_to_av(record_to_item(record)),
+                ConditionExpression="attribute_not_exists(sk)",
+            )
+            return True
+        except Exception as err:
+            if _is_conditional_failure(err):
+                return False
+            raise
+
+    def put_config(self, agent_id: str, cfg: GuardrailConfig, key_verifier: str) -> bool:
+        try:
+            self.client.update_item(
+                TableName=self.table_name,
+                Key={"agentId": {"S": agent_id}, "sk": {"S": META_SK}},
+                UpdateExpression="SET guardrails = :g",
+                ConditionExpression="keyVerifier = :kv",
+                ExpressionAttributeValues={
+                    ":g": to_av(to_json(cfg)),
+                    ":kv": {"S": key_verifier},
+                },
+            )
+            return True
+        except Exception as err:
+            if _is_conditional_failure(err):
+                return False
+            raise
+
+    def record_event(self, event, cost: float, key_verifier: str) -> RecordResult:
+        event_item = {**event.item, "sk": event.sk, "costUsd": round(float(cost), 6)}
+        set_parts = ["firstSeen = if_not_exists(firstSeen, :ts)"]
+        values = {
+            ":c": {"N": _num(cost)},
+            ":ts": {"S": event.ts},
+            ":kv": {"S": key_verifier},
+        }
+        if event.type == "llm_call":
+            set_parts.append("model = :m")
+            values[":m"] = {"S": event.item["model"]}
+        update_expr = "ADD totalSpendUsd :c SET " + ", ".join(set_parts)
+        try:
+            self.client.transact_write_items(
+                TransactItems=[
+                    {
+                        "Put": {
+                            "TableName": self.table_name,
+                            "Item": item_to_av(event_item),
+                            "ConditionExpression": "attribute_not_exists(sk)",
+                        }
+                    },
+                    {
+                        "Update": {
+                            "TableName": self.table_name,
+                            "Key": {"agentId": {"S": event.agent_id}, "sk": {"S": META_SK}},
+                            "UpdateExpression": update_expr,
+                            "ConditionExpression": "keyVerifier = :kv",
+                            "ExpressionAttributeValues": values,
+                        }
+                    },
+                ]
+            )
+            return "stored"
+        except Exception as err:
+            reasons = _cancellation_reasons(err)
+            if reasons is not None:
+                return classify_cancellation(reasons)
+            raise
+
+    def bump_last_seen(self, agent_id: str, ts: str) -> None:
+        try:
+            self.client.update_item(
+                TableName=self.table_name,
+                Key={"agentId": {"S": agent_id}, "sk": {"S": META_SK}},
+                UpdateExpression="SET lastSeen = :ts",
+                ConditionExpression="attribute_not_exists(lastSeen) OR lastSeen < :ts",
+                ExpressionAttributeValues={":ts": {"S": ts}},
+            )
+        except Exception as err:
+            if _is_conditional_failure(err):
+                return
+            raise

@@ -83,7 +83,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.8, 23.4_
     - Commit: `feat(backend): classify transaction cancellation reasons`
 
-  - [ ] 1.12 Implement DynamoStore agent-record and event writes
+  - [x] 1.12 Implement DynamoStore agent-record and event writes
     - Write the failing tests first. In `backend/tests/test_store_dynamo.py`, use a hand-written fake low-level client that records calls and can raise a `TransactionCanceledException`-shaped `botocore.exceptions.ClientError` with `CancellationReasons`. Assert: `create_agent_if_absent` sends `attribute_not_exists(sk)` and writes `gsiOwnerId`; `record_event` sends two TransactItems in order (event Put with `attribute_not_exists(sk)`, META Update with `ADD totalSpendUsd`, `if_not_exists(firstSeen)`, `keyVerifier = :kv`); each cancellation row maps to the right result; numbers are written as `Decimal(str(round(x, 6)))`; `bump_last_seen` swallows `ConditionalCheckFailedException`.
     - Implement `DynamoStore.__init__(table_name, client=None)`, `get_agent` (consistent read), `create_agent_if_absent`, `put_config`, `record_event`, `bump_last_seen` in `backend/src/agentwatch_api/store.py`.
     - _Requirements: 4.1, 4.2, 4.3, 4.6, 4.7, 4.8, 14.3, 23.5_
