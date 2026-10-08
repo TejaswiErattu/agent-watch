@@ -6,13 +6,13 @@ Last updated: 2026-10-08 by Kiro session
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
 - Group 2 (2.1–2.8) Service layer and API: `service.py` (`Result`, `authorize`, `authorize_or_register`, `ingest_event`, `get_config`, `put_config`, `NullPublisher`) and `handlers/api.py` (route table, 401 gate, 400/404/500 mapping, structured secret-free logs). Properties 4, 5, 6 (config clause), 7, 10, 12, 14 (route clauses), 15, 28 (service clause) added. Backend suite: 370 passed.
 
-- Task 3.1 SDK scaffold: `sdk/pyproject.toml` (requests-only), `agentwatch/__init__.py` with `__version__`, stub `client.py`/`guardrails.py`/`pricing.py`, `tests/conftest.py`, `tests/test_packaging.py` (3 passed).
+- Group 3 (3.1–3.16) SDK: key hash and exceptions, `ApiClient`, retrying background `Sender`, cost math, `Watcher` config cache with 60 s sync, path blocklist (forms, matching, symlinks, enforcement with a synchronous blocked event), tool wrapper, LLM wrapper for Bedrock `converse` and Anthropic `messages.create` (metadata only, no prompt text), unknown-model warn-once, and a test that runs the 3-line snippet verbatim. Properties 1, 18–20, 23 (config), 24–27, 29 added. Checkpoint: SDK 136 passed, backend 381 passed.
 
 ## In progress
 - (none)
 
 ## Next step
-- Task 3.2: write failing `sdk/tests/test_credentials.py` (known SHA-256 vector for `key_hash`, `GuardrailBlocked` with `violation_type`/`detail`, `SpendCapExceeded`/`PathBlocked` subclasses, credentials `repr` hides key and hash). Then implement `key_hash` and the exceptions in `sdk/agentwatch/client.py` and export the exceptions from `__init__.py`.
+- Task 4.1: write failing `backend/tests/test_alerts.py` (subject names agentId and violation; spend_cap body has `attemptedCostUsd`, blocked_path body has `attemptedPath`; `publish_alert` returns True on success; a raising publisher returns False and logs `alert_publish_failed` with agentId and eventId) and `backend/tests/test_properties_alerts.py` (Property 17). Then create `backend/src/agentwatch_api/alerts.py` with `format_alert`, `publish_alert`, `SnsPublisher(topic_arn, client=None)`.
 
 ## Blocked
 - (none)
@@ -34,6 +34,10 @@ Last updated: 2026-10-08 by Kiro session
 - 2026-10-08 SDK config refresh is timed from the last attempt, not the last success (design), so an outage gets at most one request per 60 s.
 
 - 2026-10-08 Blocked events carry the tool name and matching entry in `meta` (`{tool, entry}`), because backend validation drops `tool` on `blocked` events.
+
+- 2026-10-08 The LLM wrapper doesn't add to Local_Spend_Total yet. Task 6.2 owns spend accounting, so 3.13 records events only, which matches "no spend check yet".
+- 2026-10-08 `aw.wrap` raises `TypeError` for a client that has neither `converse` nor `messages.create`. Wrapping it silently would record nothing and hide the mistake.
+- 2026-10-08 Unknown-model warnings run only after a successful config fetch (`_last_config_ok` is set). With EMPTY, every model is unknown, so warnings would just be noise (Req 21.4).
 
 ## Open bugs
 - (none known)

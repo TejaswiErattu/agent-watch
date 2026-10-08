@@ -149,7 +149,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
   - [x] 2.8 Checkpoint: service and API
     - Write the failing tests first. Run `pytest` in `backend/` and fix anything red; ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. SDK with path blocklist
+- [x] 3. SDK with path blocklist
   - [x] 3.1 Scaffold the SDK package
     - Write the failing tests first. Add `sdk/tests/test_packaging.py`: `import agentwatch` works and exposes `__version__`; `pyproject.toml` lists exactly one runtime dependency, `requests`, with a version range; no file under `sdk/agentwatch/` imports `boto3`, `botocore`, `numpy`, `pandas`, or `torch` (AST scan).
     - Create `sdk/pyproject.toml` (runtime `requests>=2.31,<3`; dev extras pinned `pytest`, `hypothesis`), `sdk/agentwatch/__init__.py`, empty `client.py`, `guardrails.py`, `pricing.py`, and `sdk/tests/conftest.py` with the Hypothesis profile.
@@ -249,7 +249,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 1.5_
     - Commit: `test(sdk): 3-line integration snippet`
 
-  - [ ] 3.16 Checkpoint: SDK
+  - [x] 3.16 Checkpoint: SDK
     - Write the failing tests first. Run `pytest` in `sdk/` and `backend/` and fix anything red; ensure all tests pass, ask the user if questions arise.
 
 - [ ] 4. The `.env` block and SNS alert, end to end
