@@ -262,3 +262,82 @@ def test_client_cost_dropped_even_if_garbage():
     ev = validate_event(base(costUsd="free!"), NOW)
     assert isinstance(ev, Event)
     assert "costUsd" not in ev.item
+
+
+# ---- review fixes before checkpoint 1.14 ----
+
+
+@pytest.mark.parametrize(
+    "ts",
+    [
+        "٢٠٢٦-10-08T11:59:59.123Z",  # Arabic-Indic year
+        "2026-10-08T11:59:59.١٢٣Z",  # Arabic-Indic millis
+        "２０２６-10-08T11:59:59.123Z",  # fullwidth digits
+    ],
+)
+def test_ts_rejects_non_ascii_digits(ts):
+    # \d matches these, and they would sort above "META" in the table.
+    assert err(validate_event(base(ts=ts), NOW)).field == "ts"
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize(
+    "make,field",
+    [
+        (lambda v: base(meta={"x": v}), "meta"),
+        (lambda v: base(meta={"a": [1, {"b": v}]}), "meta"),
+        (lambda v: llm(inputTokens=v), "inputTokens"),
+        (lambda v: blocked("spend_cap", attemptedCostUsd=v), "attemptedCostUsd"),
+        (lambda v: base(costUsd=v), "costUsd"),  # rejected even though it would be dropped
+        (lambda v: base(inputTokens=v), "inputTokens"),  # foreign field on a tool_call
+    ],
+)
+def test_non_finite_numbers_rejected_anywhere(make, field, bad):
+    assert err(validate_event(make(bad), NOW)).field == field
+
+
+def nested(depth):
+    """A dict nested `depth` levels deep: nested(1) == {}."""
+    d: dict = {}
+    for _ in range(depth - 1):
+        d = {"k": d}
+    return d
+
+
+def test_meta_depth_32_ok():
+    assert isinstance(validate_event(base(meta=nested(32)), NOW), Event)
+
+
+def test_meta_depth_over_32_rejected():
+    assert err(validate_event(base(meta=nested(33)), NOW)).field == "meta"
+
+
+def test_meta_list_nesting_counts_too():
+    meta = {"k": []}
+    inner = meta["k"]
+    for _ in range(31):  # meta(1) + 32 lists = 33 levels
+        inner.append([])
+        inner = inner[0]
+    assert err(validate_event(base(meta=meta), NOW)).field == "meta"
+
+
+def test_very_deep_meta_rejected_without_recursion_error():
+    assert err(validate_event(base(meta=nested(5000)), NOW)).field == "meta"
+
+
+@pytest.mark.parametrize(
+    "make,foreign",
+    [
+        (lambda: base(inputTokens="lots", outputTokens=-3, model=5), ("inputTokens", "outputTokens", "model")),
+        (lambda: base(attemptedCostUsd=-1, violationType="nope", attemptedPath=""),
+         ("attemptedCostUsd", "violationType", "attemptedPath")),
+        (lambda: llm(tool=7, target=None, attemptedPath="x"), ("tool", "target", "attemptedPath")),
+        (lambda: blocked("blocked_path", attemptedCostUsd=-1, model="m"), ("attemptedCostUsd", "model")),
+        (lambda: blocked("spend_cap", attemptedPath="", inputTokens="x"), ("attemptedPath", "inputTokens")),
+    ],
+)
+def test_fields_of_other_types_are_dropped(make, foreign):
+    ev = validate_event(make(), NOW)
+    assert isinstance(ev, Event), ev
+    for name in foreign:
+        assert name not in ev.item

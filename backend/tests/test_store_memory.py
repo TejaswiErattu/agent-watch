@@ -281,3 +281,30 @@ def test_sum_spend_empty_and_all():
     assert s.sum_spend("bot", "2000", "2001") == 0.0
     assert s.sum_spend("ghost", "0", "9") == 0.0
     assert s.sum_spend("bot", "0", "9") == pytest.approx(0.15)
+
+
+# ---- review fixes before checkpoint 1.14: match DynamoStore ----
+
+
+def test_total_spend_adds_rounded_cost():
+    s = store_with_agent()
+    s.record_event(ev(eid="1" * 32), 0.1234567, KV)
+    s.record_event(ev(eid="2" * 32), 0.0000004, KV)
+    # DynamoStore ADDs Decimal(str(round(cost, 6))), so the total must use the same rounding.
+    assert s.get_agent("bot").total_spend_usd == round(0.1234567, 6) + round(0.0000004, 6)
+
+
+def test_query_events_exactly_full_final_page_returns_cursor():
+    # DynamoDB sets LastEvaluatedKey whenever Limit is reached, even if nothing follows.
+    s = seeded(4)
+    page1, cur = s.query_events("bot", limit=2)
+    page2, cur = s.query_events("bot", limit=2, start_after=cur)
+    assert len(page2) == 2 and cur == page2[-1]["sk"]
+    page3, cur = s.query_events("bot", limit=2, start_after=cur)
+    assert page3 == [] and cur is None
+
+
+def test_query_events_full_page_cursor_with_filter():
+    s = seeded(2)  # llm, tool
+    page, cur = s.query_events("bot", limit=2, type_filter="llm_call")
+    assert len(page) == 1 and cur is not None

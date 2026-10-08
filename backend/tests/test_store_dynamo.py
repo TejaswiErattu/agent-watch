@@ -299,3 +299,125 @@ def test_sum_spend_pages_and_converts_decimal():
     query_calls = [k for n, k in c.calls if n == "query"]
     assert len(query_calls) == 2
     assert query_calls[1]["ExclusiveStartKey"]["sk"] == {"S": "s2"}
+
+
+# ---- review fixes before checkpoint 1.14: missing 1.12 coverage ----
+
+from agentwatch_api.rules import GuardrailConfig  # noqa: E402
+from agentwatch_api.store import (  # noqa: E402
+    _num,
+    from_av,
+    item_to_record,
+    record_to_item,
+    to_av,
+)
+
+
+def tool_event():
+    item = {"agentId": "agent-1", "ownerId": "owner-1", "ts": "2026-10-08T00:00:00.000Z",
+            "eventId": "e" * 32, "type": "tool_call", "tool": "read_file", "target": "x", "meta": {}}
+    return Event(agent_id="agent-1", owner_id="owner-1", ts=item["ts"], event_id=item["eventId"],
+                 type="tool_call", item=item)
+
+
+def transact_items(c):
+    name, kwargs = c.calls[-1]
+    assert name == "transact_write_items"
+    return kwargs["TransactItems"]
+
+
+def test_event_put_has_no_verifier_or_gsi_owner():
+    c = FakeClient()
+    DynamoStore(TABLE, client=c).record_event(llm_event(), 0.01, KV)
+    item = transact_items(c)[0]["Put"]["Item"]
+    assert "keyVerifier" not in item
+    assert "gsiOwnerId" not in item
+    assert item["sk"] == {"S": llm_event().sk}
+
+
+def test_model_set_only_for_llm_call():
+    c = FakeClient()
+    store = DynamoStore(TABLE, client=c)
+    store.record_event(llm_event(), 0.0, KV)
+    upd = transact_items(c)[1]["Update"]
+    assert "model = :m" in upd["UpdateExpression"]
+    assert upd["ExpressionAttributeValues"][":m"] == {"S": "claude"}
+
+    store.record_event(tool_event(), 0.0, KV)
+    upd = transact_items(c)[1]["Update"]
+    assert "model" not in upd["UpdateExpression"]
+    assert ":m" not in upd["ExpressionAttributeValues"]
+
+
+@pytest.mark.parametrize(
+    "reasons",
+    [
+        [{"Code": "ThrottlingError"}, {"Code": "None"}],
+        [{"Code": "None"}, {"Code": "TransactionConflict"}],
+        [{"Code": "None"}, {"Code": "None"}],
+    ],
+)
+def test_unexpected_cancellation_raises_runtime_error(reasons):
+    c = FakeClient()
+    c.raise_on["transact_write_items"] = cancel_error(reasons)
+    with pytest.raises(RuntimeError):
+        DynamoStore(TABLE, client=c).record_event(llm_event(), 0.0, KV)
+
+
+def test_client_error_without_cancellation_reasons_is_reraised():
+    c = FakeClient()
+    original = ClientError(
+        {"Error": {"Code": "ProvisionedThroughputExceededException", "Message": "slow down"}},
+        "TransactWriteItems",
+    )
+    c.raise_on["transact_write_items"] = original
+    with pytest.raises(ClientError) as info:
+        DynamoStore(TABLE, client=c).record_event(llm_event(), 0.0, KV)
+    assert info.value is original
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [(10, "10"), (0, "0"), (-3, "-3"), (2**53 + 1, str(2**53 + 1)), (0.1234567, "0.1234567"), (1.0, "1.0")],
+)
+def test_num_is_exact_and_keeps_ints_as_ints(value, expected):
+    # Only costs are rounded (by the caller); other numbers are written exactly.
+    assert _num(value) == expected
+
+
+def test_event_put_cost_is_rounded():
+    c = FakeClient()
+    DynamoStore(TABLE, client=c).record_event(llm_event(), 0.123456789, KV)
+    assert transact_items(c)[0]["Put"]["Item"]["costUsd"] == {"N": "0.123457"}
+
+
+@pytest.mark.parametrize("value", [10, 0, -3, 2**53 + 1, 0.1234567, 1.5])
+def test_number_attribute_round_trip_is_exact(value):
+    back = from_av(to_av(value))
+    assert back == value and type(back) is type(value)
+
+
+def test_int_token_counts_written_as_ints():
+    c = FakeClient()
+    DynamoStore(TABLE, client=c).record_event(llm_event(), 0.0, KV)
+    item = transact_items(c)[0]["Put"]["Item"]
+    assert item["inputTokens"] == {"N": "10"}
+    assert item["outputTokens"] == {"N": "5"}
+
+
+@pytest.mark.parametrize(
+    "rec",
+    [
+        make_record(),  # null cap, Unreported_Agent (no firstSeen/lastSeen/model)
+        make_record(guardrails=GuardrailConfig(None, (".env", "~/.ssh"))),
+        make_record(guardrails=GuardrailConfig(2.5, (".env",)), first_seen="2026-10-08T00:00:00.000Z",
+                    last_seen="2026-10-08T01:00:00.000Z", model="claude", total_spend_usd=0.123456),
+        make_record(guardrails=GuardrailConfig(3, ()), total_spend_usd=0.0),
+    ],
+)
+def test_record_round_trip_through_attribute_values(rec):
+    av = {k: to_av(v) for k, v in record_to_item(rec).items()}
+    back = item_to_record({k: from_av(v) for k, v in av.items()})
+    assert back == rec
+    if rec.guardrails.daily_spend_cap_usd is None:
+        assert av["guardrails"]["M"]["dailySpendCapUsd"] == {"NULL": True}

@@ -152,8 +152,10 @@ class InMemoryStore:
         key = (event.agent_id, event.sk)
         if key in self.items:  # item 0 condition
             return "duplicate"
-        self.items[key] = {**copy.deepcopy(event.item), "sk": event.sk, "costUsd": round(cost, 6)}
-        meta["totalSpendUsd"] = meta.get("totalSpendUsd", 0.0) + cost
+        rounded = round_cost(cost)
+        self.items[key] = {**copy.deepcopy(event.item), "sk": event.sk, "costUsd": rounded}
+        # DynamoStore ADDs the rounded cost, so the total uses it too.
+        meta["totalSpendUsd"] = meta.get("totalSpendUsd", 0.0) + rounded
         meta.setdefault("firstSeen", event.ts)
         if event.type == "llm_call":
             meta["model"] = event.item["model"]
@@ -175,15 +177,16 @@ class InMemoryStore:
     def query_events(self, agent_id, *, ascending=True, limit=50, type_filter=None, start_after=None):
         """Like a DynamoDB Query: read up to `limit` items past the cursor, THEN filter by type.
 
-        Returns (items, last_sk). last_sk is None when the partition is exhausted.
+        Returns (items, last_sk). Like LastEvaluatedKey, last_sk is set whenever `limit` items
+        were read, even if nothing follows (the next page is then empty with last_sk None).
         """
         items = self._event_items(agent_id)
         if not ascending:
             items.reverse()
         if start_after is not None:
             items = [i for i in items if (i["sk"] > start_after if ascending else i["sk"] < start_after)]
-        page, rest = items[:limit], items[limit:]
-        last_sk = page[-1]["sk"] if page and rest else None
+        page = items[:limit]
+        last_sk = page[-1]["sk"] if page and len(page) == limit else None
         if type_filter is not None:
             page = [i for i in page if i["type"] == type_filter]
         return copy.deepcopy(page), last_sk
@@ -207,8 +210,22 @@ class InMemoryStore:
 # ---- low-level DynamoDB attribute-value (de)serialization ----
 
 
-def _num(x: float | int) -> str:
-    return str(Decimal(str(round(float(x), 6))))
+def round_cost(cost: float) -> float:
+    """The single rounding rule for costs (6 dp), shared by both stores."""
+    return round(float(cost), 6)
+
+
+def _num(x: float | int | Decimal) -> str:
+    """Exact DynamoDB N string. Ints stay ints ("10", not "10.0"); costs are rounded by the caller."""
+    if isinstance(x, int):
+        return str(x)
+    if isinstance(x, Decimal):
+        return str(x)
+    return str(Decimal(repr(float(x))))
+
+
+def _cost_num(cost: float) -> str:
+    return _num(round_cost(cost))
 
 
 def to_av(value) -> dict:
@@ -233,8 +250,10 @@ def from_av(av: dict):
     if tag == "S":
         return raw
     if tag == "N":
-        f = float(raw)
-        return int(f) if f.is_integer() and "." not in raw and "e" not in raw.lower() else f
+        # Integer-looking strings parse as exact ints (no float detour for big values).
+        if "." not in raw and "e" not in raw.lower():
+            return int(Decimal(raw))
+        return float(raw)
     if tag == "BOOL":
         return raw
     if tag == "NULL":
@@ -315,10 +334,10 @@ class DynamoStore:
             raise
 
     def record_event(self, event, cost: float, key_verifier: str) -> RecordResult:
-        event_item = {**event.item, "sk": event.sk, "costUsd": round(float(cost), 6)}
+        event_item = {**event.item, "sk": event.sk, "costUsd": round_cost(cost)}
         set_parts = ["firstSeen = if_not_exists(firstSeen, :ts)"]
         values = {
-            ":c": {"N": _num(cost)},
+            ":c": {"N": _cost_num(cost)},
             ":ts": {"S": event.ts},
             ":kv": {"S": key_verifier},
         }

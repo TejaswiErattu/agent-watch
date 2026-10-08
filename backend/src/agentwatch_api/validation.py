@@ -12,7 +12,8 @@ from typing import Any
 AGENT_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,128}")
 OWNER_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
 EVENT_ID_RE = re.compile(r"[0-9a-f]{32}")
-TS_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z")
+# [0-9], not \d: \d also matches non-ASCII digits (e.g. Arabic-Indic), which would sort above "META".
+TS_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z")
 TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 EVENT_TYPES = ("llm_call", "tool_call", "blocked")
@@ -23,6 +24,15 @@ OPTIONAL = (
 )
 KNOWN_FIELDS = frozenset(REQUIRED + OPTIONAL)
 META_MAX_BYTES = 4096
+META_MAX_DEPTH = 32  # meta itself is depth 1; lists and objects both count
+
+# Fields kept per type (plus REQUIRED and meta). Anything else known is dropped, not validated.
+TYPE_FIELDS = {
+    "llm_call": ("model", "inputTokens", "outputTokens"),
+    "tool_call": ("tool", "target"),
+    ("blocked", "spend_cap"): ("violationType", "attemptedCostUsd"),
+    ("blocked", "blocked_path"): ("violationType", "attemptedPath"),
+}
 
 
 class ValidationError(Exception):
@@ -72,6 +82,24 @@ def _check_ts(ts: str) -> ValidationError | None:
     return None
 
 
+def _scan(value: Any, max_depth: int | None) -> str | None:
+    """Iteratively walk a JSON value. Return "nonfinite", "depth", or None.
+
+    Iterative so a hostile, deeply nested body can't raise RecursionError.
+    """
+    stack = [(value, 1)]
+    while stack:
+        v, depth = stack.pop()
+        if isinstance(v, float) and not math.isfinite(v):
+            return "nonfinite"
+        if isinstance(v, (dict, list)):
+            if max_depth is not None and depth > max_depth:
+                return "depth"
+            children = v.values() if isinstance(v, dict) else v
+            stack.extend((c, depth + 1) for c in children)
+    return None
+
+
 def _validate_common(body: dict) -> ValidationError | None:
     for name in REQUIRED:
         if name not in body:
@@ -93,11 +121,19 @@ def _validate_common(body: dict) -> ValidationError | None:
     if body["type"] not in EVENT_TYPES:
         return ValidationError("type", f"must be one of {', '.join(EVENT_TYPES)}")
 
+    # NaN/Infinity can't be stored as DynamoDB numbers; reject them in any field, even dropped ones.
+    for name in sorted(body, key=str):
+        problem = _scan(body[name], META_MAX_DEPTH if name == "meta" else None)
+        if problem == "nonfinite":
+            return ValidationError(name, "must not contain NaN or Infinity")
+        if problem == "depth":
+            return ValidationError(name, f"must be nested at most {META_MAX_DEPTH} levels deep")
+
     meta = body.get("meta", {})
     if not isinstance(meta, dict):
         return ValidationError("meta", "must be an object")
     try:
-        size = len(json.dumps(meta, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+        size = len(json.dumps(meta, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8"))
     except (TypeError, ValueError):
         return ValidationError("meta", "must be JSON-serializable")
     if size > META_MAX_BYTES:
@@ -132,12 +168,16 @@ def _req_count(body: dict, name: str) -> ValidationError | None:
     return None
 
 
+def _own_fields(body: dict) -> dict:
+    """Keep REQUIRED, meta, and the fields that belong to this event's type; drop the rest."""
+    t = body["type"]
+    key = (t, body.get("violationType")) if t == "blocked" else t
+    keep = set(REQUIRED) | {"meta"} | set(TYPE_FIELDS.get(key, ("violationType",)))
+    return {k: v for k, v in body.items() if k in keep}
+
+
 def _validate_type_specific(body: dict) -> ValidationError | None:
-    # Optional string fields present on any type are still length-capped.
-    for name in ("model", "tool", "target", "attemptedPath"):
-        v = body.get(name)
-        if isinstance(v, str) and len(v) > STR_MAX:
-            return ValidationError(name, f"must be at most {STR_MAX} chars")
+    """Validate a body already reduced by _own_fields. _req_str enforces the 1024-char cap."""
     t = body["type"]
     if t == "llm_call":
         return _req_str(body, "model") or _req_count(body, "inputTokens") or _req_count(body, "outputTokens")
@@ -165,10 +205,13 @@ def validate_event(body: Any, now: datetime) -> Event | ValidationError:
     """
     if not isinstance(body, dict):
         return ValidationError("body", "must be a JSON object")
-    if (e := _validate_common(body) or _validate_type_specific(body)) is not None:
+    if (e := _validate_common(body)) is not None:
+        return e
+    # Drops client costUsd and any field that belongs to another type before type checks.
+    item = _own_fields(body)
+    if (e := _validate_type_specific(item)) is not None:
         return e
 
-    item = {k: v for k, v in body.items() if k != "costUsd"}
     item.setdefault("meta", {})
     return Event(
         agent_id=body["agentId"],
