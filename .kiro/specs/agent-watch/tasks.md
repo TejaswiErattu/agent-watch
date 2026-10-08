@@ -44,7 +44,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 13.2, 13.3, 13.4, 13.6, 13.7, 13.8_
     - Commit: `feat(backend): type-specific event validation`
 
-  - [ ] 1.6 Implement Guardrail_Config parsing
+  - [x] 1.6 Implement Guardrail_Config parsing
     - Write the failing tests first. In `backend/tests/test_rules.py`, cover: valid config parses; `EMPTY_CONFIG` is `{"dailySpendCapUsd": null, "blockedPaths": []}`; cap as bool/string/negative/NaN/inf rejected; `blockedPaths` not a list, containing empty or non-string, over 100 entries, or entry over 1024 chars rejected; unknown key and missing key rejected; error messages name the field. Add `backend/tests/test_properties_rules.py` with Property 3.
     - Create `backend/src/agentwatch_api/rules.py`: `GuardrailConfig` (frozen dataclass, paths as tuple), `parse_config(obj)`, `to_json(cfg)`, `EMPTY_CONFIG`.
     - Property test: **Property 3: Guardrail_Config JSON round trip** (required).
