@@ -11,7 +11,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
 ## Tasks
 
 - [ ] 1. Backend foundations
-  - [ ] 1.1 Scaffold the backend package and test tooling
+  - [x] 1.1 Scaffold the backend package and test tooling
     - Write the failing tests first. Add `backend/tests/test_smoke.py` that imports `agentwatch_api` and `agentwatch_api.handlers` and checks the Hypothesis profile is loaded; it fails until the package exists.
     - Create `backend/src/agentwatch_api/__init__.py`, `backend/src/agentwatch_api/handlers/__init__.py`, `backend/requirements.txt` (runtime: none beyond the Lambda-provided `boto3`), `backend/requirements-dev.txt` (pinned `pytest`, `hypothesis`, `pyyaml`, `boto3`).
     - Add `backend/pyproject.toml` with `[tool.pytest.ini_options]` `pythonpath = ["src", "../sdk", ".."]` and `testpaths = ["tests"]`.
