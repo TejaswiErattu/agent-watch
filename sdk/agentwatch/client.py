@@ -7,13 +7,17 @@ only in private fields that are excluded from repr, and is never passed to the l
 from __future__ import annotations
 
 import atexit
+import functools
 import hashlib
+import inspect
 import json as _json
 import logging
 import os
 import queue
 import threading
 import time
+import uuid
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -299,6 +303,105 @@ class Watcher:
             if last is not None and self._clock() - last < SYNC_INTERVAL_S:
                 return
             self._fetch_config()
+
+    # ---- events (task 3.11) ----
+
+    def _new_event(self, type_: str, **fields) -> dict:
+        return {"agentId": self.agent_id, "ownerId": self.owner_id, "ts": _utc_ts(),
+                "eventId": uuid.uuid4().hex, "type": type_, **fields}
+
+    # ---- tool wrapper ----
+
+    def tool(self, fn=None, *, name: str | None = None, path_arg: str | None = None):
+        """Decorator: @aw.tool, @aw.tool(), or @aw.tool(name=..., path_arg=...)."""
+        def decorate(f):
+            return self._wrap_tool(f, name or f.__name__, path_arg)
+        return decorate(fn) if callable(fn) else decorate
+
+    def tools(self, mapping: dict) -> dict:
+        """Same keys; each function wrapped as a tool named by its key."""
+        return {k: self._wrap_tool(f, k, None) for k, f in mapping.items()}
+
+    def _wrap_tool(self, f, tool_name: str, path_arg: str | None):
+        try:
+            sig = inspect.signature(f)
+        except (TypeError, ValueError):
+            sig = None
+
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            bound = _bind(sig, args, kwargs)
+            path = _find_path(bound, path_arg)
+            target = _short(os.fsdecode(os.fspath(path))) if path is not None else _first_arg_repr(args, kwargs)
+            meta = {"args": _fit_args([_short(repr(a)) for a in (*args, *kwargs.values())][:MAX_ARGS])}
+            try:
+                return f(*args, **kwargs)
+            except BaseException as e:
+                meta["error"] = type(e).__name__
+                raise
+            finally:
+                self._sender.enqueue(self._new_event("tool_call", tool=tool_name, target=target, meta=meta))
+
+        return wrapper
+
+
+# ---- event helpers ----
+
+PATH_ARG_NAMES = ("path", "file_path", "filepath", "filename", "file")
+MAX_ARGS = 10
+MAX_REPR = 200
+
+
+def _utc_ts() -> str:
+    """Fixed-width UTC: YYYY-MM-DDTHH:MM:SS.mmmZ (24 chars)."""
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
+
+
+def _short(s: str) -> str:
+    return s[:MAX_REPR]
+
+
+def _bind(sig, args, kwargs) -> dict:
+    if sig is not None:
+        try:
+            return dict(sig.bind_partial(*args, **kwargs).arguments)
+        except TypeError:
+            pass
+    return dict(kwargs)
+
+
+def _is_pathlike(v) -> bool:
+    return isinstance(v, (str, bytes, os.PathLike))
+
+
+def _find_path(bound: dict, path_arg: str | None):
+    """The path argument, or None if this tool does not touch a file path."""
+    names = (path_arg,) if path_arg else PATH_ARG_NAMES
+    for n in names:
+        v = bound.get(n)
+        if v is not None and _is_pathlike(v):
+            return v
+    return None
+
+
+META_ARGS_BUDGET = 3072  # bytes; leaves room for "error" and keys under the server's 4096-byte meta cap
+
+
+def _fit_args(reprs: list[str]) -> list[str]:
+    """Drop trailing args until the UTF-8 JSON fits the budget, so the server never 400s on meta size."""
+    out = list(reprs)
+    while out and len(_json.dumps(out, separators=(",", ":"), ensure_ascii=False).encode("utf-8")) > META_ARGS_BUDGET:
+        out.pop()
+    return out
+
+
+def _first_arg_repr(args, kwargs) -> str:
+    if args:
+        return _short(repr(args[0]))
+    if kwargs:
+        return _short(repr(next(iter(kwargs.values()))))
+    return "()"
 
 
 def init(agent_id: str, owner_id: str, api_key: str, endpoint: str | None = None, *,

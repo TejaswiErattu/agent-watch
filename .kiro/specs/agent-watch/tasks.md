@@ -216,7 +216,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 8.4, 8.9, 8.11_
     - Commit: `test(sdk): symlink and equivalent-spelling blocklist cases`
 
-  - [ ] 3.11 Implement the tool wrapper and tool_call events
+  - [x] 3.11 Implement the tool wrapper and tool_call events
     - Write the failing tests first. In `sdk/tests/test_tool_wrapper.py`, cover: `aw.tools({...})` keeps keys and wraps each function; `@aw.tool(name=..., path_arg=...)` works; path argument found from `path_arg` or the first of `path, file_path, filepath, filename, file`; `target` is the path else `repr` of the first argument truncated to 200; `meta.args` holds at most 10 reprs truncated to 200; a raising tool still queues an event with `meta.error` and re-raises; `ts` is 24-char UTC and `eventId` is 32 hex.
     - Implement event building (`_new_event`), `Watcher.tool`, `Watcher.tools` in `sdk/agentwatch/client.py` (blocklist check is added in 3.12).
     - _Requirements: 1.2, 1.3, 1.4, 20.3_

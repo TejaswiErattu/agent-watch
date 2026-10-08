@@ -267,3 +267,14 @@ Format per task:
 **Q:** What is a metamorphic test? **A:** It checks that a transformation that shouldn't matter, like `./p` vs `p`, gives the same output. It doesn't need to know the right answer for each input.
 
 **Q:** Why is the converse ("alias blocked implies target blocked") not required? **A:** A symlink named `.env` is blocked by its name even when its target isn't. Blocking more is the safe direction.
+
+## 3.11 Tool wrapper with tool_call events
+**Conceptual:** Students already have their tools as plain functions in a dict. Wrapping that dict in one line makes every tool call visible on the timeline, including the ones that crash, without changing how the agent calls its tools. The wrapper also finds which argument is a file path, which is the hook the blocklist uses in the next task.
+
+**Technical:** `_wrap_tool` binds arguments with `inspect.signature` and picks the path from `path_arg` or the first of `path`, `file_path`, `filepath`, `filename`, `file`. `target` is that path, else `repr` of the first argument, capped at 200 chars. `meta.args` holds at most 10 reprs and is trimmed to a 3 KB UTF-8 budget so the server's 4 KB limit never rejects it. A `finally` block queues the event even when the tool raises, with `meta.error` set to the exception type. Tradeoff: argument `repr`s can contain user data.
+
+**Q:** Could logging tool arguments leak sensitive data? **A:** Yes. `repr` of arguments can include file contents or tokens. That's why they're truncated, kept in `meta`, and why prompts are never sent. Production would add an allowlist or redaction.
+
+**Q:** Why record the exception type and not the message? **A:** Messages often echo inputs. The type is enough to see that a tool failed and how.
+
+**Q:** Why trim on the client to match a server limit? **A:** A 400 from the server is a lost event. Enforcing the limit before sending keeps the record and avoids wasted retries.
