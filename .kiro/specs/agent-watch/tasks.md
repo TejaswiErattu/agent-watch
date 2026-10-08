@@ -289,6 +289,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Write the failing tests first. Before deploying, run `pytest` in `backend/` and `sdk/` (all green), and confirm `test_template.py` passes.
     - Run `sam build && sam deploy --guided --region us-west-2` from `backend/` with `AlertEmail`; confirm the SNS subscription email.
     - `curl` a `PUT /agents/bad-bot/config` with `{"dailySpendCapUsd": null, "blockedPaths": [".env"]}`, then run `python demo/bad_agent.py` with `AGENTWATCH_ENDPOINT` set. Expect `PathBlocked` in the terminal and the alert email within about 10 s.
+    - Verify against real DynamoDB that a wrong-key write to an existing sort key returns 403, not duplicate.
     - Run `python demo/demo_agent.py` and see a 200 for its events. Record the endpoint URL in `PROGRESS.md`; if AWS access blocks this, log it under "Blocked" and continue with group 5.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: 10.4, 14.6, 16.3, 16.4_
@@ -425,6 +426,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
   - [ ] 7.2 Write README.md with Known limitations
     - Write the failing tests first. Add `backend/tests/test_readme.py` checking `README.md` has a "Known limitations" heading that mentions `open()`, shell commands, the recognized path arguments, and the spend under-count while events are queued.
     - Write `README.md`: what Agent Watch is, the 3-line integration, deploy steps (`sam deploy`, Amplify), running the demos and tests, and the Known limitations section (incl. case-insensitive over-blocking).
+    - Known limitations: agent IDs are global and first-come; GET /config reveals whether a name is taken.
     - _Requirements: 26.1, 26.2, 26.3_
     - Commit: `feat(docs): README with known limitations`
 
