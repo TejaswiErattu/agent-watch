@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Session handoff",
+      "description": "When the session stops, update PROGRESS.md and tasks.md and commit",
+      "trigger": "Stop",
+      "action": {
+        "type": "agent",
+        "prompt": "Run the handoff from .kiro/steering/workflow.md: update PROGRESS.md (Done / In progress / Next step / Blocked / Decisions), tick finished tasks in .kiro/specs/agent-watch/tasks.md, add interview questions for completed tasks to docs/INTERVIEW_PREP.md, then commit with message 'chore: session handoff'. Print a 5-line summary for the next session."
+      }
+    }
+  ]
+}

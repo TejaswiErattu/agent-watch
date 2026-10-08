@@ -1,0 +1,21 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run SDK tests on save",
+      "description": "Runs pytest for the SDK whenever a file in sdk/ changes",
+      "trigger": "PostFileSave",
+      "matcher": "^sdk/.*\\.py$",
+      "action": { "type": "command", "command": "cd sdk && python -m pytest -q" },
+      "timeout": 120
+    },
+    {
+      "name": "Run backend tests on save",
+      "description": "Runs pytest for the backend whenever a file in backend/src changes",
+      "trigger": "PostFileSave",
+      "matcher": "^backend/src/.*\\.py$",
+      "action": { "type": "command", "command": "cd backend && python -m pytest -q" },
+      "timeout": 120
+    }
+  ]
+}
