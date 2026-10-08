@@ -19,7 +19,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 17.2, 17.5_
     - Commit: `feat(backend): scaffold package and pytest/hypothesis config`
 
-  - [ ] 1.2 Implement the backend Pricing_Table and cost math
+  - [x] 1.2 Implement the backend Pricing_Table and cost math
     - Write the failing tests first. In `backend/tests/test_pricing.py`, assert `pricing_table()["models"]` contains at least one Bedrock Claude ID (`anthropic.claude-...`), one cross-region `us.anthropic.claude-...` ID, and one Anthropic API ID (`claude-...`); unknown models cost 0.0; a hand-computed example matches `estimate_cost`; zero tokens cost 0.0. Add `backend/tests/test_properties_pricing.py` with Property 2.
     - Create `backend/src/agentwatch_api/pricing.py`: `ModelPrice`, `PRICING` (exact IDs incl. the `us.anthropic.*` profile ID and the Anthropic fallback ID that `demo/models.py` will use; check prices on the Bedrock and Anthropic pricing pages), `pricing_table()`, `cost_from_table()`, `estimate_cost()`, `format_cost()`, `parse_cost()`.
     - Property test: **Property 2: Cost format round trip** (required). Also assert non-negative cost for all generated inputs (Req 17.4).
