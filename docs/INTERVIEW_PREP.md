@@ -179,3 +179,14 @@ Format per task:
 **Q:** Isn't the hash itself now a bearer credential? **A:** Yes. Anyone with the hash can call the API, so it's treated as a secret too: hidden from repr and logs, and sent only over HTTPS. The server stores only a hash of the hash, so a table leak doesn't expose it.
 
 **Q:** Why a typed exception hierarchy? **A:** Callers can catch every guardrail block or just one kind. Exceptions also stop execution before the risky action, which a return value can't guarantee.
+
+## 3.3 ApiClient with credential headers
+**Conceptual:** Every request the SDK sends has to prove who it's from, and none of them may carry the raw key. Putting all HTTP behind one small client means the credential rule lives in one place, and tests can swap the network for a recording fake.
+
+**Technical:** `ApiClient` builds `/events`, `/agents/{id}/config`, and `/agents/{id}/spend` URLs and adds `X-Agentwatch-Owner` and `X-Agentwatch-Key-Hash` to every call, with a 2 s timeout. The `Transport` protocol returns `Response(status, body)`. `RequestsTransport` turns connection errors and timeouts into `TransportError` that carries only the exception type name. Property 19 runs random keys and outcomes and scans URLs, headers, bodies, logs, and repr. Tradeoff: dropping requests' error message loses some debugging detail.
+
+**Q:** Why a transport seam instead of mocking `requests`? **A:** A two-method fake is simpler and safer than patching a library's internals. Tests also never touch the network.
+
+**Q:** Why strip the exception message from network errors? **A:** Library errors often embed the URL or request details. Keeping only the type means a logged error can't leak a credential.
+
+**Q:** Why a short 2 s timeout? **A:** The SDK runs inside someone else's agent. A slow monitoring backend must never stall the agent, so we fail fast and retry in the background.

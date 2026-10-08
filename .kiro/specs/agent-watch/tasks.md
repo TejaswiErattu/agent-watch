@@ -162,7 +162,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 14.1, 14.4_
     - Commit: `feat(sdk): key hash and guardrail exceptions`
 
-  - [ ] 3.3 Implement ApiClient with credential headers
+  - [x] 3.3 Implement ApiClient with credential headers
     - Write the failing tests first. In `sdk/tests/test_api_client.py`, with a `FakeTransport`, cover: `post_event` sends JSON to `<endpoint>/events`; `get_config` and `get_spend` hit `/agents/{agentId}/config` and `/spend`; every request has `X-Agentwatch-Owner` and `X-Agentwatch-Key-Hash`; timeout is 2 s. Add `sdk/tests/test_properties_transport.py` with Property 19 (scan URL, headers, body, and `caplog` for the plaintext key, including on 401 and network errors).
     - Implement `ApiClient(endpoint, owner_id, key_hash, transport=None)` in `sdk/agentwatch/client.py` using a `requests.Session` by default.
     - Property test: **Property 19: Credentials sent, secrets never leaked by the SDK** (required).
