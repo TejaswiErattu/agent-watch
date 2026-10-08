@@ -97,7 +97,9 @@ class RequestsTransport:
         import requests
 
         try:
-            r = self.session.request(method, url, headers=headers, json=json, timeout=timeout)
+            # Never follow redirects: a 3xx to another host would replay the Key_Hash header (Req 14.11).
+            r = self.session.request(method, url, headers=headers, json=json, timeout=timeout,
+                                     allow_redirects=False)
         except (requests.ConnectionError, requests.Timeout) as e:
             # Type name only: requests' messages can include the full URL and headers.
             raise TransportError(type(e).__name__) from None
@@ -108,11 +110,34 @@ class RequestsTransport:
         return Response(r.status_code, body)
 
 
+_LOOPBACK_HOSTS = ("localhost", "127.0.0.1")
+
+
+def _check_endpoint(endpoint) -> str:
+    """HTTPS only; plain http just for loopback tests (Req 14.12). Raises ValueError otherwise."""
+    from urllib.parse import urlsplit
+
+    if not isinstance(endpoint, str):
+        raise ValueError("agentwatch endpoint must be a string")
+    try:
+        u = urlsplit(endpoint)
+        host = u.hostname
+        u.port  # noqa: B018  raises ValueError on a bad port
+    except ValueError:
+        raise ValueError("agentwatch endpoint is not a valid URL") from None
+    if u.scheme == "https" and host:
+        return endpoint
+    if u.scheme == "http" and host in _LOOPBACK_HOSTS and not u.username and not u.password:
+        return endpoint
+    raise ValueError("agentwatch endpoint must start with https:// (http://localhost and "
+                     "http://127.0.0.1 are allowed for tests)")
+
+
 class ApiClient:
     """Thin HTTP client for the Ingestion_API. Every request carries the credential headers."""
 
     def __init__(self, endpoint: str, owner_id: str, key_hash: str, transport: Transport | None = None) -> None:
-        self.endpoint = endpoint.rstrip("/")
+        self.endpoint = _check_endpoint(endpoint).rstrip("/")
         self.owner_id = owner_id
         self._key_hash = key_hash
         self.transport = transport if transport is not None else RequestsTransport()

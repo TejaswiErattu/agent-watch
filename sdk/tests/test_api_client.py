@@ -95,3 +95,38 @@ def test_requests_transport_wraps_network_errors():
     for exc in (requests.ConnectionError("x"), requests.Timeout("x")):
         with pytest.raises(TransportError):
             RequestsTransport(_FakeSession(exc)).request("GET", "u", headers={}, timeout=2.0)
+
+
+# ---- 3.19 no redirects, https only ----
+
+import agentwatch  # noqa: E402
+
+
+@pytest.mark.parametrize("method", ["GET", "POST", "PUT"])
+def test_requests_transport_never_follows_redirects(method):
+    s = _FakeSession(_FakeResp(200, "{}"))
+    RequestsTransport(session=s).request(method, EP + "/x", headers={}, json=None, timeout=2)
+    assert s.calls[0][2]["allow_redirects"] is False
+
+
+def test_redirect_is_returned_not_followed():
+    s = _FakeSession(_FakeResp(302, ""))
+    r = RequestsTransport(session=s).request("GET", EP + "/x", headers={"X-Agentwatch-Key-Hash": H},
+                                             json=None, timeout=2)
+    assert r.status == 302 and len(s.calls) == 1
+
+
+@pytest.mark.parametrize("bad", ["http://example.com", "http://api.example.com/prod", "ftp://x",
+                                 "api.example.com", "HTTP://localhost.evil.com", "http://localhost.evil.com",
+                                 "http://127.0.0.1.evil.com", "http://localhost@evil.com", "https://", ""])
+def test_non_https_endpoint_rejected(bad):
+    with pytest.raises(ValueError):
+        ApiClient(bad, "tejaswi", H, transport=FakeTransport())
+    with pytest.raises(ValueError):
+        agentwatch.init("bot", "tejaswi", "sk-key", endpoint=bad or "x", transport=FakeTransport())
+
+
+@pytest.mark.parametrize("ok", ["https://api.example.com", "https://abc.execute-api.us-west-2.amazonaws.com/",
+                                "http://localhost", "http://localhost:3000", "http://127.0.0.1:8080/api"])
+def test_https_and_loopback_accepted(ok):
+    ApiClient(ok, "tejaswi", H, transport=FakeTransport())
