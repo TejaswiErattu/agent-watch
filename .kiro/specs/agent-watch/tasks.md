@@ -209,7 +209,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 8.5, 8.6, 8.10, 8.12_
     - Commit: `feat(sdk): directory and name entry matching`
 
-  - [ ] 3.10 Cover symlink and spelling cases
+  - [x] 3.10 Cover symlink and spelling cases
     - Write the failing tests first. In `sdk/tests/test_guardrails_symlinks.py`, add the example: a symlink named `.env` pointing to `secrets.txt` is blocked by `.env`; an innocent alias pointing into a blocked directory is blocked. Add Property 25 to `sdk/tests/test_properties_paths.py` (generated trees with symlinks to files and directories; skip if symlinks are not permitted).
     - Fix `sdk/agentwatch/guardrails.py` if any case fails.
     - Property test: **Property 25: Equivalent spellings keep the decision; symlink aliases keep blocks** (required).

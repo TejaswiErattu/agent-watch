@@ -53,3 +53,66 @@ def test_property_27_case_changes_keep_decision(dirs, leaf, entries, mask_p, mas
         blocked2 = [swap_case(b, mask_e) if os.sep not in b else
                     os.path.join(root, swap_case(os.path.relpath(b, root), mask_e)) for b in blocked]
         assert (blocked_entry_for(p2, blocked2) is not None) == base
+
+
+# ---- Property 25 ----
+
+import pytest  # noqa: E402
+
+# A small fixed tree; the generator picks paths, entries, and symlinks over it.
+TREE_DIRS = ["a", "a/b", "c", "vault"]
+TREE_FILES = ["a/x.txt", "a/b/.env", "c/notes.md", "vault/key.pem", "secrets.txt"]
+
+
+def _build(root, links):
+    for d in TREE_DIRS:
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+    for f in TREE_FILES:
+        with open(os.path.join(root, f), "w") as fh:
+            fh.write("x")
+    made = []
+    for i, (target, link_dir, link_name) in enumerate(links):
+        dst = os.path.join(root, link_dir, f"{link_name}{i}" if link_name != ".env" else ".env")
+        if os.path.lexists(dst):
+            continue
+        try:
+            os.symlink(os.path.join(root, target), dst)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlinks not permitted")
+        made.append((dst, os.path.join(root, target)))
+    return made
+
+
+link = st.tuples(st.sampled_from(TREE_FILES + TREE_DIRS), st.sampled_from(["", "a", "c"]),
+                 st.sampled_from(["ln", "alias", ".env"]))
+entry = st.one_of(st.sampled_from([".env", "key.pem", "notes.md"]),
+                  st.sampled_from(["vault", "a/b", "c", ""]).map(lambda d: ("dir", d)))
+
+
+# Feature: agent-watch, Property 25: Equivalent spellings keep the decision; symlink aliases keep blocks
+@settings(max_examples=100, deadline=None)
+@given(p_rel=st.sampled_from(TREE_FILES + TREE_DIRS), links=st.lists(link, max_size=4),
+       entries=st.lists(entry, min_size=1, max_size=3), dotdot=st.sampled_from(["a", "c", "vault"]))
+def test_property_25_spellings_and_aliases(p_rel, links, entries, dotdot):
+    with tempfile.TemporaryDirectory() as root:
+        root = os.path.realpath(root)
+        made = _build(root, links)
+        blocked = [os.path.join(root, e[1]) if isinstance(e, tuple) else e for e in entries]
+        p = os.path.join(root, p_rel)
+        decision = blocked_entry_for(p, blocked) is not None
+
+        # "./" + p relative to cwd, and an inserted d/../ segment (d is a real directory).
+        old = os.getcwd()
+        try:
+            os.chdir(root)
+            assert (blocked_entry_for("./" + p_rel, blocked) is not None) == decision
+        finally:
+            os.chdir(old)
+        inserted = os.path.join(root, dotdot, "..", p_rel)
+        assert (blocked_entry_for(inserted, blocked) is not None) == decision
+
+        # Aliases may add blocks but never remove them. p_rel has no symlink components.
+        if decision:
+            for dst, target in made:
+                if os.path.realpath(dst) == os.path.realpath(p):
+                    assert blocked_entry_for(dst, blocked) is not None

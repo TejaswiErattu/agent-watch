@@ -256,3 +256,14 @@ Format per task:
 **Q:** Why test against real temp directories instead of strings? **A:** `realpath` touches the filesystem, and platforms like macOS add their own symlinks (`/var` → `/private/var`). Real trees catch what string tests miss.
 
 **Q:** Why return the matching entry and not just a bool? **A:** The alert and the dashboard can show which rule fired, so the student can tell why the agent was stopped.
+
+## 3.10 Symlink and equivalent-spelling cases
+**Conceptual:** Symlinks are the obvious way around a path blocklist: make `notes.txt` point at `~/.ssh/id_rsa` and read that instead. The rule we promise is that an alias can add a block but never remove one. This task proves that rule against real symlinks on disk.
+
+**Technical:** Example tests cover a symlink named `.env` pointing at `secrets.txt`, a file alias and a directory alias into a blocked folder, an alias to a real `.env`, and a blocked entry that is itself a symlink. Property 25 builds a tree with random symlinks and checks two things: the same decision for `p`, `./p`, and `d/../p`, and that every alias resolving to a blocked file is also blocked. No code changes were needed. Tradeoff: there's a check-then-open race, as with any userspace check.
+
+**Q:** How would an attacker bypass a path blocklist? **A:** With `..` segments, symlinks, case changes, `~` expansion, or relative paths. Canonicalizing before comparing, and checking both the link and its target, closes these.
+
+**Q:** What is a metamorphic test? **A:** It checks that a transformation that shouldn't matter, like `./p` vs `p`, gives the same output. It doesn't need to know the right answer for each input.
+
+**Q:** Why is the converse ("alias blocked implies target blocked") not required? **A:** A symlink named `.env` is blocked by its name even when its target isn't. Blocking more is the safe direction.
