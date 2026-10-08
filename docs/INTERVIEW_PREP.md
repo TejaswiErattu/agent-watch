@@ -278,3 +278,14 @@ Format per task:
 **Q:** Why record the exception type and not the message? **A:** Messages often echo inputs. The type is enough to see that a tool failed and how.
 
 **Q:** Why trim on the client to match a server limit? **A:** A 400 from the server is a lost event. Enforcing the limit before sending keeps the record and avoids wasted retries.
+
+## 3.12 Enforce the path blocklist
+**Conceptual:** This is the demo moment. When the agent calls `read_file(".env")`, the file is never opened, the server hears about it before the agent does, and the agent gets a clear `PathBlocked` it can catch. Enforcement sits in the SDK, in front of the action, because once a secret has been read, alerting about it is too late.
+
+**Technical:** Before a tool runs, the wrapper refreshes a stale config and calls `blocked_entry_for` on the decoded path (str, bytes, or PathLike). On a match it sends a `blocked` event synchronously on the caller's thread, with `violationType`, `attemptedPath`, and `meta.{tool, entry}`, then raises. No `tool_call` event is queued. Reporting failures are swallowed, so the block always holds. Property 24 compares against a separately written reference rule. Tradeoff: tools without a recognized path argument aren't checked.
+
+**Q:** Why enforce on the client and not the server? **A:** The server never sees the file read. Only code in the agent's process can stop it. The server is the record and the alert path.
+
+**Q:** What if the report fails? **A:** The block still happens. Failing closed on the action matters more than the telemetry, and retries cover brief outages.
+
+**Q:** Why test against an independently written reference? **A:** Comparing code to itself proves nothing. A second implementation from the spec catches shared misunderstandings.

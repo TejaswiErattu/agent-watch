@@ -116,3 +116,69 @@ def test_property_25_spellings_and_aliases(p_rel, links, entries, dotdot):
             for dst, target in made:
                 if os.path.realpath(dst) == os.path.realpath(p):
                     assert blocked_entry_for(dst, blocked) is not None
+
+
+# ---- Property 24 ----
+
+import agentwatch  # noqa: E402
+from agentwatch import PathBlocked  # noqa: E402
+from agentwatch.client import Response  # noqa: E402
+from fakes import FakeTransport  # noqa: E402
+
+
+def _ref_forms(x):
+    """Independent reference: F(x) = {A(x).casefold(), N(x).casefold()} written from scratch."""
+    x = os.path.expanduser(x)
+    a = os.path.normpath(os.path.join(os.getcwd(), x)) if not os.path.isabs(x) else os.path.normpath(x)
+    n = os.path.realpath(x)
+    return {a.casefold(), n.casefold()}
+
+
+def reference_blocked(p, entries):
+    pf = _ref_forms(p)
+    for e in entries:
+        if "/" in e or os.sep in e or (os.altsep and os.altsep in e):
+            for f in _ref_forms(e):
+                for a in pf:
+                    if a == f or a.startswith(f.rstrip(os.sep) + os.sep):
+                        return True
+        else:
+            if any(a.rsplit(os.sep, 1)[-1] == e.casefold() for a in pf):
+                return True
+    return False
+
+
+p24_entry = st.one_of(st.sampled_from([".env", ".ENV", "key.pem", "Notes.md", "secrets.txt"]),
+                      st.sampled_from(["vault", "a/b", "c", "", "A"]).map(lambda d: ("dir", d)))
+
+
+# Feature: agent-watch, Property 24: Blocklist decision matches the reference rule
+@settings(max_examples=100, deadline=None)
+@given(p_rel=st.sampled_from(TREE_FILES + TREE_DIRS + ["a/.Env", "c/missing.txt"]),
+       links=st.lists(link, max_size=4), entries=st.lists(p24_entry, min_size=1, max_size=3),
+       use_link=st.booleans())
+def test_property_24_blocklist_matches_reference(p_rel, links, entries, use_link):
+    with tempfile.TemporaryDirectory() as root:
+        root = os.path.realpath(root)
+        made = _build(root, links)
+        blocked = [os.path.join(root, e[1]) if isinstance(e, tuple) else e for e in entries]
+        p = made[0][0] if (use_link and made) else os.path.join(root, p_rel)
+
+        t = FakeTransport([Response(200, {"guardrails": {"dailySpendCapUsd": None, "blockedPaths": blocked},
+                                          "pricing": {"models": {}}})])
+        aw = agentwatch.init("bot", "tejaswi", "sk-key", endpoint="https://x", transport=t,
+                             clock=lambda: 0.0, sleep=lambda s: None)
+        calls = []
+        tool = aw.tools({"read_file": lambda path: calls.append(path)})["read_file"]
+
+        expected = reference_blocked(p, blocked)
+        if expected:
+            with pytest.raises(PathBlocked):
+                tool(p)
+            assert calls == []
+            sent = [r["json"] for r in t.requests if r["url"].endswith("/events")]
+            assert len(sent) == 1
+            assert sent[0]["violationType"] == "blocked_path" and sent[0]["attemptedPath"] == p
+        else:
+            tool(p)
+            assert calls == [p]

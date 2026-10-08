@@ -222,7 +222,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 1.2, 1.3, 1.4, 20.3_
     - Commit: `feat(sdk): tool wrapper with tool_call events`
 
-  - [ ] 3.12 Enforce the blocklist in the tool wrapper
+  - [x] 3.12 Enforce the blocklist in the tool wrapper
     - Write the failing tests first. Extend `sdk/tests/test_tool_wrapper.py`: with `.env` blocked, `read_file(".env")` raises `PathBlocked`, the tool is never called, and one `blocked` event with `violationType="blocked_path"` and `attemptedPath=".env"` was sent via `send_sync` before the raise; a tool without a path argument skips the check; a stale config is refreshed first; the block still raises when reporting fails. Add Property 24 to `sdk/tests/test_properties_paths.py` with the independent reference rule.
     - Wire `_maybe_refresh_config` and `blocked_entry_for(os.fsdecode(os.fspath(value)), ...)` into the tool wrapper in `sdk/agentwatch/client.py`.
     - Property test: **Property 24: Blocklist decision matches the reference rule** (required).

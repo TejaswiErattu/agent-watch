@@ -153,3 +153,86 @@ def test_meta_stays_under_server_4kb_limit_with_wide_unicode():
     size = len(json.dumps(e["meta"], separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
     assert size <= 4096
     assert e["meta"]["args"]  # still reports something
+
+
+# ---- 3.12 blocklist enforcement ----
+
+import threading  # noqa: E402
+
+from agentwatch import PathBlocked  # noqa: E402
+from agentwatch.client import TransportError  # noqa: E402
+
+
+def test_blocked_path_raises_before_tool_runs_and_reports_sync():
+    aw, t = make(paths=[".env"])
+    called = []
+
+    def read(path):
+        called.append(path)
+
+    tools = aw.tools({"read_file": read})
+    with pytest.raises(PathBlocked) as ei:
+        tools["read_file"](".env")
+    assert called == []
+    assert ei.value.violation_type == "blocked_path" and ei.value.detail == ".env"
+    # The blocked event was sent BEFORE the raise: present without flushing the queue.
+    blocked = [r["json"] for r in t.requests if r["url"].endswith("/events")]
+    assert len(blocked) == 1
+    b = blocked[0]
+    assert b["type"] == "blocked" and b["violationType"] == "blocked_path" and b["attemptedPath"] == ".env"
+    assert b["meta"] == {"tool": "read_file", "entry": ".env"}
+    # No tool_call event for a blocked call.
+    assert [e["type"] for e in events(aw, t)] == ["blocked"]
+
+
+def test_blocked_event_sent_on_caller_thread():
+    aw, t = make(paths=[".env"])
+    seen = []
+    orig = t.request
+
+    def rec(*a, **kw):
+        seen.append(threading.current_thread().name)
+        return orig(*a, **kw)
+
+    t.request = rec
+    with pytest.raises(PathBlocked):
+        aw.tools({"r": read_file})["r"](".env")
+    assert seen[-1] == threading.current_thread().name
+
+
+def test_tool_without_path_argument_skips_check():
+    aw, t = make(paths=["/"])  # root blocks every path
+    assert aw.tools({"search": search})["search"]("q", limit=1) == ["q"]
+    assert [e["type"] for e in events(aw, t)] == ["tool_call"]
+
+
+def test_non_matching_path_runs_tool():
+    aw, t = make(paths=[".env"])
+    assert aw.tools({"r": read_file})["r"]("notes.md") == "contents of notes.md"
+
+
+def test_stale_config_is_refreshed_before_check():
+    now = [0.0]
+    t = FakeTransport([cfg([]), cfg([".env"])])
+    aw = agentwatch.init("bot", "tejaswi", "sk-key", endpoint="https://x", transport=t,
+                         clock=lambda: now[0], sleep=lambda s: None)
+    r = aw.tools({"r": read_file})["r"]
+    assert r(".env") == "contents of .env"  # first config had no rules
+    now[0] = 60.0
+    with pytest.raises(PathBlocked):
+        r(".env")
+
+
+def test_block_still_raises_when_reporting_fails():
+    aw, t = make(paths=[".env"], outcomes=[TransportError("down")] * 4)
+    with pytest.raises(PathBlocked):
+        aw.tools({"r": read_file})["r"](".env")
+
+
+def test_pathlike_and_bytes_paths_are_checked(tmp_path):
+    aw, _ = make(paths=[".env"])
+    r = aw.tools({"r": read_file})["r"]
+    with pytest.raises(PathBlocked):
+        r(tmp_path / ".env")
+    with pytest.raises(PathBlocked):
+        r(b".env")

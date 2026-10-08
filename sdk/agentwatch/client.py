@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
+from .guardrails import blocked_entry_for
+
 REQUEST_TIMEOUT_S = 2.0
 _log = logging.getLogger("agentwatch")
 
@@ -310,6 +312,25 @@ class Watcher:
         return {"agentId": self.agent_id, "ownerId": self.owner_id, "ts": _utc_ts(),
                 "eventId": uuid.uuid4().hex, "type": type_, **fields}
 
+    # ---- guardrail enforcement ----
+
+    def _send_blocked_sync(self, **fields) -> None:
+        """Report a block on the caller's thread before raising. Never raises itself."""
+        try:
+            self._sender.send_sync(self._new_event("blocked", **fields))
+        except Exception:
+            pass
+
+    def _check_path(self, tool_name: str, path: str) -> None:
+        self._maybe_refresh_config()  # Req 8.8
+        entry = blocked_entry_for(path, self._config.blocked_paths)
+        if entry is None:
+            return
+        # The server keeps only violationType/attemptedPath on blocked events, so context goes in meta.
+        self._send_blocked_sync(violationType="blocked_path", attemptedPath=path[:1024],
+                                meta={"tool": tool_name[:200], "entry": entry[:200]})
+        raise PathBlocked(path)
+
     # ---- tool wrapper ----
 
     def tool(self, fn=None, *, name: str | None = None, path_arg: str | None = None):
@@ -332,6 +353,8 @@ class Watcher:
         def wrapper(*args, **kwargs):
             bound = _bind(sig, args, kwargs)
             path = _find_path(bound, path_arg)
+            if path is not None:
+                self._check_path(tool_name, os.fsdecode(os.fspath(path)))  # raises PathBlocked
             target = _short(os.fsdecode(os.fspath(path))) if path is not None else _first_arg_repr(args, kwargs)
             meta = {"args": _fit_args([_short(repr(a)) for a in (*args, *kwargs.values())][:MAX_ARGS])}
             try:
