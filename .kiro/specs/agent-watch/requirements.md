@@ -40,7 +40,7 @@ Identity in the MVP is deliberately simple: an Owner is identified by an `ownerI
 - **Normalized_Path**: The result of `os.path.realpath(os.path.expanduser(p))` evaluated on the SDK host, which resolves relative paths against the current working directory and removes "./" and ".." segments and symlinks
 - **Absolute_Path**: The result of `os.path.normpath(os.path.abspath(os.path.expanduser(p)))` evaluated on the SDK host, which resolves relative paths against the current working directory and removes "./" and ".." segments lexically, without resolving symlinks
 - **Path_Forms**: The two forms of a path p used for blocklist matching: the Absolute_Path of p and the Normalized_Path of p
-- **Case_Fold**: The result of Python `str.casefold()` applied to a string; blocklist comparisons compare the Case_Fold of both sides
+- **Case_Fold**: The result of Python `str.casefold()` applied to the Unicode NFC normalization (`unicodedata.normalize("NFC", s)`) of a string; blocklist comparisons compare the Case_Fold of both sides
 - **Daily_Spend_Cap**: Maximum USD amount an agent can spend in a rolling 24-hour period
 - **Violation_Type**: The reason an action was blocked, with value "spend_cap" or "blocked_path"
 
@@ -157,13 +157,18 @@ Identity in the MVP is deliberately simple: an Owner is identified by an `ownerI
 3. WHEN a tool call attempts to access a path that matches no Blocked_Path under criteria 4 through 6, THE SDK SHALL allow the call to proceed
 4. WHEN the SDK checks a tool call against the blocklist, THE SDK SHALL compute the Path_Forms of the attempted path before matching and SHALL treat the attempted path as matching a Blocked_Path if either of its Path_Forms matches that Blocked_Path under criteria 5 and 6
 5. WHEN the SDK matches against a Directory_Entry, THE SDK SHALL compute the Path_Forms of the Directory_Entry and treat an attempted Path_Form as matching if its Case_Fold equals the Case_Fold of either entry Path_Form or begins with the Case_Fold of either entry Path_Form followed by a Directory_Separator (blocking "/a/b" blocks "/a/b", "/A/B", and "/a/b/c", but not "/a/bc")
-6. WHEN the SDK matches against a Name_Entry, THE SDK SHALL treat an attempted Path_Form as matching if the Case_Fold of its final component (file name) equals the Case_Fold of the Name_Entry, in any directory (".env" blocks ".env" and ".ENV")
+6. WHEN the SDK matches against a Name_Entry, THE SDK SHALL treat an attempted Path_Form as matching if the Case_Fold of any of its components equals the Case_Fold of the Name_Entry, in any directory (".env" blocks ".env" and ".ENV"; ".git" blocks ".git/config")
 7. THE SDK SHALL check the path blocklist before every file access tool call
 8. WHEN the SDK checks the path blocklist and the cached Guardrail_Config was fetched more than one Sync_Interval earlier, THE SDK SHALL refresh the Guardrail_Config as specified in Requirement 21 before evaluating the blocklist
 9. FOR ALL attempted paths p and Guardrail_Configs, THE SDK block decision for p SHALL equal the block decision for p with a "./" prefix and for p with an inserted "dir/../" segment where dir is an existing non-symlink directory; and FOR ALL attempted paths p that contain no symlink components and are blocked, THE SDK SHALL also block any symlink that resolves to the same file as p, so a symlink alias may add blocks but never remove them (metamorphic property)
 10. FOR ALL Directory_Entries e and attempted paths formed by appending one or more non-separator characters directly to the Normalized_Path of e (e.g. "/a/b" and "/a/bc"), where neither e nor the attempted path involves a symlink, THE SDK SHALL allow the call when the Guardrail_Config contains e as the only Blocked_Path (property)
 11. WHEN the attempted path is a symlink whose own file name matches a Name_Entry under criterion 6 (e.g. ".env" pointing to "secrets.txt"), THE SDK SHALL block the call
 12. FOR ALL attempted paths and Blocked_Paths that involve no symlinks, THE SDK block decision SHALL be unchanged when the case of any characters in the attempted path or in any Blocked_Path is changed (case-invariance property)
+13. WHEN a tool call is checked, THE SDK SHALL treat as attempted paths every argument named in `path_arg` (a name or a list of names) or in `path, file_path, filepath, filename, file, src, dst, source, destination, target_path`, plus every str, bytes, or PathLike value in the positional and keyword arguments and directly inside a list or tuple argument, and SHALL block the call if any one of them matches a Blocked_Path
+14. IF computing the Path_Forms of an attempted path raises (e.g. the path contains a NUL byte), THEN THE SDK SHALL treat the path as blocked, report it as in criterion 2, and raise PathBlocked
+15. WHEN a Directory_Entry exists on the SDK host, THE SDK SHALL also treat an attempted path as matching it if the `(st_dev, st_ino)` of the entry equals that of the attempted path or of any existing parent of the attempted path (covers macOS firmlinks such as `/System/Volumes/Data` and bind mounts)
+
+Note: Case_Fold NFC-normalizes before `casefold()`, so an NFD-encoded `é` (common in macOS file names) matches an NFC entry.
 
 ### Requirement 9: Guardrail Configuration
 
@@ -259,6 +264,8 @@ Note: the Key_Hash is a bearer credential. Anyone holding it can act as the Owne
 8. WHEN the Ingestion_API checks Credentials against an Agent_Record, THE Ingestion_API SHALL compute the Key_Verifier as the SHA-256 digest of the received Key_Hash and compare the computed Key_Verifier with the stored Key_Verifier
 9. THE Ingestion_API SHALL compare the computed Key_Verifier with the stored Key_Verifier using a constant-time comparison (e.g. `hmac.compare_digest`)
 10. THE Ingestion_API SHALL never store or log the received Key_Hash
+11. THE SDK SHALL never follow HTTP redirects, so the Credentials headers are never re-sent to another host
+12. WHEN the SDK is initialized, THE SDK SHALL reject with ValueError any endpoint that does not start with `https://`, except `http://localhost` and `http://127.0.0.1` (with optional port) for local testing
 
 ### Requirement 15: Infrastructure as Code
 
@@ -347,6 +354,7 @@ Note: the Key_Hash is a bearer credential. Anyone holding it can act as the Owne
 4. IF no config request has ever succeeded, THEN THE SDK SHALL apply no Daily_Spend_Cap and no Blocked_Paths and SHALL estimate the cost of every call as 0.0 USD
 5. WHILE a config refresh is failing, THE SDK SHALL retry the config request at most once per Sync_Interval
 6. FOR ALL valid Guardrail_Config objects, serializing to JSON then parsing SHALL produce an equivalent Guardrail_Config (round-trip property)
+7. WHILE no config request has ever succeeded, THE SDK SHALL log the warning "agentwatch: guardrails NOT active (config fetch failed)" once at initialization and once per failed refresh
 
 ### Requirement 22: Guardrail Config Endpoints
 

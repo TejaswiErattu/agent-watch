@@ -110,8 +110,8 @@ Modules:
 
 #### Tool wrapper
 
-1. Find the path argument: the `path_arg` name if given, else the first of `path, file_path, filepath, filename, file` found in the bound arguments. A tool with no path argument is not a file-access tool, so it skips the blocklist.
-2. If it has a path: refresh config if stale, then `blocked_entry_for(os.fsdecode(os.fspath(value)), blocked_paths)`. On a match, send a blocked event synchronously and raise `PathBlocked`.
+1. Collect candidate paths (Req 8.13): every bound argument named in `path_arg` (a name or a list of names) or in `PATH_ARG_NAMES = path, file_path, filepath, filename, file, src, dst, source, destination, target_path`, plus every str/bytes/PathLike in `*args`/`**kwargs` and one level inside list/tuple values. A tool with no candidates skips the blocklist. Checking every string over-blocks a non-path string that happens to equal a blocked name (e.g. `search(".env")`); that is the safe direction.
+2. If there are candidates: refresh config if stale, then `blocked_entry_for(os.fsdecode(os.fspath(value)), blocked_paths)` for each. The first match (or a value whose normalization raises, e.g. a NUL byte, Req 8.14) sends one blocked event synchronously and raises `PathBlocked`.
 3. Call the tool and queue a `tool_call` event with `tool`, `target` (the path, else `repr` of the first argument, truncated to 200 chars), and `meta.args` (each argument's `repr` truncated to 200 chars, at most 10 args).
 4. If the tool raises, still queue the event with `meta.error = type(e).__name__`, then re-raise.
 
@@ -150,6 +150,8 @@ def path_matches(attempted: str, entry: str) -> bool:
 - The Normalized_Path form catches an innocent-looking alias that resolves into a blocked location (Req 8.9).
 - Both sides are casefolded, so `.ENV` and `/Home/Me/Secrets` match their lowercase entries (Req 8.5, 8.6, 8.12). On a case-sensitive Linux volume this can over-block a file that differs only in case. That is the safe direction and is accepted.
 - `os.sep` is a single char, so casefolding does not affect the separator boundary rule.
+- Review update (task 3.18): folding is `unicodedata.normalize("NFC", s).casefold()` on both sides, so NFD file names (macOS) match NFC entries. A Name_Entry matches any component of a form, not just the basename, so `.git` blocks `.git/config` (and still not `.github`). A Directory_Entry that exists also matches when its `(st_dev, st_ino)` equals that of the attempted path or any existing parent. This catches aliases that string forms miss, such as macOS firmlinks (`/System/Volumes/Data/Users/x` vs `/Users/x`) and bind mounts. The stat walk only adds matches, so it keeps the "forms only add blocks" invariant.
+- Not covered (README, task 7.2): a hardlink to a blocked file under a different name outside a blocked directory, and the check-then-use window where a symlink is swapped after the check. The threat model is a careless agent, not a malicious one.
 - Adding forms only adds candidate matches, so the second form can never turn a block into an allow.
 
 #### Spend check (Req 7)
@@ -172,7 +174,8 @@ def check_spend(self, model, request, max_tokens):
 - Input token estimate: `ceil(len(json.dumps(messages + system, default=str)) / 4)`.
 - Max output tokens: the request's `max_tokens` (Anthropic) or `inferenceConfig.maxTokens` (Bedrock). If Bedrock omits it, use 4096 as a conservative default.
 - Sync timing uses an injectable monotonic clock. `_maybe_sync_spend` runs when `now - last_spend_attempt >= 60`. On success it replaces Local_Spend_Total. On failure or a timeout over 2 s it keeps the value and logs a warning. `_maybe_refresh_config` works the same way with `last_config_attempt`, so a failing refresh retries at most once per Sync_Interval (Req 21.5).
-- Before any successful config fetch, the cached config is `EMPTY` (no cap, no paths, empty Pricing_Table), so every cost estimate is 0.0 (Req 21.4).
+- Before any successful config fetch, the cached config is `EMPTY` (no cap, no paths, empty Pricing_Table), so every cost estimate is 0.0 (Req 21.4). Each failed fetch in that state logs `agentwatch: guardrails NOT active (config fetch failed)` (Req 21.7), so failing open is never silent.
+- Transport (Req 14.11, 14.12): `RequestsTransport` passes `allow_redirects=False`, so a 3xx can't replay the Key_Hash header to another host; a 3xx is just a non-2xx. `ApiClient` rejects any endpoint that isn't `https://`, except `http://localhost` and `http://127.0.0.1` for local tests.
 - Known gap: an `llm_call` event still in the send queue during a spend sync is not yet in the server sum, so Local_Spend_Total can briefly under-count by one or two calls. This is accepted, because Req 7.4 says "replace". The queue normally drains in well under a second. The README lists it (Req 26.3).
 
 #### Unknown-model warning (Req 3.10)
@@ -599,7 +602,7 @@ For any generated temporary directory tree, Blocked_Paths mix of Directory_Entri
 - It raises `PathBlocked`, never invokes the tool, and sends one `blocked` event with `violationType="blocked_path"` and `attemptedPath` equal to the attempted path when the reference rule holds.
 - Otherwise it invokes the tool.
 
-The reference rule, written independently of `path_matches` with `F(x) = {A(x).casefold(), N(x).casefold()}` where `A` is Absolute_Path and `N` is Normalized_Path: some Directory_Entry `e` has `a == f` or `a` starts with `f + sep` for some `a` in `F(p)` and `f` in `F(e)`; or some Name_Entry `n` has `basename(a) == n.casefold()` for some `a` in `F(p)`.
+The reference rule, written independently of `path_matches` with `fold(s) = NFC(s).casefold()` and `F(x) = {fold(A(x)), fold(N(x))}` where `A` is Absolute_Path and `N` is Normalized_Path: some Directory_Entry `e` has `a == f` or `a` starts with `f + sep` for some `a` in `F(p)` and `f` in `F(e)`, or `e` exists and its `(st_dev, st_ino)` equals that of `p` or an existing parent of `p`; or some Name_Entry `n` has `fold(n)` equal to some component of some `a` in `F(p)`. The attempted path may be passed in any argument position (named, positional, keyword, or inside a list).
 
 The generated trees include symlinks (to files and to directories, inside and outside blocked directories) and symlinks whose own name equals a Name_Entry in some case, such as `.Env -> secrets.txt`.
 
