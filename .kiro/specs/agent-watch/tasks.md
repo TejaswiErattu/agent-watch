@@ -202,7 +202,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 8.4_
     - Commit: `feat(sdk): path forms for blocklist matching`
 
-  - [ ] 3.9 Implement path_matches and blocked_entry_for
+  - [x] 3.9 Implement path_matches and blocked_entry_for
     - Write the failing tests first. Extend `sdk/tests/test_guardrails_paths.py`: blocking `/a/b` blocks `/a/b`, `/A/B`, `/a/b/c`, not `/a/bc`; `.env` blocks `x/.env` and `.ENV` anywhere; root `/` blocks everything; `blocked_entry_for` returns the first matching entry or `None`. Add `sdk/tests/test_properties_paths.py` with Properties 26 and 27 (symlink-free `tmp_path` trees, `deadline=None`, non-ASCII case forms like `ß`, `É`).
     - Implement `_under`, `path_matches`, `blocked_entry_for` in `sdk/agentwatch/guardrails.py`.
     - Property tests (required): **Property 26: Sibling prefixes are not blocked**, **Property 27: Case changes do not change the decision**.

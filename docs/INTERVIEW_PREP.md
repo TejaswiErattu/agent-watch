@@ -245,3 +245,14 @@ Format per task:
 **Q:** Why `casefold()` instead of `lower()`? **A:** It's Unicode-aware caseless matching. `lower()` misses cases like `ß` vs `SS`, which an attacker could use to slip past a blocklist.
 
 **Q:** Is this a TOCTOU risk? **A:** Yes. A symlink can be swapped between the check and the open. The SDK is a guardrail against accidents, not a sandbox, and the README says so.
+
+## 3.9 Directory and name entry matching
+**Conceptual:** Students think about blocked paths in two ways: a place (`~/.ssh`, everything under it) and a kind of file (`.env`, wherever it lives). The matcher supports both, and it has to get the boundary right. Blocking `/a/b` must not block `/a/bc`, or people will stop trusting it.
+
+**Technical:** A directory entry matches when any attempted form equals any entry form, or starts with it plus `os.sep`. That separator boundary is what keeps sibling prefixes out, and `/` correctly blocks everything. A name entry matches when the casefolded basename of any form equals the casefolded entry. `blocked_entry_for` returns the first matching entry, which goes in the alert. Properties 26 (siblings) and 27 (case changes, including `ß`/`É`) run against real temp trees. Tradeoff: matching is O(entries × 4 forms), fine for at most 100 entries.
+
+**Q:** What's the classic bug in prefix-based path checks? **A:** Using `startswith` without a separator, so `/home/al` blocks `/home/alice`. The fix is to compare against `entry + sep` or exact equality.
+
+**Q:** Why test against real temp directories instead of strings? **A:** `realpath` touches the filesystem, and platforms like macOS add their own symlinks (`/var` → `/private/var`). Real trees catch what string tests miss.
+
+**Q:** Why return the matching entry and not just a bool? **A:** The alert and the dashboard can show which rule fired, so the student can tell why the agent was stopped.

@@ -18,7 +18,9 @@ def _make(o):
 
 # Feature: agent-watch, Property 19: Credentials sent, secrets never leaked by the SDK
 @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(api_key=st.text(min_size=8, max_size=40).filter(lambda s: s.strip() == s and len(set(s)) > 3),
+# Realistic keys: long and random. A short key like "X-Agentw" would falsely "leak" via header names.
+@given(api_key=st.text(st.characters(min_codepoint=33, max_codepoint=0x2FF), min_size=16, max_size=40)
+       .map(lambda s: "sk-" + s),
        steps=st.lists(st.tuples(op, outcome), min_size=1, max_size=8))
 def test_property_19_credentials_sent_secrets_never_leaked(caplog, api_key, steps):
     caplog.clear()

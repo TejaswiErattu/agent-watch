@@ -48,3 +48,45 @@ def test_tilde_expands(monkeypatch, tmp_path):
 ])
 def test_is_directory_entry(entry, expected):
     assert is_directory_entry(entry) is expected
+
+
+# ---- 3.9 path_matches and blocked_entry_for ----
+
+from agentwatch.guardrails import blocked_entry_for, path_matches  # noqa: E402
+
+
+@pytest.mark.parametrize("attempt,expected", [
+    ("/a/b", True), ("/A/B", True), ("/a/b/c", True), ("/a/b/", True),
+    ("/a/bc", False), ("/a", False), ("/x/a/b", False),
+])
+def test_directory_entry_boundaries(attempt, expected):
+    assert path_matches(attempt, "/a/b") is expected
+
+
+@pytest.mark.parametrize("attempt", ["x/.env", ".ENV", "/deep/nested/dir/.Env", "./.env"])
+def test_name_entry_matches_anywhere_any_case(attempt):
+    assert path_matches(attempt, ".env") is True
+
+
+@pytest.mark.parametrize("attempt", [".env.example", "env", "x/.env/../notes.md", "my.env"])
+def test_name_entry_non_matches(attempt):
+    assert path_matches(attempt, ".env") is False
+
+
+def test_root_blocks_everything(tmp_path):
+    assert path_matches(str(tmp_path / "anything"), "/") is True
+    assert path_matches("relative.txt", "/") is True
+
+
+def test_tilde_directory_entry(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert path_matches(str(tmp_path / ".ssh" / "id_rsa"), "~/.ssh") is True
+    assert path_matches(str(tmp_path / ".sshx"), "~/.ssh") is False
+
+
+def test_blocked_entry_for_returns_first_match_or_none():
+    entries = ["/etc", ".env", "/a/b"]
+    assert blocked_entry_for("/a/b/.env", entries) == ".env"
+    assert blocked_entry_for("/a/b/notes", entries) == "/a/b"
+    assert blocked_entry_for("/home/me/notes.md", entries) is None
+    assert blocked_entry_for("/home/me/notes.md", []) is None

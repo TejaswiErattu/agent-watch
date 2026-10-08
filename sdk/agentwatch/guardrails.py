@@ -33,3 +33,26 @@ def path_forms(p: str) -> set[str]:
 def is_directory_entry(entry: str) -> bool:
     """An entry containing a separator names a place; otherwise it is a file name, anywhere."""
     return any(s in entry for s in _seps())
+
+
+def _under(a: str, e: str) -> bool:
+    """a is e or inside e. The separator boundary keeps /a/bc out of /a/b; "/" blocks everything."""
+    prefix = e if e.endswith(os.sep) else e + os.sep
+    return a == e or a.startswith(prefix)
+
+
+def path_matches(attempted: str, entry: str) -> bool:
+    forms = path_forms(attempted)
+    if is_directory_entry(entry):
+        entry_forms = path_forms(entry)
+        return any(_under(a, e) for a in forms for e in entry_forms)
+    name = entry.casefold()  # Name_Entry: final component, any directory
+    return any(os.path.basename(a) == name for a in forms)
+
+
+def blocked_entry_for(path: str, blocked_paths) -> str | None:
+    """The first Blocked_Path that matches `path`, or None if the access is allowed."""
+    for entry in blocked_paths:
+        if path_matches(path, entry):
+            return entry
+    return None
