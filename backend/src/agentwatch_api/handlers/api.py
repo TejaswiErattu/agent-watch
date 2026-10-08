@@ -17,9 +17,11 @@ from .. import service
 from ..auth import parse_credentials
 from ..service import NullPublisher, Publisher, Result
 from ..store import DynamoStore, Store
+from ..validation import validate_agent_id
 
 log = logging.getLogger("agentwatch_api")
 JSON_HEADERS = {"content-type": "application/json"}
+UNAUTHORIZED = {"error": "unauthorized"}
 
 
 @dataclass
@@ -86,17 +88,40 @@ def _response(result: Result) -> dict:
     return {"statusCode": result.status, "headers": dict(JSON_HEADERS), "body": json.dumps(result.body)}
 
 
+def _log_agent_id(event: dict) -> str | None:
+    """agentId for the access log: path param, else the event body's agentId if it is valid."""
+    agent_id = (event.get("pathParameters") or {}).get("agentId")
+    if agent_id is None and event.get("routeKey") == "POST /events":
+        try:
+            body = _json_body(event)
+            agent_id = body.get("agentId") if isinstance(body, dict) else None
+        except BadRequest:
+            agent_id = None
+    return agent_id if isinstance(agent_id, str) and validate_agent_id(agent_id) is None else None
+
+
+def _request_id(event: dict) -> str | None:
+    return (event.get("requestContext") or {}).get("requestId")
+
+
 def lambda_handler(event, context):
     route = event.get("routeKey", "")
     handler = ROUTES.get(route)
     if handler is None:
-        return _response(Result(404, {"error": "not found"}))
-    try:
-        creds = parse_credentials(event.get("headers"))
-        result = handler(_get_deps(), creds, event)
-    except BadRequest as e:
-        result = Result(400, {"error": str(e)})
-    except Exception:
-        log.exception("unhandled error route=%s", route)
-        result = Result(500, {"error": "internal"})
+        result = Result(404, {"error": "not found"})
+    elif (creds := parse_credentials(event.get("headers"))) is None:
+        # Gate before any route work: no body parsing, no store access.
+        result = Result(401, UNAUTHORIZED)
+    else:
+        try:
+            result = handler(_get_deps(), creds, event)
+        except BadRequest as e:
+            result = Result(400, {"error": str(e)})
+        except Exception as e:
+            # Exception text could echo inputs, so log only its type. Never log headers.
+            log.error("unhandled error", extra={"route": route, "request_id": _request_id(event),
+                                                 "error_type": type(e).__name__})
+            result = Result(500, {"error": "internal"})
+    log.info("request", extra={"route": route, "agent_id": _log_agent_id(event) if handler else None,
+                               "status": result.status, "request_id": _request_id(event)})
     return _response(result)

@@ -154,3 +154,11 @@ Format per task:
 
 **Q:** Why build the boto3 client outside the handler call? **A:** Lambda reuses containers, so module-level state survives across invocations. Creating the client once saves connection setup on every warm request.
 **Q:** Why return a generic 500 body? **A:** Internal error details such as exception text and table names help attackers map the system. Log them server-side and return a fixed message.
+
+## 2.7 401 gate and secret-safe logging
+**Conceptual:** Unauthenticated requests should cost almost nothing and learn nothing, so the credential check runs before any body parsing or database read. Logs are useful for debugging, but they're also a common leak path, so they carry only what an operator needs: route, agentId, status, and request id.
+**Technical:** `lambda_handler` calls `parse_credentials` right after route lookup and returns a fixed 401 body on failure. Mismatches surface as 403 from the service layer. Logging uses `extra=` fields, never headers. The 500 path logs the exception type, not its message, since messages can echo input. Properties drive random operation sequences through the handler and assert no Key_Hash or verifier appears in responses, logs, or stored items. Tradeoff: no stack traces in logs makes 500s harder to debug.
+
+**Q:** Why check auth before validating the body? **A:** It denies unauthenticated callers a free validation oracle and avoids spending CPU parsing attacker-supplied payloads.
+**Q:** How can secrets leak through logs even if you never log them directly? **A:** Through exception messages, request dumps, or header logging. Log structured, allowlisted fields and only the exception type.
+**Q:** What's the difference between 401 and 403 here? **A:** 401 means no usable credentials were presented. 403 means valid-looking credentials that don't own this agent.

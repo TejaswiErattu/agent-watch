@@ -139,3 +139,78 @@ def test_existing_config_returned_through_handler(store):
     store.create_agent_if_absent(new_record("bot", Credentials("tejaswi", H), cfg))
     status, body = call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
     assert status == 200 and body["guardrails"] == to_json(cfg)
+
+
+# ---- 2.7 401 gate and secret-safe logging ----
+
+import logging  # noqa: E402
+
+ROUTES = [
+    ("POST /events", None),
+    ("GET /agents/{agentId}/config", "bot"),
+    ("PUT /agents/{agentId}/config", "bot"),
+]
+BAD_HEADERS = [
+    {},
+    {"X-Agentwatch-Owner": "tejaswi"},
+    {"X-Agentwatch-Key-Hash": H},
+    {"X-Agentwatch-Owner": "has space", "X-Agentwatch-Key-Hash": H},
+    {"X-Agentwatch-Owner": "tejaswi", "X-Agentwatch-Key-Hash": H.upper()},
+    {"X-Agentwatch-Owner": "tejaswi", "X-Agentwatch-Key-Hash": "a" * 63},
+]
+
+
+@pytest.mark.parametrize("headers", BAD_HEADERS)
+@pytest.mark.parametrize("route,agent_id", ROUTES)
+def test_missing_or_malformed_credentials_401_before_any_work(store, route, agent_id, headers):
+    # Even an invalid body must not be parsed before the 401.
+    ev = http_event(route, raw_body="{not json", agent_id=agent_id, headers=headers)
+    status, body = call(ev)
+    assert status == 401 and body == {"error": "unauthorized"}
+    assert store.items == {}
+
+
+def test_no_headers_key_at_all_401(store):
+    ev = http_event("POST /events", event_body())
+    del ev["headers"]
+    assert call(ev) == (401, {"error": "unauthorized"})
+
+
+def test_forbidden_through_handler(store):
+    call(http_event("PUT /agents/{agentId}/config", CFG, agent_id="bot"))
+    snap = store.snapshot()
+    other = {"X-Agentwatch-Owner": "tejaswi", "X-Agentwatch-Key-Hash": "b" * 64}
+    for route, agent_id in ROUTES:
+        body = event_body() if route == "POST /events" else CFG
+        assert call(http_event(route, body, agent_id=agent_id, headers=other)) == (403, {"error": "forbidden"})
+    assert store.snapshot() == snap
+
+
+def test_logs_route_agent_status_request_id_only(store, caplog):
+    caplog.set_level(logging.DEBUG)
+    call(http_event("PUT /agents/{agentId}/config", CFG, agent_id="bot"))
+    recs = [r for r in caplog.records if r.name == "agentwatch_api"]
+    assert len(recs) == 1
+    r = recs[0]
+    assert (r.route, r.agent_id, r.status, r.request_id) == ("PUT /agents/{agentId}/config", "bot", 200, "req-1")
+    text = caplog.text
+    assert H not in text and "x-agentwatch" not in text.lower()
+
+
+def test_post_events_logs_agent_id_from_body(store, caplog):
+    caplog.set_level(logging.INFO)
+    call(http_event("POST /events", event_body()))
+    (r,) = [r for r in caplog.records if r.name == "agentwatch_api"]
+    assert r.agent_id == "bot" and r.status == 200
+
+
+def test_500_log_has_no_secrets(monkeypatch, caplog):
+    class Boom(InMemoryStore):
+        def get_agent(self, agent_id):
+            raise RuntimeError(f"kaboom with {H}")  # hostile: a secret inside the exception
+
+    monkeypatch.setattr(api, "_deps", api.Deps(store=Boom(), publisher=NullPublisher()))
+    caplog.set_level(logging.DEBUG)
+    status, _ = call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
+    assert status == 500
+    assert H not in caplog.text

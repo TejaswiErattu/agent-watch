@@ -139,7 +139,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 2.4, 15.2, 22.1, 22.3_
     - Commit: `feat(backend): lambda router for events and config routes`
 
-  - [ ] 2.7 Enforce the authorization gate and secret hygiene at the handler
+  - [x] 2.7 Enforce the authorization gate and secret hygiene at the handler
     - Write the failing tests first. Extend `backend/tests/test_handler.py`; extend the Property 14 test in `backend/tests/test_properties_auth.py` with the route clauses (driven through `lambda_handler`); add `backend/tests/test_properties_api.py` with Property 15 (use `caplog` to capture logs; scan responses, logs, and every store item).
     - In `handlers/api.py`, return 401 `{"error":"unauthorized"}` before any route work when Credentials are missing or malformed; log only route, agentId, status, and request id; never log headers.
     - Property tests (required): **Property 14: Authorization gate** (route clauses), **Property 15: Secret hygiene in the API**.
