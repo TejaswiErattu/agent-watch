@@ -63,3 +63,10 @@ Format per task:
 
 **Q:** What is a sparse GSI and why use one? **A:** DynamoDB indexes only items that have the GSI key attribute. Putting `gsiOwnerId` only on agent records means the inventory query reads agents, never millions of events.
 **Q:** Why a Protocol instead of a base class? **A:** Structural typing. Any object with the right methods works, so test fakes don't need inheritance, and `runtime_checkable` still lets a test assert conformance.
+
+## 1.9 InMemoryStore event writes
+**Conceptual:** An SDK retry must never double-count spend, and a request with the wrong key must never write anything. The fake store enforces both the same way DynamoDB will: through conditions checked before any write, with all-or-nothing effects.
+**Technical:** `record_event` mirrors a two-item `TransactWriteItems`. Item 1 (the META update) carries `keyVerifier = :kv`, and item 0 (the event put) carries `attribute_not_exists(sk)`. Auth is checked first, so a wrong key on a duplicate still returns `forbidden`. Only after both pass does it write the event, add to `totalSpendUsd`, and set `firstSeen` if absent. Tradeoff: `lastSeen` is a separate, non-transactional conditional update, because "keep the later ts" can fail harmlessly on out-of-order events.
+
+**Q:** How do you make ingestion idempotent? **A:** Use a client-generated eventId in the sort key and a conditional put on `attribute_not_exists(sk)`. A retry hits the condition and changes nothing.
+**Q:** Why a transaction instead of two writes? **A:** Without one, a crash between "store event" and "add cost" leaves the total wrong forever. A transaction makes them succeed or fail together.

@@ -123,10 +123,26 @@ class InMemoryStore:
     # ---- events and queries (tasks 1.9, 1.10) ----
 
     def record_event(self, event, cost: float, key_verifier: str) -> RecordResult:
-        raise NotImplementedError
+        """Mirror of the 2-item TransactWriteItems: verifier check, then SK check, then both writes."""
+        meta = self.items.get((event.agent_id, META_SK))
+        if meta is None or meta["keyVerifier"] != key_verifier:  # item 1 condition
+            return "forbidden"
+        key = (event.agent_id, event.sk)
+        if key in self.items:  # item 0 condition
+            return "duplicate"
+        self.items[key] = {**copy.deepcopy(event.item), "sk": event.sk, "costUsd": round(cost, 6)}
+        meta["totalSpendUsd"] = meta.get("totalSpendUsd", 0.0) + cost
+        meta.setdefault("firstSeen", event.ts)
+        if event.type == "llm_call":
+            meta["model"] = event.item["model"]
+        return "stored"
 
     def bump_last_seen(self, agent_id: str, ts: str) -> None:
-        raise NotImplementedError
+        meta = self.items.get((agent_id, META_SK))
+        if meta is None:
+            return
+        if "lastSeen" not in meta or meta["lastSeen"] < ts:
+            meta["lastSeen"] = ts
 
     def query_events(self, agent_id, *, ascending=True, limit=50, type_filter=None, start_after=None):
         raise NotImplementedError

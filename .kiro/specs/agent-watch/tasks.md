@@ -64,7 +64,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.2, 4.3, 4.7, 23.1_
     - Commit: `feat(backend): store protocol and in-memory agent records`
 
-  - [ ] 1.9 Implement InMemoryStore event writes
+  - [x] 1.9 Implement InMemoryStore event writes
     - Write the failing tests first. Extend `backend/tests/test_store_memory.py`: `record_event` returns `"stored"` and adds cost to `totalSpendUsd`, sets `firstSeen` if absent, sets `model` for `llm_call`; same SK again returns `"duplicate"` with no cost change; wrong verifier returns `"forbidden"` even when the SK also exists; event items carry no `keyVerifier`/`gsiOwnerId`; `bump_last_seen` keeps the later ts.
     - Implement `InMemoryStore.record_event(event, cost, key_verifier)` (verifier check first, then SK check, then both writes together) and `bump_last_seen(agent_id, ts)`.
     - _Requirements: 4.5, 4.6, 4.8, 23.2, 23.3_
