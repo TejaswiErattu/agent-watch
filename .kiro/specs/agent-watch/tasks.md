@@ -182,7 +182,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 2.1, 2.3_
     - Commit: `feat(sdk): background sender with sync path and flush`
 
-  - [ ] 3.6 Implement SDK cost math over the Pricing_Table
+  - [x] 3.6 Implement SDK cost math over the Pricing_Table
     - Write the failing tests first. In `sdk/tests/test_pricing.py`, cover: known model cost from a sample table; unknown model and empty table give 0.0; `sdk/agentwatch/pricing.py` has no numeric price literals (AST scan for float constants in a dict). Add `backend/tests/test_properties_sdk_parity.py` with Property 1 (imports both packages).
     - Implement `cost_from_table(table, model, in_tok, out_tok)` in `sdk/agentwatch/pricing.py` (same formula as the backend).
     - Property test: **Property 1: SDK cost matches backend cost** (required).

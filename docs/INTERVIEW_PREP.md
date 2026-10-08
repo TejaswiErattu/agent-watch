@@ -212,3 +212,14 @@ Format per task:
 **Q:** Why send blocked events synchronously? **A:** The exception may end the process. A queued event could be lost, and the block event is what triggers the alert.
 
 **Q:** What are the limits of an in-memory queue? **A:** It's unbounded and lost on a crash. For production, use a bounded queue with drop-oldest, or spool to disk.
+
+## 3.6 SDK cost math over the Pricing_Table
+**Conceptual:** Prices change, and a student won't upgrade their SDK just because Anthropic cut a price. So the SDK holds no prices. It uses the table the server sends with each config fetch. The backend stays the single source of truth, and the SDK's spend-cap estimate matches what the server will bill.
+
+**Technical:** `cost_from_table(table, model, in, out)` is `(in*inputPerMTok + out*outputPerMTok) / 1e6`, rounded to 6 dp, and returns 0.0 for an unknown model or an empty table. An AST test fails on any non-zero float literal in the file. Property 1 runs random models and token counts through both the SDK and the backend and requires agreement within $0.0001. Tradeoff: the formula is duplicated in two packages, and a parity test guards it instead of a shared library.
+
+**Q:** Why not ship prices in the SDK? **A:** Clients drift. Server-provided data updates every user immediately and avoids two sources disagreeing.
+
+**Q:** Why duplicate the formula instead of sharing a package? **A:** The SDK must stay requests-only and installable on its own. Four lines plus a property test is cheaper than a third package.
+
+**Q:** What happens before the first config fetch? **A:** The table is empty, so estimates are 0.0 and a cap can't block. That's the fail-open choice for availability, and it's documented.
