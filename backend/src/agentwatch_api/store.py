@@ -11,7 +11,7 @@ InMemoryStore mirrors DynamoStore's conditional semantics and is used by every s
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Literal, Protocol, runtime_checkable
 
@@ -50,7 +50,7 @@ def classify_cancellation(reasons: list[dict]) -> RecordResult:
 class AgentRecord:
     agent_id: str
     owner_id: str
-    key_verifier: str
+    key_verifier: str = field(repr=False)  # like Credentials: never in logs or tracebacks
     guardrails: GuardrailConfig
     first_seen: str | None = None
     last_seen: str | None = None
@@ -102,6 +102,8 @@ class Store(Protocol):
     def record_event(self, event, cost: float, key_verifier: str) -> RecordResult: ...
 
     def bump_last_seen(self, agent_id: str, ts: str) -> None: ...
+
+    def get_event_cost(self, agent_id: str, sk: str) -> float | None: ...
 
     def query_events(
         self,
@@ -167,6 +169,10 @@ class InMemoryStore:
             return
         if "lastSeen" not in meta or meta["lastSeen"] < ts:
             meta["lastSeen"] = ts
+
+    def get_event_cost(self, agent_id: str, sk: str) -> float | None:
+        item = self.items.get((agent_id, sk))
+        return None if item is None else float(item["costUsd"])
 
     def _event_items(self, agent_id: str) -> list[dict]:
         return sorted(
@@ -386,6 +392,16 @@ class DynamoStore:
             if _is_conditional_failure(err):
                 return
             raise
+
+    def get_event_cost(self, agent_id: str, sk: str) -> float | None:
+        resp = self.client.get_item(
+            TableName=self.table_name,
+            Key={"agentId": {"S": agent_id}, "sk": {"S": sk}},
+            ConsistentRead=True,
+            ProjectionExpression="costUsd",
+        )
+        item = resp.get("Item")
+        return float(from_av(item["costUsd"])) if item and "costUsd" in item else None
 
     # ---- queries (task 1.13) ----
 

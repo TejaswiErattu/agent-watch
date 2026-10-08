@@ -106,6 +106,11 @@ def ingest_event(store: Store, creds: Credentials, body, now: datetime, publishe
     if outcome == "forbidden":
         return Result(403, FORBIDDEN)
 
+    # A duplicate reports what was stored the first time, not the resubmitted body's cost.
+    if outcome == "duplicate":
+        stored = store.get_event_cost(event.agent_id, event.sk)
+        cost = cost if stored is None else stored
+
     # 6. lastSeen keeps the later ts (a no-op for duplicates)
     store.bump_last_seen(event.agent_id, event.ts)
 

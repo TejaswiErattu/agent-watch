@@ -24,7 +24,9 @@ Last updated: 2026-10-08 by Kiro session
 - 2026-10-08 InMemoryStore `last_sk` follows DynamoDB `LastEvaluatedKey`: it's set whenever `limit` items were read.
 - 2026-10-08 `new_record(agent_id, creds, cfg)` takes agentId (tasks.md listed `new_record(creds, cfg)`, but a record needs its key).
 - 2026-10-08 `authorize_or_register` is shared by ingest and put_config. It returns "created" so put_config skips a redundant update after creating the record with the submitted config.
-- 2026-10-08 A duplicate event's response reports the recomputed server cost (no extra read). It's identical unless prices change between retries.
+- 2026-10-08 A duplicate event's response reports the stored costUsd (one consistent `get_item`, only on the duplicate path). Recomputing from the resubmitted body could disagree with what was stored. (Replaces the earlier "recompute, no extra read" decision, per group 2 review.)
+- 2026-10-08 The handler sets the `agentwatch_api` logger to INFO; the SAM template must also set `LoggingConfig.ApplicationLogLevel: INFO` (task 4.3).
+- 2026-10-08 On 401 the handler reads no body and no path; the log agentId is set by the route after the gate, and the POST body is parsed once.
 - 2026-10-08 get_config and put_config validate the path agentId (400) before touching the store.
 - 2026-10-08 The handler's 500 path logs only the exception type, never its message, since messages can echo inputs or secrets.
 

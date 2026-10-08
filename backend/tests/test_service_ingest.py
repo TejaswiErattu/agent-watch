@@ -189,3 +189,12 @@ def test_last_seen_keeps_later_ts_out_of_order():
     assert rec.first_seen == "2026-10-08T10:00:00.000Z"  # first to arrive, not earliest
     ingest_event(s, CREDS, body(eid="3" * 32, ts="2026-10-08T11:00:00.000Z"), NOW)
     assert s.get_agent("bot").last_seen == "2026-10-08T11:00:00.000Z"
+
+
+def test_duplicate_returns_stored_cost_not_resubmitted():
+    s = InMemoryStore()
+    first = ingest_event(s, CREDS, body(), NOW)
+    # Same eventId and ts (same SK), different token counts in the resubmission.
+    again = ingest_event(s, CREDS, body(inputTokens=999999, outputTokens=999999), NOW)
+    assert again.body["duplicate"] is True
+    assert again.body["costUsd"] == first.body["costUsd"]

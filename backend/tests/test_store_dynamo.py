@@ -421,3 +421,21 @@ def test_record_round_trip_through_attribute_values(rec):
     assert back == rec
     if rec.guardrails.daily_spend_cap_usd is None:
         assert av["guardrails"]["M"]["dailySpendCapUsd"] == {"NULL": True}
+
+
+# ---- get_event_cost (duplicate responses report the stored cost) ----
+
+def test_get_event_cost_reads_stored_cost_consistently():
+    c = FakeClient()
+    c.get_item = lambda **kw: (c.calls.append(("get_item", kw)), {"Item": {"costUsd": {"N": "0.0042"}}})[1]
+    store = DynamoStore(TABLE, client=c)
+    assert store.get_event_cost("agent-1", "2026-10-08T00:00:00.000Z#" + "f" * 32) == 0.0042
+    _, kwargs = c.calls[-1]
+    assert kwargs["ConsistentRead"] is True
+    assert kwargs["Key"] == {"agentId": {"S": "agent-1"}, "sk": {"S": "2026-10-08T00:00:00.000Z#" + "f" * 32}}
+    assert kwargs["ProjectionExpression"] == "costUsd"
+
+
+def test_get_event_cost_missing_returns_none():
+    store = DynamoStore(TABLE, client=FakeClient())
+    assert store.get_event_cost("agent-1", "x#y") is None

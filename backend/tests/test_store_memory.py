@@ -308,3 +308,12 @@ def test_query_events_full_page_cursor_with_filter():
     s = seeded(2)  # llm, tool
     page, cur = s.query_events("bot", limit=2, type_filter="llm_call")
     assert len(page) == 1 and cur is not None
+
+
+def test_agent_record_repr_hides_key_verifier():
+    from agentwatch_api.rules import EMPTY_CONFIG as _E
+    from agentwatch_api.store import AgentRecord as _AR
+
+    v = "f" * 64
+    rec = _AR(agent_id="bot", owner_id="tejaswi", key_verifier=v, guardrails=_E)
+    assert v not in repr(rec) and "key_verifier" not in repr(rec)

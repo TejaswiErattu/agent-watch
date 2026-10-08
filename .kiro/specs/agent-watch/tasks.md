@@ -268,7 +268,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Commit: `feat(backend): publish alert for newly stored blocked events`
 
   - [ ] 4.3 Write the minimal SAM template for the demo
-    - Write the failing tests first. Add `backend/tests/test_template.py` that parses `backend/template.yaml` with a CloudFormation-tag-aware YAML loader and asserts: `ApiFunction` has `python3.11`, `arm64`, handler `agentwatch_api.handlers.api.lambda_handler`, env `TABLE_NAME` and `TOPIC_ARN`; routes `POST /events`, `GET /agents/{agentId}/config`, `PUT /agents/{agentId}/config` exist; `EventTable` is `PAY_PER_REQUEST` with keys `agentId`/`sk` and GSI `ownerIndex` on `gsiOwnerId`; `AlertTopic` has an `email` subscription from the `AlertEmail` parameter.
+    - Write the failing tests first. Add `backend/tests/test_template.py` that parses `backend/template.yaml` with a CloudFormation-tag-aware YAML loader and asserts: `ApiFunction` has `python3.11`, `arm64`, handler `agentwatch_api.handlers.api.lambda_handler`, env `TABLE_NAME` and `TOPIC_ARN`, `LoggingConfig: {LogFormat: JSON, ApplicationLogLevel: INFO}`; routes `POST /events`, `GET /agents/{agentId}/config`, `PUT /agents/{agentId}/config` exist; `EventTable` is `PAY_PER_REQUEST` with keys `agentId`/`sk` and GSI `ownerIndex` on `gsiOwnerId`; `AlertTopic` has an `email` subscription from the `AlertEmail` parameter.
     - Create `backend/template.yaml` and `backend/samconfig.toml` (`region = "us-west-2"`). Full routes, CORS, throttling, and Budget come in 7.1.
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.6, 18.1, 18.2, 18.4_
     - Commit: `feat(infra): minimal SAM template for ingest, config, table, topic`

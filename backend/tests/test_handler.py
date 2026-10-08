@@ -214,3 +214,48 @@ def test_500_log_has_no_secrets(monkeypatch, caplog):
     status, _ = call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
     assert status == 500
     assert H not in caplog.text
+
+
+# ---- group 2 review fixes ----
+
+
+def test_agentwatch_logger_level_is_info():
+    assert logging.getLogger("agentwatch_api").level == logging.INFO
+
+
+class NoBodyEvent(dict):
+    """An API Gateway event whose body must never be touched."""
+
+    def get(self, key, default=None):
+        assert key != "body", "body read on a 401"
+        return super().get(key, default)
+
+    def __getitem__(self, key):
+        assert key != "body", "body read on a 401"
+        return super().__getitem__(key)
+
+
+@pytest.mark.parametrize("route,agent_id", ROUTES)
+def test_401_never_reads_body(store, route, agent_id):
+    ev = NoBodyEvent(http_event(route, event_body(), agent_id=agent_id, headers={}))
+    assert call(ev) == (401, {"error": "unauthorized"})
+
+
+def test_401_logs_no_agent_id(store, caplog):
+    caplog.set_level(logging.INFO)
+    call(http_event("POST /events", event_body(), headers={}))
+    (r,) = [r for r in caplog.records if r.name == "agentwatch_api"]
+    assert r.status == 401 and r.agent_id is None
+
+
+def test_post_body_parsed_once(store, monkeypatch):
+    calls = []
+    real = api._json_body
+
+    def counting(ev):
+        calls.append(1)
+        return real(ev)
+
+    monkeypatch.setattr(api, "_json_body", counting)
+    status, _ = call(http_event("POST /events", event_body()))
+    assert status == 200 and len(calls) == 1
