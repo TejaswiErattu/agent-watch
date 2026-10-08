@@ -98,7 +98,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
   - [x] 1.14 Checkpoint: backend foundations
     - Write the failing tests first. Run `pytest` in `backend/` and fix anything red; ensure all tests pass, ask the user if questions arise.
 
-- [ ] 2. Service layer and API for ingest and config
+- [x] 2. Service layer and API for ingest and config
   - [x] 2.1 Add the service Result type and the authorize helper
     - Write the failing tests first. In `backend/tests/test_service_auth.py`, cover: `authorize` returns `None` for a missing record, the record for Matching_Credentials, and `"forbidden"` for an ownerId or verifier mismatch; `Result(status, body)` equality.
     - Create `backend/src/agentwatch_api/service.py` with `Result`, `authorize(store, agent_id, creds)`, `new_record(creds, cfg)`, and a `Publisher` protocol with a `NullPublisher` default (no-op until task 4.2).
@@ -146,7 +146,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.6, 14.3, 14.5, 14.10, 25.1, 25.2, 25.4_
     - Commit: `feat(backend): 401 gate and secret-safe logging`
 
-  - [ ] 2.8 Checkpoint: service and API
+  - [x] 2.8 Checkpoint: service and API
     - Write the failing tests first. Run `pytest` in `backend/` and fix anything red; ensure all tests pass, ask the user if questions arise.
 
 - [ ] 3. SDK with path blocklist
