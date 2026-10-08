@@ -111,3 +111,17 @@ Format per task:
 **Q:** Why is `\d` a security bug in a validator? **A:** In Python 3, `\d` matches any Unicode decimal digit. A `ts` like `٢٠٢٦-...` passes the check but sorts above `META` as a string, which breaks range queries and record separation.
 **Q:** How can a JSON body crash a Python service? **A:** `json.loads` accepts `NaN`/`Infinity` and deep nesting. NaN can't be a DynamoDB number (500 on write), and recursive validators can hit RecursionError. Reject both at the edge with an iterative walk.
 **Q:** Why keep a test fake behaviorally identical to DynamoDB? **A:** Service tests trust the fake. If its rounding or pagination differs, a test can pass while production totals drift or pagination stops early.
+
+## 2.1 Service Result type and authorize helper
+**Conceptual:** Every route needs the same answer to one question: is there a record for this agent, and do these credentials own it? One helper with three outcomes (missing, match, forbidden) keeps that decision in one place, so no route can get it subtly wrong.
+**Technical:** `authorize` does a consistent read, then `auth.matches`. `new_record` stores `sha256(key_hash)`, never the Key_Hash. `Result(status, body)` is a frozen dataclass, so service tests compare whole responses with `==`. `Publisher` is a Protocol with a `NullPublisher` default, which lets ingest run before SNS exists. Tradeoff: returning a sentinel string `"forbidden"` instead of raising is less Pythonic, but it keeps control flow explicit and easy to test.
+
+**Q:** Why separate "missing" from "forbidden"? **A:** A missing record means first contact, so ingest registers it and reads return empty. Forbidden means someone else owns the agentId, which must never create or change anything.
+**Q:** Why a consistent read for authorization? **A:** An eventually consistent read could miss a just-created record and treat the agent as new, opening a window for a second owner to race in.
+
+## 2.2 ingest_event: validation, registration, server-side cost
+**Conceptual:** Ingest is the one write path from untrusted agents. It validates, binds a new agentId to the caller's credentials on first contact, and computes cost on the server so a client can't under-report spend.
+**Technical:** `validate_event` runs first (400, nothing stored). The body `ownerId` must equal the header ownerId. A missing record is created with an empty config, then `record_event` writes the event and cost in one transaction, then `bump_last_seen`. Only `llm_call` costs money, via `estimate_cost`, rounded with the shared `round_cost`, so the response matches what's stored. Tradeoff: race handling, forbidden, and duplicates are deferred to 2.3 so each task stays under an hour.
+
+**Q:** Why check that body ownerId equals the header ownerId? **A:** Otherwise a caller could write events claiming another owner. The authenticated identity has to win over anything in the payload.
+**Q:** Why return the server's cost in the response? **A:** The SDK can reconcile its local spend estimate with the authoritative number instead of trusting its own math.

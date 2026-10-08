@@ -105,7 +105,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 25.2, 25.3, 14.8_
     - Commit: `feat(backend): service result type and authorize helper`
 
-  - [ ] 2.2 Implement ingest_event validation, registration, and cost
+  - [x] 2.2 Implement ingest_event validation, registration, and cost
     - Write the failing tests first. In `backend/tests/test_service_ingest.py`, cover: invalid body returns 400 and stores nothing; body `ownerId` differing from Credentials returns 400; first event creates a META record with empty config and `firstSeen == lastSeen == ts`; `llm_call` cost equals `estimate_cost`, `tool_call` and `blocked` cost 0.0 even if the client sent `costUsd`; response is `{"eventId","costUsd","duplicate": false}`. Add `backend/tests/test_properties_ingest.py` with Property 7.
     - Implement `ingest_event(store, creds, body, now, publisher=NullPublisher())` steps 1 to 4 and 8 from the design.
     - Property test: **Property 7: Invalid events are rejected and nothing is stored** (required).
