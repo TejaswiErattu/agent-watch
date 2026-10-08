@@ -168,3 +168,14 @@ Format per task:
 **Technical:** `test_packaging.py` parses `pyproject.toml` with `tomllib` and asserts exactly one runtime dependency with a bounded range (`requests>=2.31,<3`). It also walks every file under `sdk/agentwatch/` with `ast` and fails on imports of `boto3`, `botocore`, `numpy`, `pandas`, or `torch`. Tradeoff: an AST scan is static, so it misses dynamic imports via `importlib`. It's cheap and catches the common accident of a stray import.
 **Q:** Why keep boto3 out of the SDK? **A:** It's a heavy dependency, and it would need AWS credentials on the student's machine. The SDK only talks HTTPS to our API with an owner id and a key hash, so the AWS surface stays server-side.
 **Q:** Why an upper bound like `<3` on requests? **A:** It allows minor and patch updates but blocks a future major release with breaking changes from silently entering a user's environment.
+
+## 3.2 Key_Hash, exceptions, and safe repr
+**Conceptual:** The student's API key shouldn't leave their machine, and it shouldn't sit in memory where a traceback or debug print could expose it. The SDK hashes the key as soon as it gets it and sends only the hash. Guardrail blocks are typed exceptions, so an agent can catch `PathBlocked` specifically and keep running.
+
+**Technical:** `key_hash` is the SHA-256 hex digest of the UTF-8 key, checked against the FIPS "abc" vector. `Credentials` is a frozen dataclass with `key_hash` marked `repr=False`, and `from_api_key` drops the plaintext. `SpendCapExceeded` and `PathBlocked` subclass `GuardrailBlocked` and fix `violation_type`. Tradeoff: an unsalted fast hash of a high-entropy key is fine, but it would be weak for human-chosen passwords.
+
+**Q:** Why is unsalted SHA-256 acceptable here when it's wrong for passwords? **A:** API keys are long random strings, so there's nothing to brute-force or look up in a rainbow table. Passwords are low-entropy and need a slow, salted KDF like Argon2 or bcrypt.
+
+**Q:** Isn't the hash itself now a bearer credential? **A:** Yes. Anyone with the hash can call the API, so it's treated as a secret too: hidden from repr and logs, and sent only over HTTPS. The server stores only a hash of the hash, so a table leak doesn't expose it.
+
+**Q:** Why a typed exception hierarchy? **A:** Callers can catch every guardrail block or just one kind. Exceptions also stop execution before the risky action, which a return value can't guarantee.

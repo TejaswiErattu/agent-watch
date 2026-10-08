@@ -156,7 +156,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 10.7, 19.1, 19.2, 19.3_
     - Commit: `feat(sdk): scaffold package with requests-only dependency`
 
-  - [ ] 3.2 Add Key_Hash, exceptions, and safe repr
+  - [x] 3.2 Add Key_Hash, exceptions, and safe repr
     - Write the failing tests first. In `sdk/tests/test_credentials.py`, cover: `key_hash("abc")` equals the known SHA-256 hex vector; `GuardrailBlocked` has `violation_type` and `detail`, and `SpendCapExceeded`/`PathBlocked` subclass it; a credentials holder's `repr` contains neither the API_Key nor the Key_Hash.
     - Implement `key_hash(api_key)` and the exception classes in `sdk/agentwatch/client.py`; export the exceptions from `__init__.py`.
     - _Requirements: 14.1, 14.4_
