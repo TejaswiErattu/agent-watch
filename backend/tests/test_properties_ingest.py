@@ -78,3 +78,65 @@ def test_invalid_events_rejected_and_nothing_stored(b, data):
 @given(b=valid_bodies())
 def test_valid_bodies_are_accepted(b):
     assert ingest_event(InMemoryStore(), CREDS, b, NOW).status == 200
+
+
+# ---- 2.3: Properties 10 and 12 ----
+
+import pytest  # noqa: E402
+
+from agentwatch_api.rules import EMPTY_CONFIG  # noqa: E402
+from agentwatch_api.service import new_record  # noqa: E402
+from agentwatch_api.store import META_SK  # noqa: E402
+
+
+@st.composite
+def submissions(draw):
+    """Distinct-eventId bodies plus a submission order that may repeat them (resubmissions)."""
+    pool = draw(st.lists(valid_bodies(), min_size=1, max_size=8, unique_by=lambda b: b["eventId"]))
+    order = draw(st.lists(st.integers(0, len(pool) - 1), min_size=1, max_size=16))
+    return [pool[i] for i in order]
+
+
+# Feature: agent-watch, Property 10: Total spend equals the sum of distinct stored events
+@settings(max_examples=100)
+@given(subs=submissions())
+def test_total_spend_equals_sum_of_distinct_events(subs):
+    s = InMemoryStore()
+    for b in subs:
+        assert ingest_event(s, CREDS, b, NOW).status == 200
+    events = [v for (_, sk), v in s.items.items() if sk != META_SK]
+    assert len(events) == len({b["eventId"] for b in subs})
+    assert s.get_agent("bot").total_spend_usd == pytest.approx(sum(e["costUsd"] for e in events), abs=1e-4)
+
+
+class MaybeLosesRace(InMemoryStore):
+    """Each create_agent_if_absent may lose to a same-owner request that lands first."""
+
+    def __init__(self, losses):
+        super().__init__()
+        self.losses = iter(losses)
+
+    def create_agent_if_absent(self, record):
+        if next(self.losses, False):
+            super().create_agent_if_absent(new_record(record.agent_id, CREDS, EMPTY_CONFIG))
+        return super().create_agent_if_absent(record)
+
+
+# Feature: agent-watch, Property 12: Registration invariants
+@settings(max_examples=100)
+@given(subs=submissions(), losses=st.lists(st.booleans(), max_size=4))
+def test_registration_invariants_events_only(subs, losses):
+    s = MaybeLosesRace(losses)
+    stored_ts = []
+    seen = set()
+    for b in subs:
+        assert ingest_event(s, CREDS, b, NOW).status == 200
+        if b["eventId"] not in seen:
+            seen.add(b["eventId"])
+            stored_ts.append(b["ts"])
+    metas = [v for (_, sk), v in s.items.items() if sk == META_SK]
+    assert len(metas) == 1
+    rec = s.get_agent("bot")
+    assert rec.first_seen == stored_ts[0]
+    assert rec.last_seen == max(stored_ts)
+    assert rec.guardrails == EMPTY_CONFIG

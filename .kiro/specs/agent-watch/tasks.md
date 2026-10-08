@@ -112,7 +112,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.1, 4.5, 13.4, 13.5, 13.9, 13.10, 23.1_
     - Commit: `feat(backend): ingest_event with validation, registration, server-side cost`
 
-  - [ ] 2.3 Handle races, duplicates, forbidden, and lastSeen in ingest_event
+  - [x] 2.3 Handle races, duplicates, forbidden, and lastSeen in ingest_event
     - Write the failing tests first. Extend `backend/tests/test_service_ingest.py`: a store whose `create_agent_if_absent` loses the race (another record appears) is re-read and authorized; a mismatched existing record returns 403 `{"error":"forbidden"}` and stores nothing; a resubmitted eventId returns 200 `duplicate: true` with no spend change; an Unreported_Agent keeps its config and gets `firstSeen`/`lastSeen`; `lastSeen` keeps the later ts on out-of-order events. Extend `backend/tests/test_properties_ingest.py` with Properties 10 and 12, and add the service clause of Property 28 (verifier replaced mid-flight via `InMemoryStore`) to `backend/tests/test_properties_store.py`.
     - Implement steps 2 (race re-read), 5, and 6 of `ingest_event` in `backend/src/agentwatch_api/service.py`.
     - Property tests (required): **Property 10: Total spend equals the sum of distinct stored events** (check `totalSpendUsd` on the record and distinct stored event items; the timeline clause is added in 5.2), **Property 12: Registration invariants** (events-only interleavings here; PUTs join in 2.5), **Property 28: Transaction outcomes are classified correctly** (service clause).

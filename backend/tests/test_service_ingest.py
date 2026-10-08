@@ -84,3 +84,108 @@ def test_only_one_meta_after_two_events():
     ingest_event(s, CREDS, body(eid="1" * 32), NOW)
     ingest_event(s, CREDS, body(eid="2" * 32), NOW)
     assert sum(1 for (_, sk) in s.items if sk == META_SK) == 1
+
+
+# ---- 2.3 races, duplicates, forbidden, lastSeen ----
+
+from agentwatch_api.rules import GuardrailConfig  # noqa: E402
+from agentwatch_api.service import new_record  # noqa: E402
+
+OTHER = Credentials("intruder", "b" * 64)
+
+
+class RacingStore(InMemoryStore):
+    """create_agent_if_absent loses: another request's record lands first."""
+
+    def __init__(self, racer_creds):
+        super().__init__()
+        self.racer_creds = racer_creds
+        self.create_calls = 0
+
+    def create_agent_if_absent(self, record):
+        self.create_calls += 1
+        super().create_agent_if_absent(new_record(record.agent_id, self.racer_creds, EMPTY_CONFIG))
+        return super().create_agent_if_absent(record)  # False: already exists
+
+
+class SwapVerifierStore(InMemoryStore):
+    """The record's keyVerifier is replaced between authorize and the transaction."""
+
+    def record_event(self, event, cost, key_verifier):
+        self.items[(event.agent_id, META_SK)]["keyVerifier"] = "c" * 64
+        return super().record_event(event, cost, key_verifier)
+
+
+def test_lost_race_same_owner_rereads_and_stores():
+    s = RacingStore(CREDS)
+    r = ingest_event(s, CREDS, body(), NOW)
+    assert r.status == 200 and r.body["duplicate"] is False
+    assert s.create_calls == 1
+    assert s.get_agent("bot").first_seen == TS
+
+
+def test_lost_race_other_owner_forbidden():
+    s = RacingStore(OTHER)
+    r = ingest_event(s, CREDS, body(), NOW)
+    assert r == Result(403, {"error": "forbidden"})
+    assert [sk for (_, sk) in s.items] == [META_SK]
+    assert s.get_agent("bot").first_seen is None
+
+
+@pytest.mark.parametrize("creds", [OTHER, Credentials("tejaswi", "b" * 64), Credentials("intruder", H)])
+def test_mismatched_existing_record_forbidden_and_unchanged(creds):
+    s = InMemoryStore()
+    ingest_event(s, CREDS, body(eid="1" * 32), NOW)
+    snap = s.snapshot()
+    r = ingest_event(s, creds, body(ownerId=creds.owner_id, eid="2" * 32), NOW)
+    assert r == Result(403, {"error": "forbidden"})
+    assert s.snapshot() == snap
+
+
+def test_forbidden_even_when_also_duplicate():
+    s = InMemoryStore()
+    ingest_event(s, CREDS, body(), NOW)
+    snap = s.snapshot()
+    r = ingest_event(s, Credentials("tejaswi", "b" * 64), body(), NOW)
+    assert r.status == 403 and s.snapshot() == snap
+
+
+def test_verifier_replaced_mid_flight_forbidden_no_last_seen():
+    s = SwapVerifierStore()
+    s.create_agent_if_absent(new_record("bot", CREDS, EMPTY_CONFIG))
+    r = ingest_event(s, CREDS, body(), NOW)
+    assert r == Result(403, {"error": "forbidden"})
+    meta = s.items[("bot", META_SK)]
+    assert "lastSeen" not in meta and "firstSeen" not in meta
+    assert meta["totalSpendUsd"] == 0.0
+
+
+def test_resubmission_is_duplicate_no_spend_change():
+    s = InMemoryStore()
+    first = ingest_event(s, CREDS, body(), NOW)
+    spend = s.get_agent("bot").total_spend_usd
+    again = ingest_event(s, CREDS, body(), NOW)
+    assert again == Result(200, {"eventId": "0" * 32, "costUsd": first.body["costUsd"], "duplicate": True})
+    assert s.get_agent("bot").total_spend_usd == spend
+    assert sum(1 for (_, sk) in s.items if sk != META_SK) == 1
+
+
+def test_unreported_agent_keeps_config_and_gets_seen_times():
+    s = InMemoryStore()
+    cfg = GuardrailConfig(2.0, (".env",))
+    s.create_agent_if_absent(new_record("bot", CREDS, cfg))
+    assert ingest_event(s, CREDS, body(type_="tool_call"), NOW).status == 200
+    rec = s.get_agent("bot")
+    assert rec.guardrails == cfg
+    assert rec.first_seen == rec.last_seen == TS
+
+
+def test_last_seen_keeps_later_ts_out_of_order():
+    s = InMemoryStore()
+    ingest_event(s, CREDS, body(eid="1" * 32, ts="2026-10-08T10:00:00.000Z"), NOW)
+    ingest_event(s, CREDS, body(eid="2" * 32, ts="2026-10-08T09:00:00.000Z"), NOW)
+    rec = s.get_agent("bot")
+    assert rec.last_seen == "2026-10-08T10:00:00.000Z"
+    assert rec.first_seen == "2026-10-08T10:00:00.000Z"  # first to arrive, not earliest
+    ingest_event(s, CREDS, body(eid="3" * 32, ts="2026-10-08T11:00:00.000Z"), NOW)
+    assert s.get_agent("bot").last_seen == "2026-10-08T11:00:00.000Z"

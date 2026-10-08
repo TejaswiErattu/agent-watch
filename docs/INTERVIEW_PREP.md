@@ -125,3 +125,11 @@ Format per task:
 
 **Q:** Why check that body ownerId equals the header ownerId? **A:** Otherwise a caller could write events claiming another owner. The authenticated identity has to win over anything in the payload.
 **Q:** Why return the server's cost in the response? **A:** The SDK can reconcile its local spend estimate with the authoritative number instead of trusting its own math.
+
+## 2.3 Ingest races, duplicates, forbidden, lastSeen
+**Conceptual:** Two first events for a new agent can arrive at once, an SDK retry can resubmit an event, and a record's key can change between the read and the write. Each case has to resolve without locks, without double-charging, and without letting the wrong caller write.
+**Technical:** `authorize_or_register` creates the record with `attribute_not_exists`. If the create loses, it re-reads and authorizes against the winner's record. `record_event`'s outcome drives the response: `forbidden` returns 403 and skips `lastSeen`, `duplicate` returns 200 with `duplicate: true` and no spend change. Tradeoff: a duplicate's response reports the recomputed cost rather than reading the stored item, which saves a read and is identical as long as prices don't change between retries.
+
+**Q:** How do you handle two concurrent "first" requests for the same new resource? **A:** Conditional create. The loser gets a condition failure, re-reads the winner's record, and authorizes against it, so the outcome is the same as if the requests had been serial.
+**Q:** What's a TOCTOU bug and where could one appear here? **A:** Time-of-check to time-of-use. Authorization reads the record, then the write happens later. The `keyVerifier = :kv` condition on the write re-checks ownership atomically, closing the gap.
+**Q:** Why should a retried request return 200 instead of an error? **A:** Idempotency. The client can't tell whether its first attempt landed, so "already stored" has to look like success or it will retry forever.
