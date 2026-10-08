@@ -125,3 +125,140 @@ def test_meta_optional():
     ev = validate_event(body, NOW)
     assert isinstance(ev, Event)
     assert ev.item["meta"] == {}
+
+
+# ---- 1.5 type-specific validation ----
+
+
+def llm(**over):
+    body = base(type="llm_call", model="claude-haiku-4-5", inputTokens=10, outputTokens=5)
+    del body["tool"], body["target"]
+    body.update(over)
+    return body
+
+
+def blocked(vt="blocked_path", **over):
+    body = base(type="blocked", violationType=vt)
+    del body["tool"], body["target"]
+    if vt == "blocked_path":
+        body["attemptedPath"] = ".env"
+    elif vt == "spend_cap":
+        body["attemptedCostUsd"] = 0.01
+    body.update(over)
+    return body
+
+
+def drop(body, key):
+    body = dict(body)
+    del body[key]
+    return body
+
+
+def test_valid_llm_call():
+    assert isinstance(validate_event(llm(), NOW), Event)
+
+
+@pytest.mark.parametrize("field", ["model", "inputTokens", "outputTokens"])
+def test_llm_call_missing_field(field):
+    assert err(validate_event(drop(llm(), field), NOW)).field == field
+
+
+@pytest.mark.parametrize("bad", [-1, 1.5, "10", True, None])
+@pytest.mark.parametrize("field", ["inputTokens", "outputTokens"])
+def test_llm_call_bad_token_count(field, bad):
+    assert err(validate_event(llm(**{field: bad}), NOW)).field == field
+
+
+def test_llm_call_zero_tokens_ok():
+    assert isinstance(validate_event(llm(inputTokens=0, outputTokens=0), NOW), Event)
+
+
+def test_llm_call_model_must_be_nonempty_string():
+    assert err(validate_event(llm(model=""), NOW)).field == "model"
+    assert err(validate_event(llm(model=5), NOW)).field == "model"
+
+
+@pytest.mark.parametrize("field", ["tool", "target"])
+def test_tool_call_missing_field(field):
+    assert err(validate_event(drop(base(), field), NOW)).field == field
+
+
+def test_tool_call_tool_nonempty():
+    assert err(validate_event(base(tool=""), NOW)).field == "tool"
+
+
+def test_tool_call_empty_target_ok():
+    # A tool with no args reports an empty target.
+    assert isinstance(validate_event(base(target=""), NOW), Event)
+
+
+def test_valid_blocked_path():
+    assert isinstance(validate_event(blocked("blocked_path"), NOW), Event)
+
+
+def test_valid_spend_cap():
+    assert isinstance(validate_event(blocked("spend_cap"), NOW), Event)
+
+
+def test_spend_cap_zero_cost_ok():
+    assert isinstance(validate_event(blocked("spend_cap", attemptedCostUsd=0), NOW), Event)
+
+
+def test_blocked_missing_violation_type():
+    assert err(validate_event(drop(blocked(), "violationType"), NOW)).field == "violationType"
+
+
+def test_blocked_bad_violation_type():
+    assert err(validate_event(blocked(violationType="nope"), NOW)).field == "violationType"
+
+
+def test_spend_cap_missing_cost():
+    body = drop(blocked("spend_cap"), "attemptedCostUsd")
+    assert err(validate_event(body, NOW)).field == "attemptedCostUsd"
+
+
+@pytest.mark.parametrize("bad", [-0.01, True, False, "0.1", None, float("nan"), float("inf")])
+def test_spend_cap_bad_cost(bad):
+    e = err(validate_event(blocked("spend_cap", attemptedCostUsd=bad), NOW))
+    assert e.field == "attemptedCostUsd"
+
+
+def test_blocked_path_missing_path():
+    body = drop(blocked("blocked_path"), "attemptedPath")
+    assert err(validate_event(body, NOW)).field == "attemptedPath"
+
+
+@pytest.mark.parametrize("bad", ["", 5, None])
+def test_blocked_path_bad_path(bad):
+    e = err(validate_event(blocked("blocked_path", attemptedPath=bad), NOW))
+    assert e.field == "attemptedPath"
+
+
+@pytest.mark.parametrize(
+    "make,field",
+    [
+        (lambda: base(tool="t" * 1025), "tool"),
+        (lambda: base(target="t" * 1025), "target"),
+        (lambda: llm(model="m" * 1025), "model"),
+        (lambda: blocked("blocked_path", attemptedPath="p" * 1025), "attemptedPath"),
+    ],
+)
+def test_string_fields_capped_at_1024(make, field):
+    assert err(validate_event(make(), NOW)).field == field
+
+
+def test_string_fields_at_1024_ok():
+    assert isinstance(validate_event(base(tool="t" * 1024, target="x" * 1024), NOW), Event)
+
+
+@pytest.mark.parametrize("make", [base, llm, lambda: blocked("spend_cap")])
+def test_client_cost_is_dropped(make):
+    ev = validate_event(make() | {"costUsd": 999.0}, NOW)
+    assert isinstance(ev, Event)
+    assert "costUsd" not in ev.item
+
+
+def test_client_cost_dropped_even_if_garbage():
+    ev = validate_event(base(costUsd="free!"), NOW)
+    assert isinstance(ev, Event)
+    assert "costUsd" not in ev.item

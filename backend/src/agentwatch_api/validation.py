@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -104,6 +105,59 @@ def _validate_common(body: dict) -> ValidationError | None:
     return None
 
 
+STR_MAX = 1024
+VIOLATION_TYPES = ("spend_cap", "blocked_path")
+
+
+def _req_str(body: dict, name: str, *, allow_empty: bool = False) -> ValidationError | None:
+    if name not in body:
+        return ValidationError(name, "is required")
+    v = body[name]
+    if not isinstance(v, str):
+        return ValidationError(name, "must be a string")
+    if not allow_empty and v == "":
+        return ValidationError(name, "must be non-empty")
+    if len(v) > STR_MAX:
+        return ValidationError(name, f"must be at most {STR_MAX} chars")
+    return None
+
+
+def _req_count(body: dict, name: str) -> ValidationError | None:
+    if name not in body:
+        return ValidationError(name, "is required")
+    v = body[name]
+    # bool is a subclass of int; reject it explicitly.
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        return ValidationError(name, "must be an integer >= 0")
+    return None
+
+
+def _validate_type_specific(body: dict) -> ValidationError | None:
+    # Optional string fields present on any type are still length-capped.
+    for name in ("model", "tool", "target", "attemptedPath"):
+        v = body.get(name)
+        if isinstance(v, str) and len(v) > STR_MAX:
+            return ValidationError(name, f"must be at most {STR_MAX} chars")
+    t = body["type"]
+    if t == "llm_call":
+        return _req_str(body, "model") or _req_count(body, "inputTokens") or _req_count(body, "outputTokens")
+    if t == "tool_call":
+        return _req_str(body, "tool") or _req_str(body, "target", allow_empty=True)
+    # blocked
+    vt = body.get("violationType")
+    if vt not in VIOLATION_TYPES:
+        reason = "is required" if "violationType" not in body else f"must be one of {', '.join(VIOLATION_TYPES)}"
+        return ValidationError("violationType", reason)
+    if vt == "spend_cap":
+        if "attemptedCostUsd" not in body:
+            return ValidationError("attemptedCostUsd", "is required")
+        c = body["attemptedCostUsd"]
+        if isinstance(c, bool) or not isinstance(c, (int, float)) or not math.isfinite(c) or c < 0:
+            return ValidationError("attemptedCostUsd", "must be a finite number >= 0")
+        return None
+    return _req_str(body, "attemptedPath")
+
+
 def validate_event(body: Any, now: datetime) -> Event | ValidationError:
     """Return an Event, or a ValidationError naming the first bad field.
 
@@ -111,7 +165,7 @@ def validate_event(body: Any, now: datetime) -> Event | ValidationError:
     """
     if not isinstance(body, dict):
         return ValidationError("body", "must be a JSON object")
-    if (e := _validate_common(body)) is not None:
+    if (e := _validate_common(body) or _validate_type_specific(body)) is not None:
         return e
 
     item = {k: v for k, v in body.items() if k != "costUsd"}

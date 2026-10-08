@@ -38,7 +38,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 13.1, 13.4, 20.1_
     - Commit: `feat(backend): common event validation`
 
-  - [ ] 1.5 Implement type-specific event validation
+  - [x] 1.5 Implement type-specific event validation
     - Write the failing tests first. Extend `backend/tests/test_validation.py`: `llm_call` needs `model`, integer `inputTokens`/`outputTokens` >= 0; `tool_call` needs `tool`, `target`; `blocked` needs `violationType` in {`spend_cap`, `blocked_path`}, `attemptedCostUsd` >= 0 (bools rejected) for spend_cap, non-empty `attemptedPath` for blocked_path; string fields capped at 1024 chars; client `costUsd` is ignored/dropped.
     - Extend `validate_event` in `backend/src/agentwatch_api/validation.py`.
     - _Requirements: 13.2, 13.3, 13.4, 13.6, 13.7, 13.8_
