@@ -140,3 +140,44 @@ def test_registration_invariants_events_only(subs, losses):
     assert rec.first_seen == stored_ts[0]
     assert rec.last_seen == max(stored_ts)
     assert rec.guardrails == EMPTY_CONFIG
+
+
+# ---- 2.5: Property 12 with config PUTs interleaved ----
+
+from agentwatch_api.rules import GuardrailConfig, to_json  # noqa: E402
+from agentwatch_api.service import put_config  # noqa: E402
+
+configs = st.builds(
+    GuardrailConfig,
+    st.one_of(st.none(), st.floats(0, 100, allow_nan=False)),
+    st.lists(st.text(min_size=1, max_size=10), max_size=4).map(tuple),
+)
+
+
+# Feature: agent-watch, Property 12: Registration invariants
+@settings(max_examples=100)
+@given(
+    subs=submissions(),
+    puts=st.lists(st.tuples(st.integers(0, 16), configs), max_size=4),
+    losses=st.lists(st.booleans(), max_size=6),
+)
+def test_registration_invariants_with_puts(subs, puts, losses):
+    s = MaybeLosesRace(losses)
+    ops = [("event", b) for b in subs]
+    for pos, cfg in sorted(puts, key=lambda p: p[0], reverse=True):
+        ops.insert(min(pos, len(ops)), ("put", cfg))
+    stored_ts, seen, last_cfg = [], set(), EMPTY_CONFIG
+    for kind, x in ops:
+        if kind == "put":
+            assert put_config(s, CREDS, "bot", to_json(x)).status == 200
+            last_cfg = x
+        else:
+            assert ingest_event(s, CREDS, x, NOW).status == 200
+            if x["eventId"] not in seen:
+                seen.add(x["eventId"])
+                stored_ts.append(x["ts"])
+    assert sum(1 for (_, sk) in s.items if sk == META_SK) == 1
+    rec = s.get_agent("bot")
+    assert rec.first_seen == stored_ts[0]
+    assert rec.last_seen == max(stored_ts)
+    assert rec.guardrails == last_cfg

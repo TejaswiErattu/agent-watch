@@ -12,7 +12,7 @@ from typing import Literal, Protocol, runtime_checkable
 from . import auth
 from .auth import Credentials
 from .pricing import estimate_cost, pricing_table
-from .rules import EMPTY_CONFIG, GuardrailConfig, to_json
+from .rules import EMPTY_CONFIG, GuardrailConfig, parse_config, to_json
 from .store import AgentRecord, Store, round_cost
 from .validation import Event, ValidationError, validate_agent_id, validate_event
 
@@ -122,3 +122,19 @@ def get_config(store: Store, creds: Credentials, agent_id: str) -> Result:
         return Result(403, FORBIDDEN)
     cfg = EMPTY_CONFIG if found is None else found.guardrails
     return Result(200, {"guardrails": to_json(cfg), "pricing": pricing_table()})
+
+
+def put_config(store: Store, creds: Credentials, agent_id: str, body) -> Result:
+    """PUT /agents/{agentId}/config. Full replace; registers the agent if it has no record."""
+    if (e := validate_agent_id(agent_id)) is not None:
+        return _bad(e)
+    cfg = parse_config(body)
+    if isinstance(cfg, ValidationError):
+        return _bad(cfg)
+    found = authorize_or_register(store, agent_id, creds, cfg)
+    if found == "forbidden":
+        return Result(403, FORBIDDEN)
+    # On "created" the record already holds cfg; otherwise write it under keyVerifier = :kv.
+    if found != "created" and not store.put_config(agent_id, cfg, auth.key_verifier(creds.key_hash)):
+        return Result(403, FORBIDDEN)  # verifier replaced mid-flight
+    return Result(200, {"guardrails": to_json(cfg)})

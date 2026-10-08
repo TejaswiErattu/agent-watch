@@ -140,3 +140,10 @@ Format per task:
 
 **Q:** Why should a GET never create state? **A:** GETs are safe and idempotent by HTTP semantics. Caches, retries, and crawlers can repeat them, and a side effect would let anyone register agentIds just by reading.
 **Q:** Why return 200 with an empty config instead of 404 for an unknown agent? **A:** A 404 vs 403 split tells an attacker which agentIds exist. The empty config also lets a new agent start with safe defaults.
+
+## 2.5 put_config
+**Conceptual:** A student sets guardrails before the agent has ever run, which is exactly when the `.env` rule matters most. So a PUT on an unknown agentId registers it, bound to the caller's key, and every later write must come from that same key.
+**Technical:** It validates the agentId and parses the full config (400, no side effects). Then `authorize_or_register` either creates the record with the submitted config or returns the existing one. Existing records are updated with `SET guardrails` under `keyVerifier = :kv`, so a key swapped mid-flight returns 403. Properties cover invalid bodies (store unchanged), PUT-then-GET round trips, and one META item across interleaved events and PUTs. Tradeoff: full replace, not patch. Simpler, and no lost-update merge logic.
+
+**Q:** Why full replace instead of PATCH? **A:** With a single writer (the dashboard), full replace is idempotent and needs no merge rules. Concurrent PATCHes would need versioning to avoid lost updates.
+**Q:** What stops someone from overwriting another student's guardrails? **A:** The update is conditional on the stored keyVerifier matching sha256 of the caller's Key_Hash, checked atomically in DynamoDB, not just in application code.

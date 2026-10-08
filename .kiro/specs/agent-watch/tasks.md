@@ -126,7 +126,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 3.7, 22.1, 22.2, 25.2_
     - Commit: `feat(backend): get_config service`
 
-  - [ ] 2.5 Implement put_config
+  - [x] 2.5 Implement put_config
     - Write the failing tests first. Extend `backend/tests/test_service_config.py`: valid PUT on an existing record replaces config and returns `{"guardrails": cfg}`; PUT on a missing record creates it with null `firstSeen`/`lastSeen`; a lost create race re-reads and authorizes; mismatch returns 403 and changes nothing. Extend `backend/tests/test_properties_config.py` with Properties 4 and 5, and extend Property 12 in `backend/tests/test_properties_ingest.py` to interleave PUTs.
     - Implement `put_config(store, creds, agent_id, body)` in `backend/src/agentwatch_api/service.py`.
     - Property tests (required): **Property 4: Invalid guardrail configs are rejected without side effects**, **Property 5: Config PUT then GET round trip** (PUT/GET clause; the inventory clause is added in 5.1), **Property 12: Registration invariants** (with PUTs).
