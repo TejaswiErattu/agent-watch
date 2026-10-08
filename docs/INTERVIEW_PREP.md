@@ -147,3 +147,10 @@ Format per task:
 
 **Q:** Why full replace instead of PATCH? **A:** With a single writer (the dashboard), full replace is idempotent and needs no merge rules. Concurrent PATCHes would need versioning to avoid lost updates.
 **Q:** What stops someone from overwriting another student's guardrails? **A:** The update is conditional on the stored keyVerifier matching sha256 of the caller's Key_Hash, checked atomically in DynamoDB, not just in application code.
+
+## 2.6 Lambda router for events and config
+**Conceptual:** One Lambda serves every route. The handler only translates API Gateway's event into service calls and back, so all business rules stay in plain, fast-to-test Python, and the Lambda-specific surface is tiny.
+**Technical:** It routes on `routeKey` through a dict table. The JSON body is decoded (including base64 bodies), and malformed JSON, bad base64, or pathological nesting all return 400. Unknown routes return 404 `{"error":"not found"}`. Any unexpected exception is logged and becomes 500 `{"error":"internal"}`, so stack traces never leak. Deps (`DynamoStore`, publisher) are built lazily once per container and are overridable in tests. Tradeoff: a single function means a shared cold start and one IAM role for all routes, which is fine at this size.
+
+**Q:** Why build the boto3 client outside the handler call? **A:** Lambda reuses containers, so module-level state survives across invocations. Creating the client once saves connection setup on every warm request.
+**Q:** Why return a generic 500 body? **A:** Internal error details such as exception text and table names help attackers map the system. Log them server-side and return a fixed message.

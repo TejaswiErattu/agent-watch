@@ -1,0 +1,141 @@
+import base64
+import json
+
+import pytest
+
+from agentwatch_api.handlers import api
+from agentwatch_api.rules import to_json, GuardrailConfig
+from agentwatch_api.service import NullPublisher
+from agentwatch_api.store import InMemoryStore
+
+H = "a" * 64
+HEADERS = {"X-Agentwatch-Owner": "tejaswi", "X-Agentwatch-Key-Hash": H}
+TS = "2026-10-08T10:00:00.000Z"
+CFG = {"dailySpendCapUsd": 1.0, "blockedPaths": [".env"]}
+
+
+@pytest.fixture
+def store(monkeypatch):
+    s = InMemoryStore()
+    monkeypatch.setattr(api, "_deps", api.Deps(store=s, publisher=NullPublisher()))
+    return s
+
+
+def http_event(route, body=None, agent_id=None, headers=HEADERS, raw_body=None, b64=False):
+    ev = {
+        "version": "2.0",
+        "routeKey": route,
+        "headers": {k.lower(): v for k, v in headers.items()},
+        "requestContext": {"requestId": "req-1", "http": {"method": (route.split() or ["GET"])[0]}},
+        "isBase64Encoded": b64,
+    }
+    if agent_id is not None:
+        ev["pathParameters"] = {"agentId": agent_id}
+    if raw_body is not None:
+        ev["body"] = raw_body
+    elif body is not None:
+        text = json.dumps(body)
+        ev["body"] = base64.b64encode(text.encode()).decode() if b64 else text
+    return ev
+
+
+def call(ev):
+    resp = api.lambda_handler(ev, None)
+    assert resp["headers"]["content-type"] == "application/json"
+    return resp["statusCode"], json.loads(resp["body"])
+
+
+def event_body(eid="0" * 32):
+    return {"agentId": "bot", "ownerId": "tejaswi", "ts": TS, "eventId": eid,
+            "type": "tool_call", "tool": "read_file", "target": "x"}
+
+
+def test_post_events_reaches_ingest(store):
+    status, body = call(http_event("POST /events", event_body()))
+    assert status == 200 and body == {"eventId": "0" * 32, "costUsd": 0.0, "duplicate": False}
+    assert store.get_agent("bot") is not None
+
+
+def test_post_events_base64_body(store):
+    status, _ = call(http_event("POST /events", event_body(), b64=True))
+    assert status == 200
+
+
+def test_put_then_get_config(store):
+    status, body = call(http_event("PUT /agents/{agentId}/config", CFG, agent_id="bot"))
+    assert status == 200 and body == {"guardrails": CFG}
+    status, body = call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
+    assert status == 200 and body["guardrails"] == CFG and "models" in body["pricing"]
+
+
+def test_get_config_missing_agent(store):
+    status, body = call(http_event("GET /agents/{agentId}/config", agent_id="ghost"))
+    assert status == 200 and body["guardrails"] == {"dailySpendCapUsd": None, "blockedPaths": []}
+    assert store.items == {}
+
+
+@pytest.mark.parametrize("raw", ["{not json", "", "[1,", "{" * 100000 + "}" * 100000])
+@pytest.mark.parametrize("route,agent_id", [("POST /events", None), ("PUT /agents/{agentId}/config", "bot")])
+def test_invalid_json_400(store, raw, route, agent_id):
+    status, body = call(http_event(route, raw_body=raw, agent_id=agent_id))
+    assert status == 400 and "JSON" in body["error"]
+    assert store.items == {}
+
+
+def test_missing_body_400(store):
+    status, body = call(http_event("POST /events"))
+    assert status == 400
+
+
+def test_bad_base64_400(store):
+    status, _ = call(http_event("POST /events", raw_body="%%%not-b64", b64=True))
+    assert status == 400
+
+
+def test_missing_path_param_400(store):
+    status, body = call(http_event("GET /agents/{agentId}/config"))
+    assert status == 400 and "agentId" in body["error"]
+
+
+@pytest.mark.parametrize("route", ["GET /nope", "DELETE /agents/{agentId}/config", "$default", ""])
+def test_unknown_route_404(store, route):
+    ev = http_event(route, agent_id="bot")
+    status, body = call(ev)
+    assert status == 404 and body == {"error": "not found"}
+
+
+def test_unexpected_exception_500(monkeypatch):
+    class Boom(InMemoryStore):
+        def get_agent(self, agent_id):
+            raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(api, "_deps", api.Deps(store=Boom(), publisher=NullPublisher()))
+    status, body = call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
+    assert status == 500 and body == {"error": "internal"}
+
+
+def test_deps_built_lazily_once_from_env(monkeypatch):
+    built = []
+
+    class FakeDynamo(InMemoryStore):
+        def __init__(self, table_name):
+            super().__init__()
+            built.append(table_name)
+
+    monkeypatch.setattr(api, "_deps", None)
+    monkeypatch.setattr(api, "DynamoStore", FakeDynamo)
+    monkeypatch.setenv("TABLE_NAME", "agentwatch-table")
+    call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
+    call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
+    assert built == ["agentwatch-table"]
+    assert isinstance(api._deps.publisher, NullPublisher)
+
+
+def test_existing_config_returned_through_handler(store):
+    from agentwatch_api.service import new_record
+    from agentwatch_api.auth import Credentials
+
+    cfg = GuardrailConfig(None, ("~/.ssh",))
+    store.create_agent_if_absent(new_record("bot", Credentials("tejaswi", H), cfg))
+    status, body = call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
+    assert status == 200 and body["guardrails"] == to_json(cfg)

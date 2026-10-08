@@ -133,7 +133,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 9.3, 22.3, 22.4, 22.5, 22.6, 23.5_
     - Commit: `feat(backend): put_config service with registration`
 
-  - [ ] 2.6 Implement the Lambda router for POST /events and the config routes
+  - [x] 2.6 Implement the Lambda router for POST /events and the config routes
     - Write the failing tests first. In `backend/tests/test_handler.py`, build API Gateway HTTP API v2 events and assert: `POST /events`, `GET /agents/{agentId}/config`, `PUT /agents/{agentId}/config` reach the right service call; invalid JSON returns 400; unknown routeKey returns 404 `{"error":"not found"}`; an unexpected exception returns 500 `{"error":"internal"}`; responses have `content-type: application/json`.
     - Create `backend/src/agentwatch_api/handlers/api.py` with `lambda_handler(event, context)`, a route table, and lazy per-container deps (`DynamoStore(os.environ["TABLE_NAME"])`, `NullPublisher` for now) overridable in tests. Use `datetime.now(timezone.utc)` for `now`.
     - _Requirements: 2.4, 15.2, 22.1, 22.3_
