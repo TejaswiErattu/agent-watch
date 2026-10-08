@@ -310,3 +310,9 @@ Format per task:
 **Q:** Why test documentation snippets? **A:** Docs drift. A test that runs the README code keeps the onboarding promise true.
 **Q:** How do you test code that makes network calls without a network? **A:** Inject a transport seam, and for code that can't take an argument, patch the default at the module boundary.
 **Q:** What does this test not prove? **A:** That the real API accepts the events. That's covered by the end-to-end deploy check in group 4.
+
+## 3.17 Check every path-like tool argument (group 3 review)
+**Conceptual:** The blocklist only looked at the first argument with a conventional name. So `copy(src="ok.txt", dst=".env")`, a path passed as the second positional, or a list of files all got through. A guardrail with a bypass this easy only gives a false sense of safety. Now every value that could be a path is a candidate, and one match blocks the call.
+**Technical:** `_candidate_paths` collects the named path args (the expanded `PATH_ARG_NAMES`, or `path_arg` as a name or list), then every str/bytes/PathLike in `*args`/`**kwargs` and one level inside lists and tuples. A value whose normalization raises, like a NUL byte, fails closed. Tradeoff: a plain string such as `search(".env")` now gets blocked too. Over-blocking is the safe direction.
+**Q:** Why fail closed when a path can't be normalized? **A:** If an error means "allow", an attacker or a buggy agent can craft input that crashes the check and skips it. For a security control, "can't decide" has to mean "deny".
+**Q:** Why not just parse each tool's intent? **A:** The SDK can't know what an arbitrary function does with its arguments. Checking every path-shaped value is a conservative over-approximation that needs no per-tool config.

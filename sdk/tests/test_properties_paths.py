@@ -156,8 +156,8 @@ p24_entry = st.one_of(st.sampled_from([".env", ".ENV", "key.pem", "Notes.md", "s
 @settings(max_examples=100, deadline=None)
 @given(p_rel=st.sampled_from(TREE_FILES + TREE_DIRS + ["a/.Env", "c/missing.txt"]),
        links=st.lists(link, max_size=4), entries=st.lists(p24_entry, min_size=1, max_size=3),
-       use_link=st.booleans())
-def test_property_24_blocklist_matches_reference(p_rel, links, entries, use_link):
+       use_link=st.booleans(), position=st.sampled_from(["path", "positional2", "kwarg", "list"]))
+def test_property_24_blocklist_matches_reference(p_rel, links, entries, use_link, position):
     with tempfile.TemporaryDirectory() as root:
         root = os.path.realpath(root)
         made = _build(root, links)
@@ -169,16 +169,23 @@ def test_property_24_blocklist_matches_reference(p_rel, links, entries, use_link
         aw = agentwatch.init("bot", "tejaswi", "sk-key", endpoint="https://x", transport=t,
                              clock=lambda: 0.0, sleep=lambda s: None)
         calls = []
-        tool = aw.tools({"read_file": lambda path: calls.append(path)})["read_file"]
+
+        def read_file(*args, **kwargs):
+            calls.append(1)
+
+        tool = aw.tools({"read_file": read_file})["read_file"]
+        # The attempted path may sit in any argument position (Req 8.13). Fillers are non-strings.
+        invoke = {"path": lambda: tool(path=p), "positional2": lambda: tool(0, p),
+                  "kwarg": lambda: tool(n=0, anything=p), "list": lambda: tool([p])}[position]
 
         expected = reference_blocked(p, blocked)
         if expected:
             with pytest.raises(PathBlocked):
-                tool(p)
+                invoke()
             assert calls == []
             sent = [r["json"] for r in t.requests if r["url"].endswith("/events")]
             assert len(sent) == 1
             assert sent[0]["violationType"] == "blocked_path" and sent[0]["attemptedPath"] == p
         else:
-            tool(p)
-            assert calls == [p]
+            invoke()
+            assert calls == [1]

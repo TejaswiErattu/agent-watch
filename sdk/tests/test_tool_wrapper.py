@@ -200,9 +200,10 @@ def test_blocked_event_sent_on_caller_thread():
     assert seen[-1] == threading.current_thread().name
 
 
-def test_tool_without_path_argument_skips_check():
+def test_tool_without_path_like_argument_skips_check():
     aw, t = make(paths=["/"])  # root blocks every path
-    assert aw.tools({"search": search})["search"]("q", limit=1) == ["q"]
+    # Since 3.17 every str argument is a candidate path, so only non-string args skip the check.
+    assert aw.tools({"add": lambda a, b=1: a + b})["add"](2, b=3) == 5
     assert [e["type"] for e in events(aw, t)] == ["tool_call"]
 
 
@@ -236,3 +237,110 @@ def test_pathlike_and_bytes_paths_are_checked(tmp_path):
         r(tmp_path / ".env")
     with pytest.raises(PathBlocked):
         r(b".env")
+
+
+# ---- 3.17 every path-like argument is checked ----
+
+
+@pytest.mark.parametrize("name", ["src", "dst", "source", "destination", "target_path"])
+def test_extra_named_path_args_are_checked(name):
+    aw, t = make(paths=[".env"])
+    ns = {}
+    exec(f"def f(other, {name}):\n    return {name}", ns)
+    tool = aw.tool(name="f")(ns["f"])
+    with pytest.raises(PathBlocked):
+        tool("ok.txt", **{name: ".env"})
+
+
+def test_copy_blocks_on_second_named_path():
+    aw, t = make(paths=[".env"])
+    called = []
+
+    def copy(src, dst):
+        called.append((src, dst))
+
+    with pytest.raises(PathBlocked) as ei:
+        aw.tools({"copy": copy})["copy"](src="ok.txt", dst=".env")
+    assert called == [] and ei.value.detail == ".env"
+    sent = [r["json"] for r in t.requests if r["url"].endswith("/events")]
+    assert len(sent) == 1 and sent[0]["attemptedPath"] == ".env"
+
+
+def test_second_positional_arg_is_checked():
+    aw, t = make(paths=[".env"])
+    called = []
+
+    def run(cmd, arg):
+        called.append(arg)
+
+    with pytest.raises(PathBlocked):
+        aw.tools({"run": run})["run"]("cat", ".env")
+    assert called == []
+
+
+def test_varargs_and_varkwargs_are_checked():
+    aw, _ = make(paths=[".env"])
+    called = []
+
+    def many(*a, **kw):
+        called.append(1)
+
+    tool = aw.tools({"many": many})["many"]
+    with pytest.raises(PathBlocked):
+        tool("a", "b", ".env")
+    with pytest.raises(PathBlocked):
+        tool(x="a", y=".env")
+    assert called == []
+
+
+@pytest.mark.parametrize("container", [list, tuple])
+def test_paths_inside_list_or_tuple_are_checked(container):
+    aw, _ = make(paths=[".env"])
+    called = []
+
+    def cat(files):
+        called.append(files)
+
+    with pytest.raises(PathBlocked):
+        aw.tools({"cat": cat})["cat"](container(["ok.txt", ".env"]))
+    assert called == []
+
+
+def test_path_arg_list_checks_each_name():
+    aw, _ = make(paths=[".env"])
+    called = []
+
+    @aw.tool(name="merge", path_arg=["left", "right"])
+    def merge(left, right, mode=0):
+        called.append(1)
+
+    with pytest.raises(PathBlocked):
+        merge("ok.txt", ".env")
+    assert called == []
+    assert merge("a.txt", "b.txt") is None and called == [1]
+
+
+def test_path_that_fails_normalization_is_blocked():
+    aw, t = make(paths=["/nonexistent/dir"])
+    called = []
+
+    def read(path):
+        called.append(path)
+
+    with pytest.raises(PathBlocked):
+        aw.tools({"read": read})["read"]("bad\x00name")
+    assert called == []
+    sent = [r["json"] for r in t.requests if r["url"].endswith("/events")]
+    assert len(sent) == 1 and sent[0]["violationType"] == "blocked_path"
+    assert sent[0]["attemptedPath"] == "bad\x00name"
+
+
+def test_unrelated_strings_still_allowed():
+    aw, t = make(paths=[".env"])
+
+    def copy(src, dst, note=""):
+        return dst
+
+    assert aw.tools({"copy": copy})["copy"]("a.txt", "b.txt", note="hello") == "b.txt"
+    (e,) = events(aw, t)
+    assert e["type"] == "tool_call" and e["target"] == "a.txt"

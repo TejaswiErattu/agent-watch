@@ -322,15 +322,28 @@ class Watcher:
         except Exception:
             pass
 
-    def _check_path(self, tool_name: str, path: str) -> None:
+    def _check_paths(self, tool_name: str, candidates: list) -> None:
+        """Block if any candidate matches (Req 8.13). A path that can't be normalized is blocked (8.14)."""
         self._maybe_refresh_config()  # Req 8.8
-        entry = blocked_entry_for(path, self._config.blocked_paths)
-        if entry is None:
+        blocked_paths = self._config.blocked_paths
+        if not blocked_paths:
             return
-        # The server keeps only violationType/attemptedPath on blocked events, so context goes in meta.
-        self._send_blocked_sync(violationType="blocked_path", attemptedPath=path[:1024],
-                                meta={"tool": tool_name[:200], "entry": entry[:200]})
-        raise PathBlocked(path)
+        for value in candidates:
+            try:
+                path = os.fsdecode(os.fspath(value))
+            except Exception:
+                path, entry = _safe_str(value), "<unreadable path>"
+            else:
+                try:
+                    entry = blocked_entry_for(path, blocked_paths)
+                except Exception:  # e.g. ValueError: embedded null byte
+                    entry = "<unnormalizable path>"
+            if entry is None:
+                continue
+            # The server keeps only violationType/attemptedPath on blocked events, so context goes in meta.
+            self._send_blocked_sync(violationType="blocked_path", attemptedPath=path[:1024] or "?",
+                                    meta={"tool": tool_name[:200], "entry": entry[:200]})
+            raise PathBlocked(path)
 
     # ---- LLM wrapper (task 3.13) ----
 
@@ -353,7 +366,7 @@ class Watcher:
 
     # ---- tool wrapper ----
 
-    def tool(self, fn=None, *, name: str | None = None, path_arg: str | None = None):
+    def tool(self, fn=None, *, name: str | None = None, path_arg: str | list[str] | None = None):
         """Decorator: @aw.tool, @aw.tool(), or @aw.tool(name=..., path_arg=...)."""
         def decorate(f):
             return self._wrap_tool(f, name or f.__name__, path_arg)
@@ -363,7 +376,7 @@ class Watcher:
         """Same keys; each function wrapped as a tool named by its key."""
         return {k: self._wrap_tool(f, k, None) for k, f in mapping.items()}
 
-    def _wrap_tool(self, f, tool_name: str, path_arg: str | None):
+    def _wrap_tool(self, f, tool_name: str, path_arg):
         try:
             sig = inspect.signature(f)
         except (TypeError, ValueError):
@@ -372,10 +385,11 @@ class Watcher:
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
             bound = _bind(sig, args, kwargs)
-            path = _find_path(bound, path_arg)
-            if path is not None:
-                self._check_path(tool_name, os.fsdecode(os.fspath(path)))  # raises PathBlocked
-            target = _short(os.fsdecode(os.fspath(path))) if path is not None else _first_arg_repr(args, kwargs)
+            named = _named_paths(bound, path_arg)
+            candidates = _candidate_paths(named, args, kwargs)
+            if candidates:
+                self._check_paths(tool_name, candidates)  # raises PathBlocked
+            target = _short(_safe_str(named[0])) if named else _first_arg_repr(args, kwargs)
             meta = {"args": _fit_args([_short(repr(a)) for a in (*args, *kwargs.values())][:MAX_ARGS])}
             try:
                 return f(*args, **kwargs)
@@ -390,7 +404,8 @@ class Watcher:
 
 # ---- event helpers ----
 
-PATH_ARG_NAMES = ("path", "file_path", "filepath", "filename", "file")
+PATH_ARG_NAMES = ("path", "file_path", "filepath", "filename", "file",
+                  "src", "dst", "source", "destination", "target_path")
 MAX_ARGS = 10
 MAX_REPR = 200
 
@@ -418,14 +433,41 @@ def _is_pathlike(v) -> bool:
     return isinstance(v, (str, bytes, os.PathLike))
 
 
-def _find_path(bound: dict, path_arg: str | None):
-    """The path argument, or None if this tool does not touch a file path."""
-    names = (path_arg,) if path_arg else PATH_ARG_NAMES
-    for n in names:
-        v = bound.get(n)
-        if v is not None and _is_pathlike(v):
-            return v
-    return None
+def _safe_str(v) -> str:
+    try:
+        return os.fsdecode(os.fspath(v))
+    except Exception:
+        return repr(v)
+
+
+def _named_paths(bound: dict, path_arg) -> list:
+    """Path-like values of the named path arguments, in name order. Used for `target` and checks."""
+    if path_arg:
+        names = (path_arg,) if isinstance(path_arg, str) else tuple(path_arg)
+    else:
+        names = PATH_ARG_NAMES
+    return [bound[n] for n in names if _is_pathlike(bound.get(n))]
+
+
+def _candidate_paths(named: list, args, kwargs) -> list:
+    """Every value that could be a path (Req 8.13): named path args first, then every
+    str/bytes/PathLike in args/kwargs and one level inside list/tuple values. Duplicates dropped."""
+    out, seen = [], set()
+
+    def add(v):
+        if _is_pathlike(v) and id(v) not in seen:
+            seen.add(id(v))
+            out.append(v)
+
+    for v in named:
+        add(v)
+    for v in (*args, *kwargs.values()):
+        if isinstance(v, (list, tuple)):
+            for item in v:
+                add(item)
+        else:
+            add(v)
+    return out
 
 
 META_ARGS_BUDGET = 3072  # bytes; leaves room for "error" and keys under the server's 4096-byte meta cap
