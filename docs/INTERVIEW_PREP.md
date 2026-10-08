@@ -103,3 +103,11 @@ Format per task:
 **Q:** Why page with `ExclusiveStartKey` for the spend sum? **A:** A single Query returns at most 1 MB. For a correct total you must follow `LastEvaluatedKey` until it's absent, otherwise you'd undercount a busy day.
 **Q:** Why alias `type` as `#t`? **A:** `type` is a DynamoDB reserved word. Using an `ExpressionAttributeNames` placeholder is the supported way to reference it in a FilterExpression.
 **Q:** Why a sparse GSI for inventory instead of filtering the base table? **A:** Only agent records carry `gsiOwnerId`, so the index holds one item per agent. The owner query reads exactly those, with no event noise and no Scan.
+
+## 1.14 Checkpoint: backend foundations (review fixes)
+**Conceptual:** A review found inputs that passed validation but would break storage or ordering: non-ASCII digits in `ts`, NaN/Infinity, very deep `meta`, and unvalidated fields from other event types. It also found the in-memory fake drifting from DynamoDB. Each fix closes a gap between "passes validation" and "safe to store".
+**Technical:** `ts` uses `[0-9]`, because `\d` matches Unicode digits. An iterative walk rejects non-finite floats in any field and `meta` deeper than 32 levels, with no recursion risk. Foreign-type fields are dropped before type checks. Only costs are rounded, so ints stay ints. Tradeoff: dropping foreign fields silently is lenient to clients, but it means typos in field names go unreported.
+
+**Q:** Why is `\d` a security bug in a validator? **A:** In Python 3, `\d` matches any Unicode decimal digit. A `ts` like `٢٠٢٦-...` passes the check but sorts above `META` as a string, which breaks range queries and record separation.
+**Q:** How can a JSON body crash a Python service? **A:** `json.loads` accepts `NaN`/`Infinity` and deep nesting. NaN can't be a DynamoDB number (500 on write), and recursive validators can hit RecursionError. Reject both at the edge with an iterative walk.
+**Q:** Why keep a test fake behaviorally identical to DynamoDB? **A:** Service tests trust the fake. If its rounding or pagination differs, a test can pass while production totals drift or pagination stops early.

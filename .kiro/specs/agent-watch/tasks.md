@@ -10,7 +10,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
 
 ## Tasks
 
-- [ ] 1. Backend foundations
+- [x] 1. Backend foundations
   - [x] 1.1 Scaffold the backend package and test tooling
     - Write the failing tests first. Add `backend/tests/test_smoke.py` that imports `agentwatch_api` and `agentwatch_api.handlers` and checks the Hypothesis profile is loaded; it fails until the package exists.
     - Create `backend/src/agentwatch_api/__init__.py`, `backend/src/agentwatch_api/handlers/__init__.py`, `backend/requirements.txt` (runtime: none beyond the Lambda-provided `boto3`), `backend/requirements-dev.txt` (pinned `pytest`, `hypothesis`, `pyyaml`, `boto3`).
@@ -95,7 +95,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.4, 5.3, 6.1, 24.1_
     - Commit: `feat(backend): DynamoStore queries`
 
-  - [ ] 1.14 Checkpoint: backend foundations
+  - [x] 1.14 Checkpoint: backend foundations
     - Write the failing tests first. Run `pytest` in `backend/` and fix anything red; ensure all tests pass, ask the user if questions arise.
 
 - [ ] 2. Service layer and API for ingest and config
