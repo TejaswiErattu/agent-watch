@@ -99,7 +99,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Write the failing tests first. Run `pytest` in `backend/` and fix anything red; ensure all tests pass, ask the user if questions arise.
 
 - [ ] 2. Service layer and API for ingest and config
-  - [ ] 2.1 Add the service Result type and the authorize helper
+  - [x] 2.1 Add the service Result type and the authorize helper
     - Write the failing tests first. In `backend/tests/test_service_auth.py`, cover: `authorize` returns `None` for a missing record, the record for Matching_Credentials, and `"forbidden"` for an ownerId or verifier mismatch; `Result(status, body)` equality.
     - Create `backend/src/agentwatch_api/service.py` with `Result`, `authorize(store, agent_id, creds)`, `new_record(creds, cfg)`, and a `Publisher` protocol with a `NullPublisher` default (no-op until task 4.2).
     - _Requirements: 25.2, 25.3, 14.8_
