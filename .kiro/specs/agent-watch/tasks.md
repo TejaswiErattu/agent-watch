@@ -26,7 +26,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.11, 17.4_
     - Commit: `feat(backend): pricing table and cost estimator`
 
-  - [ ] 1.3 Add demo model constants and the pricing coverage test
+  - [x] 1.3 Add demo model constants and the pricing coverage test
     - Write the failing tests first. Add `backend/tests/test_demo_models.py` that loads `demo/models.py` by file path (`importlib.util.spec_from_file_location`) and asserts `BEDROCK_MODEL_ID` starts with `us.anthropic.` and both `BEDROCK_MODEL_ID` and `ANTHROPIC_MODEL_ID` are keys in `pricing_table()["models"]`.
     - Create `demo/models.py` with only those two constants. Fix `PRICING` if a key is missing.
     - _Requirements: 3.11, 16.6_
