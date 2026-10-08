@@ -32,7 +32,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 3.11, 16.6_
     - Commit: `feat(demo): model ID constants checked against pricing table`
 
-  - [ ] 1.4 Implement common event validation
+  - [x] 1.4 Implement common event validation
     - Write the failing tests first. In `backend/tests/test_validation.py`, cover: missing each of `agentId`, `ownerId`, `ts`, `eventId`, `type` returns a `ValidationError` naming the field; bad `ts` format (not 24-char `YYYY-MM-DDTHH:MM:SS.mmmZ`); bad `eventId` (not 32 lowercase hex); `agentId` pattern/length; unknown `type`; unknown top-level field; `meta` over 4 KB.
     - Create `backend/src/agentwatch_api/validation.py` with `ValidationError`, `Event` dataclass, `validate_agent_id(s)`, and the common part of `validate_event(body, now)`.
     - _Requirements: 13.1, 13.4, 20.1_
