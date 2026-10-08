@@ -6,9 +6,13 @@ only in private fields that are excluded from repr, and is never passed to the l
 
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json as _json
 import logging
+import queue
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -166,3 +170,52 @@ def send_with_retries(api, event: dict, sleep: Callable[[float], None]) -> bool:
             return False
     _log.warning("agentwatch: giving up on event %s after %d attempts", event_id, len(BACKOFF_S) + 1)
     return False
+
+
+# ---- background sender (task 3.5) ----
+
+ATEXIT_FLUSH_S = 5.0
+
+
+class Sender:
+    """Queue + one daemon thread. Normal events are fire-and-forget; blocked events use send_sync
+    so they reach the server before the exception is raised, even if the agent then crashes."""
+
+    def __init__(self, api, sleep: Callable[[float], None] = time.sleep,
+                 register_atexit: Callable = atexit.register) -> None:
+        self._api = api
+        self._sleep = sleep
+        self._q: queue.Queue = queue.Queue()
+        self._thread = threading.Thread(target=self._run, name="agentwatch-sender", daemon=True)
+        self._thread.start()
+        register_atexit(self._atexit_flush)
+
+    def _run(self) -> None:
+        while True:
+            event = self._q.get()
+            try:
+                send_with_retries(self._api, event, self._sleep)
+            except Exception:  # send_with_retries never raises; this is belt and braces
+                pass
+            finally:
+                self._q.task_done()
+
+    def enqueue(self, event: dict) -> None:
+        self._q.put(event)
+
+    def send_sync(self, event: dict) -> bool:
+        return send_with_retries(self._api, event, self._sleep)
+
+    def flush(self, timeout: float = ATEXIT_FLUSH_S) -> bool:
+        """Wait until every queued event has been handled. False if `timeout` passes first."""
+        deadline = time.monotonic() + timeout
+        with self._q.all_tasks_done:
+            while self._q.unfinished_tasks:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._q.all_tasks_done.wait(remaining)
+        return True
+
+    def _atexit_flush(self) -> None:
+        self.flush(timeout=ATEXIT_FLUSH_S)

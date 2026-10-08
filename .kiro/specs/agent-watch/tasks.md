@@ -176,7 +176,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 2.2, 2.3, 2.6_
     - Commit: `feat(sdk): event send retry policy`
 
-  - [ ] 3.5 Implement the background Sender
+  - [x] 3.5 Implement the background Sender
     - Write the failing tests first. In `sdk/tests/test_sender.py`, cover: `enqueue` delivers via the daemon thread in order; `send_sync` sends immediately on the caller thread; `flush(timeout=5)` drains the queue; `atexit` registration happens once.
     - Implement `Sender` (queue, daemon thread, `enqueue`, `send_sync`, `flush`, `atexit` hook) in `sdk/agentwatch/client.py`.
     - _Requirements: 2.1, 2.3_

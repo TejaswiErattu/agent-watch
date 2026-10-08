@@ -201,3 +201,14 @@ Format per task:
 **Q:** Why log the auth failure only once? **A:** A wrong key fails every event. Logging each one floods the user's console and hides real problems.
 
 **Q:** What would you add for many clients? **A:** Exponential backoff with full jitter, plus honoring `Retry-After` on 429, so clients don't retry in lockstep.
+
+## 3.5 Background Sender
+**Conceptual:** Reporting must not slow the agent down, so normal events go into a queue and a background thread sends them. Blocked events are different. They're the evidence for the alert email, and the agent is about to raise, so they're sent synchronously before the exception. That way even a crashing bad agent reports what it tried.
+
+**Technical:** `Sender` owns a `queue.Queue` and one daemon thread named `agentwatch-sender` that calls `send_with_retries` for each item, in FIFO order. `flush(timeout)` waits on the queue's `all_tasks_done` condition with a deadline. An `atexit` hook flushes for up to 5 s. The sleep and `atexit` hooks are injected for tests. Tradeoff: a daemon thread dies with the process, so events queued after the 5 s flush window are lost.
+
+**Q:** Why a daemon thread? **A:** A non-daemon thread would keep the interpreter alive and hang the student's script on exit. The `atexit` flush gives queued events a bounded chance to go out.
+
+**Q:** Why send blocked events synchronously? **A:** The exception may end the process. A queued event could be lost, and the block event is what triggers the alert.
+
+**Q:** What are the limits of an in-memory queue? **A:** It's unbounded and lost on a crash. For production, use a bounded queue with drop-oldest, or spool to disk.
