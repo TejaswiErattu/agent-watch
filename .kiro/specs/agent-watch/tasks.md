@@ -119,7 +119,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.7, 4.8, 5.6, 23.2, 23.3, 23.4, 23.5_
     - Commit: `feat(backend): ingest race handling, duplicates, lastSeen`
 
-  - [ ] 2.4 Implement get_config
+  - [x] 2.4 Implement get_config
     - Write the failing tests first. In `backend/tests/test_service_config.py`, cover: authorized GET returns `{"guardrails": <stored>, "pricing": pricing_table()}`; missing record returns the empty config plus Pricing_Table and creates nothing; mismatch returns 403. Add `backend/tests/test_properties_config.py` with the `get_config` clause of Property 6.
     - Implement `get_config(store, creds, agent_id)` in `backend/src/agentwatch_api/service.py`.
     - Property test: **Property 6: Read routes never create records** (`get_config` clause, required; spend and timeline clauses are added in 6.1 and 5.2).

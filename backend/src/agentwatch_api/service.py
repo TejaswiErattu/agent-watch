@@ -11,10 +11,10 @@ from typing import Literal, Protocol, runtime_checkable
 
 from . import auth
 from .auth import Credentials
-from .pricing import estimate_cost
-from .rules import EMPTY_CONFIG, GuardrailConfig
+from .pricing import estimate_cost, pricing_table
+from .rules import EMPTY_CONFIG, GuardrailConfig, to_json
 from .store import AgentRecord, Store, round_cost
-from .validation import Event, ValidationError, validate_event
+from .validation import Event, ValidationError, validate_agent_id, validate_event
 
 FORBIDDEN = {"error": "forbidden"}
 
@@ -111,3 +111,14 @@ def ingest_event(store: Store, creds: Credentials, body, now: datetime, publishe
 
     # 8. respond
     return Result(200, {"eventId": event.event_id, "costUsd": cost, "duplicate": outcome == "duplicate"})
+
+
+def get_config(store: Store, creds: Credentials, agent_id: str) -> Result:
+    """GET /agents/{agentId}/config. A missing record returns the empty config and creates nothing."""
+    if (e := validate_agent_id(agent_id)) is not None:
+        return _bad(e)
+    found = authorize(store, agent_id, creds)
+    if found == "forbidden":
+        return Result(403, FORBIDDEN)
+    cfg = EMPTY_CONFIG if found is None else found.guardrails
+    return Result(200, {"guardrails": to_json(cfg), "pricing": pricing_table()})

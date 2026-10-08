@@ -133,3 +133,10 @@ Format per task:
 **Q:** How do you handle two concurrent "first" requests for the same new resource? **A:** Conditional create. The loser gets a condition failure, re-reads the winner's record, and authorizes against it, so the outcome is the same as if the requests had been serial.
 **Q:** What's a TOCTOU bug and where could one appear here? **A:** Time-of-check to time-of-use. Authorization reads the record, then the write happens later. The `keyVerifier = :kv` condition on the write re-checks ownership atomically, closing the gap.
 **Q:** Why should a retried request return 200 instead of an error? **A:** Idempotency. The client can't tell whether its first attempt landed, so "already stored" has to look like success or it will retry forever.
+
+## 2.4 get_config
+**Conceptual:** The SDK fetches its guardrails and the price table on startup and every 60 s. A brand-new agent has no record yet, so it gets the empty config instead of an error. Reads never create records, so a typo'd agentId can't squat on a name.
+**Technical:** It validates the agentId (400), then `authorize`. A missing record returns `EMPTY_CONFIG` plus `pricing_table()`, a match returns the stored config, and a mismatch returns 403. A Hypothesis property checks that a read on any agentId leaves the store empty. Tradeoff: missing and empty look identical to the caller, which leaks nothing about which agentIds exist, but the SDK can't tell "not registered yet" apart.
+
+**Q:** Why should a GET never create state? **A:** GETs are safe and idempotent by HTTP semantics. Caches, retries, and crawlers can repeat them, and a side effect would let anyone register agentIds just by reading.
+**Q:** Why return 200 with an empty config instead of 404 for an unknown agent? **A:** A 404 vs 403 split tells an attacker which agentIds exist. The empty config also lets a new agent start with safe defaults.
