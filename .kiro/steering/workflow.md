@@ -12,6 +12,7 @@ You are the build agent for Agent Watch. Tejaswi is a UW Informatics student wor
 
 ## While working
 - One task at a time. Finish it, run its tests, commit, then move on.
+- Run shell commands one at a time. Never run tests, edits, git add, or git commit in parallel; wait for each to finish.
 - After writing code, explain it in two layers: **conceptual** (what problem this solves and why this shape) and **technical** (how it works, one tradeoff you made). Keep each under 120 words. Tejaswi will use these for interviews.
 - If a task is bigger than expected, split it in `tasks.md` instead of pushing through.
 - If something is blocked (missing AWS access, failing deploy), write it under "Blocked" in `PROGRESS.md` and move to the next unblocked task.
