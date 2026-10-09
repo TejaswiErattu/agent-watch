@@ -110,10 +110,12 @@ def test_cors_configuration(tpl):
     assert "ServerlessHttpApi" not in tpl.get("Resources", {})
     cors = tpl["Globals"]["HttpApi"]["CorsConfiguration"]
     origins = cors["AllowOrigins"]
-    assert "http://localhost:3000" in origins
     assert {"Ref": "DashboardOrigin"} in origins
-    # DashboardOrigin defaults to http://localhost:3000; don't list it twice.
-    assert origins.count("http://localhost:3000") == 1
+    # API Gateway rejects duplicate origins. DashboardOrigin defaults to
+    # http://localhost:3000, so no literal origin may equal that default.
+    default_origin = tpl["Parameters"]["DashboardOrigin"]["Default"]
+    literal_origins = [o for o in origins if isinstance(o, str)]
+    assert default_origin not in literal_origins
     assert {"GET", "PUT"} <= set(cors["AllowMethods"])
     allowed_headers = {h.lower() for h in cors["AllowHeaders"]}
     assert {"content-type", "x-agentwatch-owner", "x-agentwatch-key-hash"} <= allowed_headers
