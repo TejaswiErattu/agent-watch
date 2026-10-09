@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-08 by Kiro session
+Last updated: 2026-10-08 by Kiro session (group 4)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -10,14 +10,18 @@ Last updated: 2026-10-08 by Kiro session
 
 - Group 3 review fixes (3.17–3.20), each pushed as its own `fix(sdk)` commit. The tool wrapper now checks every path-like argument and fails closed when a path can't be normalized. Matching uses NFC before casefold, name entries match any path component, and existing directory entries also match by inode. Transport sends with `allow_redirects=False` and accepts only https endpoints (loopback http allowed). A "guardrails NOT active" warning fires while no config fetch has succeeded. Req 8.6, 8.13–8.15, 14.11–14.12, 21.7, and Property 24 updated. Checkpoint: SDK 184 passed, backend 381 passed.
 
+- 3.17 regression fix (pushed as `fix(sdk)`): fail-closed on unnormalizable values now applies only to named path args. Binary `bytes` with a NUL in another arg is skipped. Req 8.14 and design updated.
+- Group 4 (4.1–4.5): `alerts.py` (`format_alert`, `publish_alert`, `SnsPublisher`) and Properties 16 and 17; step 7 of `ingest_event` publishes only for newly stored blocked events; the handler builds `SnsPublisher(TOPIC_ARN)`. `demo/bad_agent.py`, `demo/demo_agent.py` (Bedrock probe, Anthropic fallback), `demo/common.py`, `demo/notes.txt`, `demo/requirements.txt`. Checkpoint: SDK 195 passed, backend 397 on main (404 with `test_template.py` on the PR branch).
+
 ## In progress
-- (none)
+- 4.3 SAM template (`backend/template.yaml`, `samconfig.toml`, `tests/test_template.py`) is on branch `feat/sam-template`, pushed with `main` merged in. `sam validate --lint` passes. Waiting for Tejaswi's approval before merging. The PR isn't open yet (see Blocked).
+- 4.6 deploy: waiting on Tejaswi to run `sam deploy` (commands are in the session summary). Run it after the 4.3 merge.
 
 ## Next step
-- Task 4.1: write failing `backend/tests/test_alerts.py` (subject names agentId and violation; spend_cap body has `attemptedCostUsd`, blocked_path body has `attemptedPath`; `publish_alert` returns True on success; a raising publisher returns False and logs `alert_publish_failed` with agentId and eventId) and `backend/tests/test_properties_alerts.py` (Property 17). Then create `backend/src/agentwatch_api/alerts.py` with `format_alert`, `publish_alert`, `SnsPublisher(topic_arn, client=None)`.
+- Open the 4.3 PR, get approval, merge `feat/sam-template` into main. Tejaswi runs the 4.6 deploy and demo commands, then records `ApiUrl` here. After that: task 5.1 (`list_inventory` and `GET /agents`).
 
 ## Blocked
-- (none)
+- Opening the 4.3 PR through the GitHub MCP server. `.kiro/settings/mcp.json` defines `github`, but its tools weren't exposed to the agent this session (needs `GITHUB_TOKEN` set and the server connected in the MCP panel). Fallback, if Tejaswi okays it: `gh pr create`.
 
 ## Decisions
 - 2026-10-08 firstSeen is the ts of the first event to arrive, not the earliest ts. It matches Property 12 and is a single `if_not_exists` in the transaction (no read-compare-write).
@@ -48,6 +52,10 @@ Last updated: 2026-10-08 by Kiro session
 - 2026-10-08 (3.19) The endpoint check parses with `urlsplit` instead of matching a prefix, so `http://localhost.evil.com` and `http://localhost@evil.com` are rejected.
 - 2026-10-08 (3.20) While no fetch has succeeded, the "NOT active" line replaces the "keeping last good config" warning and the failure reason drops to DEBUG, so the warning text stays exact.
 - 2026-10-08 Not fixed, documented instead (README in 7.2, INTERVIEW_PREP): a hardlink to a blocked file under another name, and the TOCTOU window for a swapped symlink. Both fall outside the threat model (careless agent, not a malicious one).
+
+- 2026-10-08 (4.1) Alert email fields escape non-printable chars, so an attempted path can't forge email lines. The subject is capped at 100 chars (SNS limit). Publish failures log only the exception type.
+- 2026-10-08 (4.2) Alerts are at-most-once. Publishing happens synchronously after a "stored" write, so a crash between write and publish loses the email but never duplicates it. DynamoDB Streams would make it reliable, and that's a next step.
+- 2026-10-08 (4.4/4.5) Demo setup comes from env vars `AGENTWATCH_ENDPOINT`, `AGENTWATCH_OWNER`, `AGENTWATCH_KEY`. `make_client` sends a 1-token Bedrock probe so a fallback happens at startup, not mid-demo.
 
 ## Open bugs
 - (none known)
