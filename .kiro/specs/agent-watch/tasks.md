@@ -277,7 +277,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Commit: `fix(sdk): warn when guardrails are not active`
 
 - [ ] 4. The `.env` block and SNS alert, end to end
-  - [ ] 4.1 Implement format_alert and publish_alert
+  - [x] 4.1 Implement format_alert and publish_alert
     - Write the failing tests first. In `backend/tests/test_alerts.py`, cover: subject names the agentId and violation; body for spend_cap includes `attemptedCostUsd`, for blocked_path includes `attemptedPath`; `publish_alert` calls `publisher.publish(subject, body)` and returns True; a raising publisher returns False and logs `alert_publish_failed` with agentId and eventId. Add `backend/tests/test_properties_alerts.py` with Property 17.
     - Create `backend/src/agentwatch_api/alerts.py` with `format_alert(event)`, `publish_alert(publisher, event)`, and `SnsPublisher(topic_arn, client=None)`.
     - Property test: **Property 17: Alert content** (required).
