@@ -303,7 +303,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 16.2, 16.3, 16.6_
     - Commit: `feat(demo): bad agent that gets blocked reading .env`
 
-  - [ ] 4.5 Write demo/demo_agent.py with Bedrock to Anthropic fallback
+  - [x] 4.5 Write demo/demo_agent.py with Bedrock to Anthropic fallback
     - Write the failing tests first. Add `sdk/tests/test_demo_agent.py`: when the Bedrock factory raises (missing `boto3`, `AccessDeniedException`, or a `converse` failure), `make_client()` returns a wrapped Anthropic client using `ANTHROPIC_MODEL_ID`; when Bedrock works, it uses `BEDROCK_MODEL_ID`; the agent's harmless `read_file` tool runs.
     - Create `demo/demo_agent.py` with `make_client()` and `main()`, using only constants from `demo/models.py`. Share setup with `bad_agent.py` via a small `demo/common.py` if it avoids duplication.
     - _Requirements: 16.1, 16.5, 16.6_
