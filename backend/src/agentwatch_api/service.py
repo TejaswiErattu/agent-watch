@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Literal, Protocol, runtime_checkable
 
 from . import auth
+from .alerts import publish_alert
 from .auth import Credentials
 from .pricing import estimate_cost, pricing_table
 from .rules import EMPTY_CONFIG, GuardrailConfig, parse_config, to_json
@@ -31,7 +32,7 @@ class Publisher(Protocol):
 
 
 class NullPublisher:
-    """No-op publisher until SNS alerts are wired in (task 4.2)."""
+    """No-op publisher, for tests and local runs without SNS."""
 
     def publish(self, subject: str, body: str) -> None:
         return None
@@ -113,6 +114,10 @@ def ingest_event(store: Store, creds: Credentials, body, now: datetime, publishe
 
     # 6. lastSeen keeps the later ts (a no-op for duplicates)
     store.bump_last_seen(event.agent_id, event.ts)
+
+    # 7. alert only for a newly stored blocked event; a publish failure never fails the request
+    if event.type == "blocked" and outcome == "stored" and publisher is not None:
+        publish_alert(publisher, event)
 
     # 8. respond
     return Result(200, {"eventId": event.event_id, "costUsd": cost, "duplicate": outcome == "duplicate"})

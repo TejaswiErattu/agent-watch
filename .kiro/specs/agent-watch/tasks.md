@@ -284,7 +284,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 10.5, 10.6, 10.8_
     - Commit: `feat(backend): alert formatting and safe SNS publish`
 
-  - [ ] 4.2 Wire alerts into ingest_event and the handler
+  - [x] 4.2 Wire alerts into ingest_event and the handler
     - Write the failing tests first. Extend `backend/tests/test_service_ingest.py`: a stored blocked event calls a `FakePublisher` once; a duplicate blocked event and non-blocked events do not; a raising publisher still returns 200 and the event stays stored. Add Property 16 to `backend/tests/test_properties_alerts.py`.
     - Implement step 7 of `ingest_event` in `backend/src/agentwatch_api/service.py`; in `handlers/api.py`, build `SnsPublisher(os.environ["TOPIC_ARN"])`.
     - Property test: **Property 16: Alert publish rules** (required).

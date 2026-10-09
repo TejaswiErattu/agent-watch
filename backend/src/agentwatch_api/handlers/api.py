@@ -15,7 +15,8 @@ from datetime import datetime, timezone
 
 from .. import service
 from ..auth import parse_credentials
-from ..service import NullPublisher, Publisher, Result
+from ..alerts import SnsPublisher
+from ..service import Publisher, Result
 from ..store import DynamoStore, Store
 from ..validation import validate_agent_id
 
@@ -38,7 +39,8 @@ _deps: Deps | None = None
 def _get_deps() -> Deps:
     global _deps
     if _deps is None:
-        _deps = Deps(store=DynamoStore(os.environ["TABLE_NAME"]), publisher=NullPublisher())
+        _deps = Deps(store=DynamoStore(os.environ["TABLE_NAME"]),
+                     publisher=SnsPublisher(os.environ["TOPIC_ARN"]))
     return _deps
 
 

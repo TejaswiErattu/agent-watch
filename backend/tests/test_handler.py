@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from agentwatch_api.alerts import SnsPublisher
 from agentwatch_api.handlers import api
 from agentwatch_api.rules import to_json, GuardrailConfig
 from agentwatch_api.service import NullPublisher
@@ -125,10 +126,12 @@ def test_deps_built_lazily_once_from_env(monkeypatch):
     monkeypatch.setattr(api, "_deps", None)
     monkeypatch.setattr(api, "DynamoStore", FakeDynamo)
     monkeypatch.setenv("TABLE_NAME", "agentwatch-table")
+    monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-west-2:123456789012:alerts")
     call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
     call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
     assert built == ["agentwatch-table"]
-    assert isinstance(api._deps.publisher, NullPublisher)
+    assert isinstance(api._deps.publisher, SnsPublisher)
+    assert api._deps.publisher.topic_arn == "arn:aws:sns:us-west-2:123456789012:alerts"
 
 
 def test_existing_config_returned_through_handler(store):

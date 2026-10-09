@@ -198,3 +198,49 @@ def test_duplicate_returns_stored_cost_not_resubmitted():
     again = ingest_event(s, CREDS, body(inputTokens=999999, outputTokens=999999), NOW)
     assert again.body["duplicate"] is True
     assert again.body["costUsd"] == first.body["costUsd"]
+
+
+# ---- 4.2 alerts ----
+
+class FakePublisher:
+    def __init__(self, exc=None):
+        self.calls, self.exc = [], exc
+
+    def publish(self, subject, body):
+        self.calls.append((subject, body))
+        if self.exc:
+            raise self.exc
+
+
+def test_stored_blocked_event_publishes_once():
+    s, p = InMemoryStore(), FakePublisher()
+    assert ingest_event(s, CREDS, body("blocked"), NOW, publisher=p).status == 200
+    assert len(p.calls) == 1 and "bot" in p.calls[0][0] and ".env" in p.calls[0][1]
+
+
+def test_duplicate_blocked_event_does_not_publish():
+    s, p = InMemoryStore(), FakePublisher()
+    ingest_event(s, CREDS, body("blocked"), NOW, publisher=p)
+    r = ingest_event(s, CREDS, body("blocked"), NOW, publisher=p)
+    assert r.body["duplicate"] is True and len(p.calls) == 1
+
+
+@pytest.mark.parametrize("t", ["llm_call", "tool_call"])
+def test_non_blocked_events_do_not_publish(t):
+    s, p = InMemoryStore(), FakePublisher()
+    assert ingest_event(s, CREDS, body(t), NOW, publisher=p).status == 200
+    assert p.calls == []
+
+
+def test_forbidden_blocked_event_does_not_publish():
+    s, p = InMemoryStore(), FakePublisher()
+    ingest_event(s, CREDS, body("tool_call"), NOW)
+    r = ingest_event(s, Credentials("tejaswi", "b" * 64), body("blocked", eid="1" * 32), NOW, publisher=p)
+    assert r.status == 403 and p.calls == []
+
+
+def test_raising_publisher_still_200_and_stored():
+    s, p = InMemoryStore(), FakePublisher(RuntimeError("sns down"))
+    r = ingest_event(s, CREDS, body("blocked"), NOW, publisher=p)
+    assert r == Result(200, {"eventId": "0" * 32, "costUsd": 0.0, "duplicate": False})
+    assert ("bot", event_sk(TS, "0" * 32)) in s.items and len(p.calls) == 1
