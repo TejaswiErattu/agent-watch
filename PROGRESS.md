@@ -8,6 +8,8 @@ Last updated: 2026-10-08 by Kiro session
 
 - Group 3 (3.1–3.16) SDK: key hash and exceptions, `ApiClient`, retrying background `Sender`, cost math, `Watcher` config cache with 60 s sync, path blocklist (forms, matching, symlinks, enforcement with a synchronous blocked event), tool wrapper, LLM wrapper for Bedrock `converse` and Anthropic `messages.create` (metadata only, no prompt text), unknown-model warn-once, and a test that runs the 3-line snippet verbatim. Properties 1, 18–20, 23 (config), 24–27, 29 added. Checkpoint: SDK 136 passed, backend 381 passed.
 
+- Group 3 review fixes (3.17–3.20), each pushed as its own `fix(sdk)` commit. The tool wrapper now checks every path-like argument and fails closed when a path can't be normalized. Matching uses NFC before casefold, name entries match any path component, and existing directory entries also match by inode. Transport sends with `allow_redirects=False` and accepts only https endpoints (loopback http allowed). A "guardrails NOT active" warning fires while no config fetch has succeeded. Req 8.6, 8.13–8.15, 14.11–14.12, 21.7, and Property 24 updated. Checkpoint: SDK 184 passed, backend 381 passed.
+
 ## In progress
 - (none)
 
@@ -38,6 +40,13 @@ Last updated: 2026-10-08 by Kiro session
 - 2026-10-08 The LLM wrapper doesn't add to Local_Spend_Total yet. Task 6.2 owns spend accounting, so 3.13 records events only, which matches "no spend check yet".
 - 2026-10-08 `aw.wrap` raises `TypeError` for a client that has neither `converse` nor `messages.create`. Wrapping it silently would record nothing and hide the mistake.
 - 2026-10-08 Unknown-model warnings run only after a successful config fetch (`_last_config_ok` is set). With EMPTY, every model is unknown, so warnings would just be noise (Req 21.4).
+
+- 2026-10-08 (3.17) Every str/bytes/PathLike tool argument is a candidate path, so `search(".env")` is blocked too. Over-blocking is the safe direction, and the SDK can't know which strings a tool treats as paths.
+- 2026-10-08 (3.17) A path whose normalization raises (e.g. a NUL byte) is blocked and reported with `meta.entry = "<unnormalizable path>"`. Fail closed.
+- 2026-10-08 (3.18) The inode match only adds blocks and runs only for directory entries that exist. Ancestor ids are computed lazily, once per attempted path.
+- 2026-10-08 (3.19) The endpoint check parses with `urlsplit` instead of matching a prefix, so `http://localhost.evil.com` and `http://localhost@evil.com` are rejected.
+- 2026-10-08 (3.20) While no fetch has succeeded, the "NOT active" line replaces the "keeping last good config" warning and the failure reason drops to DEBUG, so the warning text stays exact.
+- 2026-10-08 Not fixed, documented instead (README in 7.2, INTERVIEW_PREP): a hardlink to a blocked file under another name, and the TOCTOU window for a swapped symlink. Both fall outside the threat model (careless agent, not a malicious one).
 
 ## Open bugs
 - (none known)

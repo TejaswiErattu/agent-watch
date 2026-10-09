@@ -252,25 +252,25 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
   - [x] 3.16 Checkpoint: SDK
     - Write the failing tests first. Run `pytest` in `sdk/` and `backend/` and fix anything red; ensure all tests pass, ask the user if questions arise.
 
-  - [ ] 3.17 Check every path-like tool argument (group 3 review)
+  - [x] 3.17 Check every path-like tool argument (group 3 review)
     - Write the failing tests first. Extend `sdk/tests/test_tool_wrapper.py`: `copy(src="ok.txt", dst=".env")` is blocked; a blocked path in the 2nd positional arg, in `**kwargs`, or inside a list/tuple value is blocked; `path_arg=["a", "b"]` checks both; a path with a NUL byte sends a blocked event and raises `PathBlocked`; the tool is never called. Extend Property 24 so the attempted path can sit in any argument position.
     - In `sdk/agentwatch/client.py`, replace `_find_path` with `_candidate_paths`: named args (`PATH_ARG_NAMES` + `src, dst, source, destination, target_path`, or `path_arg` / each name if a list), plus every str/PathLike in `*args`/`**kwargs` and one level of list/tuple values. Block if any one matches; a path that raises in normalization is blocked.
     - _Requirements: 8.1, 8.2, 8.7, 8.13, 8.14_
     - Commit: `fix(sdk): check every path-like tool argument`
 
-  - [ ] 3.18 NFC normalization, any-component names, and inode matching (group 3 review)
+  - [x] 3.18 NFC normalization, any-component names, and inode matching (group 3 review)
     - Write the failing tests first. Extend `sdk/tests/test_guardrails_paths.py`: NFD `é` path vs NFC entry (and the reverse) match; `.git` blocks `.git/config` and `a/.git/hooks/x`; `.git` does not block `a/.github/x`; a directory entry blocks an attempted path whose string forms differ but whose parent has the same `(st_dev, st_ino)` (firmlink/bind mount simulated by monkeypatching `normalize_path` so it does not resolve a symlinked alias); a non-existent entry falls back to string matching. Update the Property 24 reference rule.
     - In `sdk/agentwatch/guardrails.py`: `_fold(s) = unicodedata.normalize("NFC", s).casefold()`; Name_Entry matches any component of either form; Directory_Entry also matches when `(st_dev, st_ino)` of the existing entry equals that of the attempted path or any of its existing parents.
     - _Requirements: 8.5, 8.6, 8.12, 8.15_
     - Commit: `fix(sdk): NFC folding, any-component name entries, inode directory match`
 
-  - [ ] 3.19 Harden transport: no redirects, HTTPS only (group 3 review)
+  - [x] 3.19 Harden transport: no redirects, HTTPS only (group 3 review)
     - Write the failing tests first. In `sdk/tests/test_api_client.py`: `RequestsTransport` passes `allow_redirects=False` on every request (fake session); a 3xx is returned as-is and is not followed; `init`/`ApiClient` reject `http://example.com`, `ftp://…`, and a bare host with `ValueError`, and accept `https://…`, `http://localhost[:port]`, and `http://127.0.0.1[:port]`.
     - Implement in `sdk/agentwatch/client.py`.
     - _Requirements: 14.11, 14.12_
     - Commit: `fix(sdk): no redirects and https-only endpoint`
 
-  - [ ] 3.20 Warn loudly when guardrails are not active (group 3 review)
+  - [x] 3.20 Warn loudly when guardrails are not active (group 3 review)
     - Write the failing tests first. In `sdk/tests/test_config_sync.py`: a failing first fetch logs `agentwatch: guardrails NOT active (config fetch failed)` once at init and once per failed refresh while no fetch has succeeded; after a success, failures log only the "keeping last good config" warning.
     - Implement in `Watcher._fetch_config` in `sdk/agentwatch/client.py`.
     - _Requirements: 21.7_
