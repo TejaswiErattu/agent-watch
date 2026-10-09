@@ -1,0 +1,4 @@
+study plan: week 3
+- review DynamoDB single-table design
+- finish the SAM template
+- practice explaining idempotent writes

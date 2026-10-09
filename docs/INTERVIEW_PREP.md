@@ -364,3 +364,15 @@ Format per task:
 **Q:** Why one Lambda for all routes instead of one per route? **A:** One deploy unit, shared warm containers, and fewer cold starts at low traffic. The per-route IAM split doesn't buy much when every route needs the same table.
 **Q:** Why arm64? **A:** Graviton Lambda costs about 20% less per GB-second and is usually as fast or faster for pure-Python work.
 **Q:** What does `DynamoDBCrudPolicy` grant? **A:** CRUD actions, including Query and Scan, scoped to that one table ARN and its indexes, not `dynamodb:*` on every resource.
+
+## 4.4 demo/bad_agent.py
+**Conceptual:** This is the demo moment as code. An agent makes a normal LLM call, then "helpfully" tries to read `.env`. The SDK stops it before the file is opened, and the alert path fires. Because it's a script with injectable dependencies, the same run is a unit test, so the live demo can't drift from what's tested.
+**Technical:** `main(client=None, transport=None)` builds the Watcher from env vars, wraps a Bedrock client (or a fake), and calls `read_file(".env")` through `aw.tools`. It returns 0 when `PathBlocked` is raised and 1 if the read went through, so a misconfigured rule is obvious. Shared setup lives in `demo/common.py` for 4.5. The test writes a real `.env` in `tmp_path` and asserts its contents never appear in the output. Tradeoff: the tool sequence is scripted, not LLM-chosen, which keeps the demo deterministic.
+**Q:** How do you test a demo script without AWS? **A:** Dependency injection. The LLM client and HTTP transport are parameters, and tests pass fakes that record calls.
+**Q:** How do you prove the secret wasn't read? **A:** Put a canary value in a real `.env` and assert it never shows up in output. A block that happens after `open()` would leak it.
+
+## 4.5 demo/demo_agent.py with Bedrock to Anthropic fallback
+**Conceptual:** A live demo shouldn't depend on one provider being available that day. Bedrock model access can be missing, throttled, or denied in a fresh account. The agent tries Bedrock first, since that's the AWS story, and falls back to the Anthropic API, so the demo always runs.
+**Technical:** `make_client` builds the Bedrock client and sends a 1-token `converse` probe through the wrapper. Any exception (ImportError, AccessDeniedException, a throttle) prints the reason type and returns a wrapped `anthropic.Anthropic()`. Both factories are injectable for tests. Model IDs come only from `demo/models.py`. Tradeoff: the probe costs one tiny extra call per run. That's worth catching failures at startup instead of mid-demo.
+**Q:** Why probe instead of checking credentials? **A:** Credentials can be valid while model access isn't granted. Only a real call proves the whole path works.
+**Q:** Why catch broad `Exception` here? **A:** It's a demo-only fallback boundary where any Bedrock failure should lead to the same action. The SDK itself never swallows provider errors.

@@ -297,13 +297,13 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.6, 18.1, 18.2, 18.4_
     - Commit: `feat(infra): minimal SAM template for ingest, config, table, topic`
 
-  - [ ] 4.4 Write demo/bad_agent.py
+  - [x] 4.4 Write demo/bad_agent.py
     - Write the failing tests first. Add `sdk/tests/test_bad_agent.py` that imports `demo/bad_agent.py` by path, runs its `main()` with a fake transport returning `.env` in Blocked_Paths and a fake LLM client, and asserts `PathBlocked` is caught and printed and one `blocked_path` event with `attemptedPath=".env"` was sent.
     - Create `demo/bad_agent.py` (models from `demo/models.py`, scripted `read_file(".env")`, injectable client and transport for tests) and `demo/requirements.txt` (pinned `boto3`, `anthropic`, plus `-e ../sdk`).
     - _Requirements: 16.2, 16.3, 16.6_
     - Commit: `feat(demo): bad agent that gets blocked reading .env`
 
-  - [ ] 4.5 Write demo/demo_agent.py with Bedrock to Anthropic fallback
+  - [x] 4.5 Write demo/demo_agent.py with Bedrock to Anthropic fallback
     - Write the failing tests first. Add `sdk/tests/test_demo_agent.py`: when the Bedrock factory raises (missing `boto3`, `AccessDeniedException`, or a `converse` failure), `make_client()` returns a wrapped Anthropic client using `ANTHROPIC_MODEL_ID`; when Bedrock works, it uses `BEDROCK_MODEL_ID`; the agent's harmless `read_file` tool runs.
     - Create `demo/demo_agent.py` with `make_client()` and `main()`, using only constants from `demo/models.py`. Share setup with `bad_agent.py` via a small `demo/common.py` if it avoids duplication.
     - _Requirements: 16.1, 16.5, 16.6_
