@@ -297,7 +297,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.6, 18.1, 18.2, 18.4_
     - Commit: `feat(infra): minimal SAM template for ingest, config, table, topic`
 
-  - [ ] 4.4 Write demo/bad_agent.py
+  - [x] 4.4 Write demo/bad_agent.py
     - Write the failing tests first. Add `sdk/tests/test_bad_agent.py` that imports `demo/bad_agent.py` by path, runs its `main()` with a fake transport returning `.env` in Blocked_Paths and a fake LLM client, and asserts `PathBlocked` is caught and printed and one `blocked_path` event with `attemptedPath=".env"` was sent.
     - Create `demo/bad_agent.py` (models from `demo/models.py`, scripted `read_file(".env")`, injectable client and transport for tests) and `demo/requirements.txt` (pinned `boto3`, `anthropic`, plus `-e ../sdk`).
     - _Requirements: 16.2, 16.3, 16.6_
