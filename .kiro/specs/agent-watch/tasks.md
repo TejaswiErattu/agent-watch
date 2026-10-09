@@ -319,7 +319,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 10.4, 14.6, 16.3, 16.4_
 
 - [ ] 5. Dashboard
-  - [ ] 5.1 Implement list_inventory and GET /agents
+  - [x] 5.1 Implement list_inventory and GET /agents
     - Write the failing tests first. In `backend/tests/test_service_inventory.py`, cover: no matching records returns 200 `{"agents": []}`; two owners sharing an ownerId with different keys see only their own agents; an Unreported_Agent shows nulls and `totalSpendUsd: 0.0`; items have all InventoryItem fields and no `keyVerifier`. Add Property 13 to `backend/tests/test_properties_inventory.py`, and extend Property 5 in `backend/tests/test_properties_config.py` with the inventory clause.
     - Implement `list_inventory(store, creds)` in `backend/src/agentwatch_api/service.py`; add the `GET /agents` route in `handlers/api.py` and `backend/template.yaml` (update `test_template.py`).
     - Property tests (required): **Property 13: Inventory returns exactly the matching records**, **Property 5: Config PUT then GET round trip** (inventory clause).

@@ -82,6 +82,10 @@ def _post_events(deps, creds, event, log_ctx):
     return service.ingest_event(deps.store, creds, body, now, publisher=deps.publisher)
 
 
+def _get_agents(deps, creds, event, log_ctx):
+    return service.list_inventory(deps.store, creds)
+
+
 def _get_config(deps, creds, event, log_ctx):
     agent_id = _agent_id(event)
     log_ctx["agent_id"] = _valid_or_none(agent_id)
@@ -96,6 +100,7 @@ def _put_config(deps, creds, event, log_ctx):
 
 ROUTES = {
     "POST /events": _post_events,
+    "GET /agents": _get_agents,
     "GET /agents/{agentId}/config": _get_config,
     "PUT /agents/{agentId}/config": _put_config,
 }

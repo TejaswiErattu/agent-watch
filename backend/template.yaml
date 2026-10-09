@@ -38,6 +38,11 @@ Resources:
           Properties:
             Method: POST
             Path: /events
+        GetAgents:
+          Type: HttpApi
+          Properties:
+            Method: GET
+            Path: /agents
         GetConfig:
           Type: HttpApi
           Properties:

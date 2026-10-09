@@ -123,6 +123,24 @@ def ingest_event(store: Store, creds: Credentials, body, now: datetime, publishe
     return Result(200, {"eventId": event.event_id, "costUsd": cost, "duplicate": outcome == "duplicate"})
 
 
+def _inventory_item(rec: AgentRecord) -> dict:
+    """InventoryItem view: public fields only, never the keyVerifier (Req 5.6)."""
+    return {
+        "agentId": rec.agent_id,
+        "ownerId": rec.owner_id,
+        "model": rec.model,
+        "firstSeen": rec.first_seen,
+        "lastSeen": rec.last_seen,
+        "totalSpendUsd": rec.total_spend_usd,
+    }
+
+
+def list_inventory(store: Store, creds: Credentials) -> Result:
+    """GET /agents. Every record for this owner whose key also matches; empty list if none."""
+    agents = [_inventory_item(rec) for rec in store.list_by_owner(creds.owner_id) if auth.matches(rec, creds)]
+    return Result(200, {"agents": agents})
+
+
 def get_config(store: Store, creds: Credentials, agent_id: str) -> Result:
     """GET /agents/{agentId}/config. A missing record returns the empty config and creates nothing."""
     if (e := validate_agent_id(agent_id)) is not None:

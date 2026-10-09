@@ -4,7 +4,7 @@ from hypothesis import strategies as st
 from agentwatch_api.auth import Credentials
 from agentwatch_api.pricing import pricing_table
 from agentwatch_api.rules import EMPTY_CONFIG, to_json
-from agentwatch_api.service import get_config
+from agentwatch_api.service import get_config, list_inventory
 from agentwatch_api.store import InMemoryStore
 
 agent_ids = st.from_regex(r"[A-Za-z0-9._-]{1,128}", fullmatch=True)
@@ -90,3 +90,6 @@ def test_put_then_get_round_trip(cfg, agent_id, creds, preexisting):
     assert g.status == 200
     assert _same(g.body["guardrails"], to_json(cfg))
     assert g.body["pricing"] == pricing_table()
+    # Inventory clause: a PUT registers the agent, so it shows up for the same credentials.
+    inv = list_inventory(s, creds)
+    assert agent_id in {a["agentId"] for a in inv.body["agents"]}
