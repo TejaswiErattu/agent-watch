@@ -317,6 +317,12 @@ Format per task:
 **Q:** Why fail closed when a path can't be normalized? **A:** If an error means "allow", an attacker or a buggy agent can craft input that crashes the check and skips it. For a security control, "can't decide" has to mean "deny".
 **Q:** Why not just parse each tool's intent? **A:** The SDK can't know what an arbitrary function does with its arguments. Checking every path-shaped value is a conservative over-approximation that needs no per-tool config.
 
+### 3.17 regression fix: fail closed only on named path args
+**Conceptual:** Failing closed on every unnormalizable string broke real tools. `write_file("out.zip", data)` was blocked because the zip bytes contain a NUL. Fail-closed is right when we know an argument is a path, and wrong when we're only guessing.
+**Technical:** `_check_paths` now gets the named path values. If normalization raises on one of them, the call is still blocked (Req 8.14). If it raises on any other candidate, that value is skipped. Identity is tracked by `id()` so a value that is both named and positional is treated as named. Tradeoff: a NUL-containing string in an unnamed arg goes through unchecked. That's safe, because the OS rejects a NUL in a path, so it can't open `.env`.
+**Q:** When is fail-closed the wrong default? **A:** When the input isn't known to be security-relevant. Blocking every ambiguous value breaks legitimate work, and users then switch the guard off.
+**Q:** How did you catch it? **A:** Review found it, and the fix started with two failing tests: binary content allowed, NUL in a named path still blocked.
+
 ## 3.18 NFC folding, any-component names, inode directory match (group 3 review)
 **Conceptual:** String matching on paths has three gaps. The same name can have two Unicode encodings, and macOS often stores NFD. A name entry like `.git` should cover everything inside `.git/`. And one directory can have several string names (firmlinks like `/System/Volumes/Data/Users/x`, bind mounts) that `realpath` doesn't collapse. Each gap was a bypass.
 **Technical:** `fold` is `NFC` then `casefold` on both sides. Name entries match any path component. An existing directory entry also matches when its `(st_dev, st_ino)` equals that of the attempted path or any existing parent, since a device and inode pair is the filesystem's own identity for the directory. Tradeoff: up to one `stat` per path level per check. That's cheap next to a tool call, and the ids are computed lazily, once per attempt.
