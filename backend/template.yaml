@@ -6,6 +6,10 @@ Parameters:
   AlertEmail:
     Type: String
     Description: Email address that receives guardrail alerts (confirm the SNS subscription once).
+  DashboardOrigin:
+    Type: String
+    Default: http://localhost:3000
+    Description: Deployed dashboard origin allowed by CORS (set to the Amplify URL once it exists).
 
 Globals:
   Function:
@@ -19,6 +23,23 @@ Globals:
         TOPIC_ARN: !Ref AlertTopic
 
 Resources:
+  ServerlessHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - http://localhost:3000
+          - !Ref DashboardOrigin
+        AllowMethods:
+          - GET
+          - PUT
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+          - x-agentwatch-owner
+          - x-agentwatch-key-hash
+
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:

@@ -102,5 +102,17 @@ def test_function_policies_scoped(tpl):
     assert {"SNSPublishMessagePolicy": {"TopicName": {"Fn::GetAtt": ["AlertTopic", "TopicName"]}}} in pol
 
 
+def test_cors_configuration(tpl):
+    assert tpl["Parameters"]["DashboardOrigin"]["Type"] == "String"
+    http_api = res(tpl, "ServerlessHttpApi")
+    cors = http_api["Properties"]["CorsConfiguration"]
+    origins = cors["AllowOrigins"]
+    assert "http://localhost:3000" in origins
+    assert {"Ref": "DashboardOrigin"} in origins
+    assert {"GET", "PUT"} <= set(cors["AllowMethods"])
+    allowed_headers = {h.lower() for h in cors["AllowHeaders"]}
+    assert {"content-type", "x-agentwatch-owner", "x-agentwatch-key-hash"} <= allowed_headers
+
+
 def test_samconfig_region():
     assert 'region = "us-west-2"' in SAMCONFIG.read_text()
