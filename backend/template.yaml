@@ -43,6 +43,11 @@ Resources:
           Properties:
             Method: GET
             Path: /agents
+        GetEvents:
+          Type: HttpApi
+          Properties:
+            Method: GET
+            Path: /agents/{agentId}/events
         GetConfig:
           Type: HttpApi
           Properties:

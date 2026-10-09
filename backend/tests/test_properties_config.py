@@ -4,7 +4,7 @@ from hypothesis import strategies as st
 from agentwatch_api.auth import Credentials
 from agentwatch_api.pricing import pricing_table
 from agentwatch_api.rules import EMPTY_CONFIG, to_json
-from agentwatch_api.service import get_config, list_inventory
+from agentwatch_api.service import get_config, get_timeline, list_inventory
 from agentwatch_api.store import InMemoryStore
 
 agent_ids = st.from_regex(r"[A-Za-z0-9._-]{1,128}", fullmatch=True)
@@ -23,6 +23,11 @@ def test_get_config_never_creates_records(agent_id, creds):
     r = get_config(s, creds, agent_id)
     assert r.status == 200
     assert r.body == {"guardrails": to_json(EMPTY_CONFIG), "pricing": pricing_table()}
+    assert s.items == {}
+    # get_timeline clause: a read of an agent with no record returns an empty list and creates nothing.
+    t = get_timeline(s, creds, agent_id, {})
+    assert t.status == 200
+    assert t.body == {"events": [], "nextCursor": None}
     assert s.items == {}
 
 

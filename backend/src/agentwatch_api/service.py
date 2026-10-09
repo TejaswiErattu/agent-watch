@@ -5,6 +5,10 @@ No AWS and no HTTP here; handlers/api.py translates API Gateway events to these 
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol, runtime_checkable
@@ -139,6 +143,91 @@ def list_inventory(store: Store, creds: Credentials) -> Result:
     """GET /agents. Every record for this owner whose key also matches; empty list if none."""
     agents = [_inventory_item(rec) for rec in store.list_by_owner(creds.owner_id) if auth.matches(rec, creds)]
     return Result(200, {"agents": agents})
+
+
+TIMELINE_FIELDS = (
+    "ts", "eventId", "type", "model", "tool", "target", "inputTokens",
+    "outputTokens", "costUsd", "violationType", "attemptedCostUsd", "attemptedPath", "meta",
+)
+EVENT_SK_RE = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z#[0-9a-f]{32}"
+)
+
+
+def encode_cursor(sk: str) -> str:
+    """base64url JSON of the LastEvaluatedKey sk (Req 20.5)."""
+    return base64.urlsafe_b64encode(json.dumps({"sk": sk}).encode("utf-8")).decode("ascii")
+
+
+def _decode_cursor(cursor: str) -> str | None:
+    """Return the event SK a cursor points at, or None if it is undecodable or not an event SK."""
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode("ascii"))
+        sk = json.loads(raw)["sk"]
+    except (binascii.Error, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(sk, str) or not EVENT_SK_RE.fullmatch(sk):
+        return None
+    return sk
+
+
+def _parse_timeline_query(query: dict) -> tuple[dict, None] | tuple[None, Result]:
+    """Validate order/limit/type/cursor. Return (parsed, None) or (None, 400 Result)."""
+    order = query.get("order", "asc")
+    if order not in ("asc", "desc"):
+        return None, _bad(ValidationError("order", "must be asc or desc"))
+
+    raw_limit = query.get("limit", "50")
+    try:
+        limit = int(raw_limit)
+    except (TypeError, ValueError):
+        return None, _bad(ValidationError("limit", "must be an integer 1..100"))
+    if not 1 <= limit <= 100:
+        return None, _bad(ValidationError("limit", "must be an integer 1..100"))
+
+    type_filter = query.get("type")
+    if type_filter is not None and type_filter not in ("llm_call", "tool_call", "blocked"):
+        return None, _bad(ValidationError("type", "must be llm_call, tool_call, or blocked"))
+
+    start_after = None
+    if (cursor := query.get("cursor")) is not None:
+        start_after = _decode_cursor(cursor)
+        if start_after is None:
+            return None, _bad(ValidationError("cursor", "is not a valid timeline cursor"))
+
+    return {"ascending": order == "asc", "limit": limit,
+            "type_filter": type_filter, "start_after": start_after}, None
+
+
+def _timeline_item(stored: dict) -> dict:
+    """Project a stored event to a TimelineItem; absent fields become null."""
+    return {name: stored.get(name) for name in TIMELINE_FIELDS}
+
+
+def get_timeline(store: Store, creds: Credentials, agent_id: str, query: dict) -> Result:
+    """GET /agents/{agentId}/events. Missing agent returns an empty list and creates nothing."""
+    if (e := validate_agent_id(agent_id)) is not None:
+        return _bad(e)
+    parsed, err = _parse_timeline_query(query)
+    if err is not None:
+        return err
+
+    found = authorize(store, agent_id, creds)
+    if found == "forbidden":
+        return Result(403, FORBIDDEN)
+    if found is None:
+        return Result(200, {"events": [], "nextCursor": None})
+
+    items, last_sk = store.query_events(
+        agent_id,
+        ascending=parsed["ascending"],
+        limit=parsed["limit"],
+        type_filter=parsed["type_filter"],
+        start_after=parsed["start_after"],
+    )
+    events = [_timeline_item(i) for i in items]
+    next_cursor = encode_cursor(last_sk) if last_sk is not None else None
+    return Result(200, {"events": events, "nextCursor": next_cursor})
 
 
 def get_config(store: Store, creds: Credentials, agent_id: str) -> Result:

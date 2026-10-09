@@ -326,7 +326,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 5.1, 5.2, 5.3, 5.5, 5.6, 5.7_
     - Commit: `feat(backend): inventory endpoint`
 
-  - [ ] 5.2 Implement get_timeline and GET /agents/{agentId}/events
+  - [x] 5.2 Implement get_timeline and GET /agents/{agentId}/events
     - Write the failing tests first. In `backend/tests/test_service_timeline.py`, cover: default `order=asc`, `limit=50`; `limit` outside 1..100, bad `order`, bad `type`, an undecodable cursor, or a cursor `sk` that is not an event SK returns 400; missing agent returns `{"events": [], "nextCursor": null}`; mismatch returns 403; absent TimelineItem fields are `null`. Add Properties 8 and 9 to `backend/tests/test_properties_timeline.py`; extend Property 10 with the timeline clause and Property 6 with the `get_timeline` clause.
     - Implement `get_timeline(store, creds, agent_id, query)` and base64url cursor encode/decode in `backend/src/agentwatch_api/service.py`; add the route in `handlers/api.py` and `backend/template.yaml` (update `test_template.py`).
     - Property tests (required): **Property 8: Ingest then timeline round trip with server-side cost**, **Property 9: Timeline order, filter, and pagination**, **Property 10** (timeline clause), **Property 6** (`get_timeline` clause).

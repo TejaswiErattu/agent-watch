@@ -4,7 +4,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from agentwatch_api.auth import Credentials
-from agentwatch_api.service import ingest_event
+from agentwatch_api.service import get_timeline, ingest_event
 from agentwatch_api.store import InMemoryStore
 
 NOW = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
@@ -107,6 +107,9 @@ def test_total_spend_equals_sum_of_distinct_events(subs):
     events = [v for (_, sk), v in s.items.items() if sk != META_SK]
     assert len(events) == len({b["eventId"] for b in subs})
     assert s.get_agent("bot").total_spend_usd == pytest.approx(sum(e["costUsd"] for e in events), abs=1e-4)
+    # Timeline clause: the timeline returns exactly the distinct stored events, by eventId.
+    timeline = get_timeline(s, CREDS, "bot", {"limit": "100"}).body["events"]
+    assert {e["eventId"] for e in timeline} == {e["eventId"] for e in events}
 
 
 class MaybeLosesRace(InMemoryStore):
