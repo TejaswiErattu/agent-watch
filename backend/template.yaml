@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Agent Watch ingest/config API, event table, and alert topic (minimal demo stack; full routes, CORS, throttling, and budget come in task 7.1).
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Description: Email address that receives guardrail alerts (confirm the SNS subscription once).
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Architectures: [arm64]
+    Timeout: 10
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref EventTable
+        TOPIC_ARN: !Ref AlertTopic
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: agentwatch_api.handlers.api.lambda_handler
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AlertTopic.TopicName
+      Events:
+        PostEvents:
+          Type: HttpApi
+          Properties:
+            Method: POST
+            Path: /events
+        GetConfig:
+          Type: HttpApi
+          Properties:
+            Method: GET
+            Path: /agents/{agentId}/config
+        PutConfig:
+          Type: HttpApi
+          Properties:
+            Method: PUT
+            Path: /agents/{agentId}/config
+
+  EventTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsiOwnerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: ownerIndex
+          KeySchema:
+            - AttributeName: gsiOwnerId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for AGENTWATCH_ENDPOINT
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+  TableName:
+    Value: !Ref EventTable
+  TopicArn:
+    Value: !Ref AlertTopic
