@@ -1,0 +1,10 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "agent-watch"
+
+[default.deploy.parameters]
+region = "us-west-2"
+capabilities = "CAPABILITY_IAM"
+resolve_s3 = true
+confirm_changeset = true
