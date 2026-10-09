@@ -257,6 +257,7 @@ class Sender:
 # ---- config cache and Watcher (task 3.7) ----
 
 SYNC_INTERVAL_S = 60.0
+GUARDRAILS_NOT_ACTIVE_MSG = "agentwatch: guardrails NOT active (config fetch failed)"
 
 
 @dataclass(frozen=True)
@@ -312,17 +313,22 @@ class Watcher:
         try:
             resp = self._api.get_config(self.agent_id)
         except TransportError as e:
-            _log.warning("agentwatch: config fetch failed (%s); keeping last good config", e)
-            return
+            return self._config_failed(str(e))
         except Exception as e:
-            _log.warning("agentwatch: config fetch failed (%s); keeping last good config", type(e).__name__)
-            return
+            return self._config_failed(type(e).__name__)
         parsed = parse_config_response(resp.body) if 200 <= resp.status < 300 else None
         if parsed is None:
-            _log.warning("agentwatch: config fetch failed (status %s); keeping last good config", resp.status)
-            return
+            return self._config_failed(f"status {resp.status}")
         self._config = parsed
         self._last_config_ok = self._last_config_attempt
+
+    def _config_failed(self, reason: str) -> None:
+        if self._last_config_ok is None:
+            # Failing open must never be silent (Req 21.7): no rules are enforced right now.
+            _log.warning(GUARDRAILS_NOT_ACTIVE_MSG)
+            _log.debug("agentwatch: config fetch failure reason: %s", reason)
+        else:
+            _log.warning("agentwatch: config fetch failed (%s); keeping last good config", reason)
 
     def _maybe_refresh_config(self) -> None:
         """Refetch when a Sync_Interval has passed since the last attempt (Req 21.2, 21.5)."""

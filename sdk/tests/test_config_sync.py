@@ -115,3 +115,46 @@ def test_watcher_repr_hides_secrets():
 
 def test_init_exported_from_package():
     assert callable(agentwatch.init)
+
+
+# ---- 3.20 loud warning while guardrails are not active ----
+
+NOT_ACTIVE = "agentwatch: guardrails NOT active (config fetch failed)"
+
+
+def _count(caplog):
+    return sum(1 for r in caplog.records if r.getMessage() == NOT_ACTIVE and r.levelno == logging.WARNING)
+
+
+@pytest.mark.parametrize("bad", [TransportError("x"), Response(500, None), Response(200, {"nope": 1})])
+def test_failed_first_fetch_warns_not_active_once_at_init(caplog, bad):
+    caplog.set_level(logging.WARNING, logger="agentwatch")
+    init([bad])
+    assert _count(caplog) == 1
+
+
+def test_not_active_repeats_per_failed_refresh_until_success(caplog):
+    caplog.set_level(logging.WARNING, logger="agentwatch")
+    clock = Clock()
+    aw, _, _ = init([TransportError("x"), Response(500, None), Response(200, cfg_body()),
+                     TransportError("x")], clock=clock)
+    assert _count(caplog) == 1
+    clock.t += 30
+    aw._maybe_refresh_config()  # not due: no fetch, no extra warning
+    assert _count(caplog) == 1
+    clock.t += 30
+    aw._maybe_refresh_config()  # failed refresh, still never succeeded
+    assert _count(caplog) == 2
+    clock.t += 60
+    aw._maybe_refresh_config()  # success
+    assert _count(caplog) == 2
+    clock.t += 60
+    aw._maybe_refresh_config()  # failure after a success: last-good warning only
+    assert _count(caplog) == 2
+    assert "keeping last good config" in caplog.text
+
+
+def test_no_not_active_warning_when_first_fetch_succeeds(caplog):
+    caplog.set_level(logging.WARNING, logger="agentwatch")
+    init([Response(200, cfg_body())])
+    assert _count(caplog) == 0
