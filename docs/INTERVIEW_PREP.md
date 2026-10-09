@@ -390,3 +390,46 @@ Format per task:
 **Q:** Why page on `LastEvaluatedKey` instead of an offset or page number? **A:** DynamoDB has no OFFSET. Key-based paging is O(1) per page and stable under inserts: following the last sort key never re-reads or skips rows, where an offset would shift when new events land.
 **Q:** Why validate the cursor's shape instead of trusting it? **A:** A cursor is client-supplied. Decoding arbitrary base64 into a query key risks a malformed ExclusiveStartKey or a probe into META. Requiring the exact event-SK pattern turns a tampered cursor into a clean 400.
 **Q:** The type filter runs after the limit, so pages can be short. Why is that acceptable? **A:** A FilterExpression is cheaper and simpler than a second index, and correctness holds because the client follows `nextCursor` to the end. The only cost is extra round trips on sparse filters, fine at demo scale.
+
+## 5.3 CORS for the dashboard origin
+**Conceptual:** The dashboard is a static site served from a different origin than the API. Browsers block cross-origin calls unless the API returns CORS headers naming the allowed origin, methods, and headers. The origin is a deploy-time parameter so the Amplify URL can be set without touching code.
+**Technical:** An explicit `AWS::Serverless::HttpApi` named `ServerlessHttpApi` (SAM's default implicit-API logical id) carries the `CorsConfiguration`; the function's existing HttpApi events bind to it. `AllowHeaders` lists only `content-type` and the two custom credential headers. Tradeoff: an allow-list of headers instead of `*`, so a new header requires a template edit, but the surface stays tight.
+
+**Q:** Why can't CORS be your authorization mechanism? **A:** CORS is a browser-enforced policy for cross-origin reads; it does nothing for non-browser clients and isn't an auth control. The API still checks the owner/key-hash headers server-side.
+**Q:** Why list explicit origins instead of `*`? **A:** A wildcard origin can't be combined with credentials safely and would let any site call the API from a victim's browser. Naming the dashboard origin scopes it.
+
+## 5.4 Scaffold the Next.js static-export dashboard
+**Conceptual:** Amplify Hosting serves static files cheaply with no server to run or patch. `output: "export"` makes Next emit plain HTML/JS to `out/`, so the whole dashboard is a CDN artifact. Tests run in jsdom so components are verified without a browser.
+**Technical:** `lib/types.ts` mirrors the backend JSON shapes exactly, giving every component a typed contract. The smoke test asserts static export is configured and that jsdom is active. Tradeoff: hand-authored shadcn components instead of the CLI, trading upstream updates for control over exactly what ships.
+
+**Q:** Why static export over a Node server on Amplify? **A:** No server means no runtime to scale, patch, or pay for; the API is the only backend. It also fits the free-tier goal.
+**Q:** What breaks under static export that works in a normal Next app? **A:** Anything needing a request at runtime: server components with data fetching, `useSearchParams` without Suspense, and image optimization (disabled here).
+
+## 5.5 Browser key hashing and credential storage
+**Conceptual:** The raw API key is a secret and must never be persisted. The dashboard hashes it with SHA-256 (same as the backend) and stores only `{ownerId, keyHash}`, so inspecting storage reveals a hash, not the key.
+**Technical:** `hashKey` uses `crypto.subtle.digest` and hex-encodes the bytes, matching Python's `hashlib.sha256(...).hexdigest()`. `loadCredentials` returns null on corrupt or wrong-shaped data so a bad entry can't crash the app. Tradeoff: localStorage is XSS-readable; acceptable for a hackathon MVP without server sessions.
+
+**Q:** Is hashing the key in the browser a security boundary? **A:** No. The key-hash is what the server compares, so it's effectively a bearer token. Hashing avoids storing the original key but anyone with the hash can call the API; real auth would use short-lived tokens.
+**Q:** Why does the browser hash match the backend? **A:** Both compute SHA-256 over the UTF-8 bytes and lowercase-hex encode, so the digests are identical.
+
+## 5.6 API client with credential headers
+**Conceptual:** One module attaches credentials and interprets failures so no component hand-rolls fetch logic. Auth failures become a typed `AuthError` (re-prompt) and other failures an `ApiError` carrying the server message.
+**Technical:** `apiFetch` injects the owner and key-hash headers and reads the base URL from `NEXT_PUBLIC_API_URL` at call time so tests can stub it. `getTimeline` builds its query with `URLSearchParams`, omitting unset keys. Tradeoff: `res.json()` is wrapped in a catch so an empty error body doesn't throw a confusing parse error.
+
+**Q:** Why distinguish 401/403 from other errors in the client? **A:** They mean the credentials are wrong, so the UI should re-prompt rather than show a transient error and keep polling.
+**Q:** Where does the API base URL come from in a static site? **A:** A build-time `NEXT_PUBLIC_` env var inlined into the bundle, since there's no server to read runtime config.
+
+## 5.7–5.12 Dashboard components and pages
+**Conceptual:** The UI mirrors the backend's capabilities: enter credentials, list agents, open one, see its timeline, and edit its guardrails. Each piece gates on credentials and fails safe (keep last data, re-prompt on auth loss).
+**Technical:** Inventory polls every 30s with a cleaned-up interval; Timeline pages with an IntersectionObserver sentinel and a native-select type filter; RulesEditor always PUTs the full config and adopts the server's response. Tradeoff: a `loaded` flag returns null on first render to avoid a flash of the credentials form before localStorage is read in the browser-only effect.
+
+**Q:** Why poll instead of websockets for the inventory? **A:** The API is request/response over API Gateway HTTP API; a 30s poll is simple, cheap, and good enough for a dashboard. Websockets would add infrastructure for little demo value.
+**Q:** Why send the whole guardrail config on every save? **A:** The backend replaces config wholesale (a single PUT), so sending a partial object would drop the other fields. The full object keeps client and server in sync.
+**Q:** How does infinite scroll avoid duplicate or runaway fetches? **A:** The observer only triggers a load when `nextCursor` is non-null and no fetch is in flight, and a filter change resets the list and cursor.
+
+## 5.13 (partial) Amplify build config
+**Conceptual:** Amplify needs to know how to build and where the publishable output lives. `amplify.yml` runs `npm ci` + `npm run build` and publishes `out/`, matching the static export.
+**Technical:** `baseDirectory: out`, `node_modules` cached between builds. The AWS half (connect repo, set `NEXT_PUBLIC_API_URL`, set `DashboardOrigin` + redeploy) is left for a session with AWS access. Tradeoff: committing the build config early so the deploy step is a pure ops action with nothing left to author.
+
+**Q:** Why `npm ci` instead of `npm install` in CI? **A:** `npm ci` installs exactly from the lockfile, is faster, and fails if `package.json` and the lockfile disagree, giving reproducible builds.
+**Q:** How does the dashboard learn the API URL and how does the API learn the dashboard origin? **A:** The dashboard gets `NEXT_PUBLIC_API_URL` at build time in Amplify; the API gets the Amplify origin via the `DashboardOrigin` SAM parameter on `sam deploy`, closing the CORS loop.

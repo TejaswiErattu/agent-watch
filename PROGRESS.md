@@ -21,14 +21,20 @@ Last updated: 2026-10-08 by Kiro session (group 4)
   - Replaying an existing event with a wrong key returned 403, and nothing was written.
   - `demo_agent.py` events were stored.
 
+- 5.3 CORS: added `DashboardOrigin` parameter (default `http://localhost:3000`) and an explicit `ServerlessHttpApi` resource with `CorsConfiguration` (origins localhost + `DashboardOrigin`; methods GET/PUT/POST/OPTIONS; headers content-type, x-agentwatch-owner, x-agentwatch-key-hash). `test_template.py` asserts it. Committed and pushed on main; NOT deployed (Tejaswi runs `sam deploy`).
+
+- Group 5 dashboard (5.4–5.12): Next.js 14 App Router static-export app under `dashboard/`, TypeScript + Tailwind + hand-authored shadcn/ui (Button, Input, Table, Select, Alert), vitest + Testing Library + jsdom. `lib/types.ts` mirrors InventoryItem/TimelineItem/GuardrailConfig/ConfigResponse. `lib/credentials.ts` (SHA-256 via `crypto.subtle`, stores only {ownerId, keyHash}), `lib/api.ts` (credential headers, AuthError/ApiError, getInventory/getTimeline/getConfig/putConfig). Components: CredentialsForm, InventoryTable, AddAgentForm, Timeline (infinite scroll + type filter), RulesEditor. Pages: inventory `/` (30s polling, auth/clear handling) and agent detail `/agent?id=` (Suspense-wrapped useSearchParams). `npm run build` produces `out/` with `/` and `/agent` prerendered. Dashboard suite: 46 passed. Next bumped to 14.2.35 to clear a published advisory.
+
+- 5.13 (local half only): `dashboard/amplify.yml` (`baseDirectory: out`, `npm ci` + `npm run build`) and `dashboard/lib/build.test.ts` added and passing. The AWS half (connect repo in Amplify, set `NEXT_PUBLIC_API_URL`, set `DashboardOrigin` + `sam deploy`) is NOT done — needs AWS.
+
 ## In progress
 - (none)
 
 ## Next step
-- Task 5.1 (`list_inventory` and `GET /agents`).
+- Finish 5.13 (needs AWS): deploy `backend/template.yaml` with `sam deploy` so the new CORS config and `DashboardOrigin` take effect; connect the GitHub repo in AWS Amplify Hosting with `NEXT_PUBLIC_API_URL` set to the ApiUrl; once the Amplify URL exists, pass it as `DashboardOrigin` and `sam deploy` again. Then do 5.14 checkpoint (run vitest in dashboard/ + pytest in backend/ and sdk/, click through the deployed dashboard).
 
 ## Blocked
-- (none)
+- 5.13 Amplify deploy + CORS redeploy: needs AWS access (Amplify console + `sam deploy`). Local config and tests are ready.
 
 ## Decisions
 - 2026-10-08 firstSeen is the ts of the first event to arrive, not the earliest ts. It matches Property 12 and is a single `if_not_exists` in the transaction (no read-compare-write).
@@ -65,6 +71,13 @@ Last updated: 2026-10-08 by Kiro session (group 4)
 - 2026-10-08 (4.4/4.5) Demo setup comes from env vars `AGENTWATCH_ENDPOINT`, `AGENTWATCH_OWNER`, `AGENTWATCH_KEY`. `make_client` sends a 1-token Bedrock probe so a fallback happens at startup, not mid-demo.
 
 - 2026-10-08 (4.6) `demo/requirements.txt` pins `botocore[crt]` to the same version as `boto3`. `aws login` credentials need the CRT extra.
+
+- 2026-10-08 (5.3) CORS is attached via an explicit `ServerlessHttpApi` resource (the default implicit API logical id) so the function's existing HttpApi events still bind to it. `DashboardOrigin` defaults to localhost and is overridden with the Amplify URL at deploy time, so no code change is needed when the URL exists.
+- 2026-10-08 (5.4) Dashboard scaffolded by hand (not create-next-app) to stay offline and avoid interactive prompts. shadcn/ui components authored directly under `components/ui/` rather than via the CLI. Next bumped from 14.2.15 to 14.2.35 to clear a published security advisory while staying on Next 14.
+- 2026-10-08 (5.4) vitest setup installs a minimal in-memory `localStorage` polyfill; jsdom in this Node did not expose Storage. jsdom `url` set to `http://localhost:3000`.
+- 2026-10-08 (5.8) Agent links use `/agent?id=<id>` (query param) instead of a dynamic route, which is simpler for static export (no generateStaticParams needed).
+- 2026-10-08 (5.10/5.12) Timeline type filter uses a native `<select>` (easy to drive with Testing Library `selectOptions`); the detail page wraps `useSearchParams` in `<Suspense>`, required by static export.
+- 2026-10-08 (5.11) RulesEditor always PUTs the full GuardrailConfig (backend replaces config wholesale); an empty cap input is sent as `null`.
 
 ## Open bugs
 - (none known)

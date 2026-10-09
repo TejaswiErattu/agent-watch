@@ -333,61 +333,61 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 6.1, 6.3, 12.2, 13.9, 20.5, 22.2_
     - Commit: `feat(backend): timeline endpoint with cursor and type filter`
 
-  - [ ] 5.3 Add CORS for the dashboard and redeploy
+  - [x] 5.3 Add CORS for the dashboard and redeploy
     - Write the failing tests first. Extend `backend/tests/test_template.py` to assert `CorsConfiguration` allows `http://localhost:3000` and the `DashboardOrigin` parameter, methods `GET` and `PUT`, and headers `content-type`, `x-agentwatch-owner`, `x-agentwatch-key-hash`.
     - Update `backend/template.yaml`; run `sam deploy`.
     - _Requirements: 15.8_
     - Commit: `feat(infra): CORS for dashboard origin`
 
-  - [ ] 5.4 Scaffold the Next.js dashboard
+  - [x] 5.4 Scaffold the Next.js dashboard
     - Write the failing tests first. Add `dashboard/lib/smoke.test.ts` asserting `next.config.mjs` sets `output: "export"` and that vitest runs in jsdom.
     - Create the Next.js 14 App Router app in `dashboard/` with TypeScript, Tailwind, shadcn/ui (`Table`, `Input`, `Button`, `Select`, `Alert`), vitest + Testing Library + jsdom, and `NEXT_PUBLIC_API_URL`. Add `dashboard/lib/types.ts` mirroring InventoryItem, TimelineItem, Guardrail_Config, Config_Response.
     - _Requirements: 17.3_
     - Commit: `feat(dashboard): scaffold Next.js static export with vitest`
 
-  - [ ] 5.5 Implement lib/credentials.ts
+  - [x] 5.5 Implement lib/credentials.ts
     - Write the failing tests first. In `dashboard/lib/credentials.test.ts`, cover: `hashKey("abc")` equals the known SHA-256 lowercase hex vector; `saveCredentials` writes only `{ownerId, keyHash}` under `agentwatch.credentials` and no plaintext key; `loadCredentials` returns null when empty or corrupt; `clearCredentials` removes the key.
     - Implement `dashboard/lib/credentials.ts` using `crypto.subtle.digest`.
     - _Requirements: 11.6, 11.9, 14.7_
     - Commit: `feat(dashboard): browser key hashing and credential storage`
 
-  - [ ] 5.6 Implement lib/api.ts
+  - [x] 5.6 Implement lib/api.ts
     - Write the failing tests first. In `dashboard/lib/api.test.ts` with a mocked `fetch`, cover: `apiFetch` adds `x-agentwatch-owner` and `x-agentwatch-key-hash`; 401/403 throw `AuthError`; other non-2xx throw `ApiError` with the server `error` message; `getInventory`, `getTimeline({order, type, cursor, limit})`, `getConfig`, `putConfig` build the right URLs and bodies.
     - Implement `dashboard/lib/api.ts`.
     - _Requirements: 9.2, 9.3, 11.7, 11.8_
     - Commit: `feat(dashboard): API client with credential headers`
 
-  - [ ] 5.7 Implement CredentialsForm
+  - [x] 5.7 Implement CredentialsForm
     - Write the failing tests first. In `dashboard/components/CredentialsForm.test.tsx`, cover: labelled ownerId and API key (`type="password"`) inputs; submit hashes and saves, calls `onSaved`, and clears the key field; an optional error message renders in `role="alert"`.
     - Implement `dashboard/components/CredentialsForm.tsx`.
     - _Requirements: 11.5, 11.6, 14.7_
     - Commit: `feat(dashboard): credentials form`
 
-  - [ ] 5.8 Implement InventoryTable and AddAgentForm
+  - [x] 5.8 Implement InventoryTable and AddAgentForm
     - Write the failing tests first. In `dashboard/components/InventoryTable.test.tsx`, cover: rows show agentId, model, last activity, total spend; rows link to `/agent?id=<agentId>`; Unreported_Agents show "not yet reported" and an empty model cell. In `dashboard/components/AddAgentForm.test.tsx`, cover: invalid agentId shows an error; valid agentId navigates to `/agent?id=<agentId>` (mock the router).
     - Implement `dashboard/components/InventoryTable.tsx` and `dashboard/components/AddAgentForm.tsx`.
     - _Requirements: 11.2, 11.3, 11.10, 11.11, 11.12_
     - Commit: `feat(dashboard): inventory table and add-agent form`
 
-  - [ ] 5.9 Build the inventory page with polling
+  - [x] 5.9 Build the inventory page with polling
     - Write the failing tests first. In `dashboard/app/page.test.tsx`, cover: no stored credentials shows `CredentialsForm`; with credentials, the table renders from a mocked `getInventory`; `AuthError` shows "Credentials not accepted" and the form; "Clear credentials" clears storage and shows the form; with fake timers, inventory refetches every 30 s and the interval is cleared on unmount; other errors keep the last data and show an inline alert.
     - Implement `dashboard/app/page.tsx`.
     - _Requirements: 11.1, 11.4, 11.5, 11.8, 11.9_
     - Commit: `feat(dashboard): inventory page with 30s polling`
 
-  - [ ] 5.10 Implement the Timeline component
+  - [x] 5.10 Implement the Timeline component
     - Write the failing tests first. In `dashboard/components/Timeline.test.tsx`, cover: mixed `llm_call`, `tool_call`, and `blocked` events render in one list in the order returned (`order=desc`); the type filter resets the list and passes `type`; a mocked `IntersectionObserver` firing loads `nextCursor` and appends; no more loads when `nextCursor` is null.
     - Implement `dashboard/components/Timeline.tsx`.
     - _Requirements: 6.4, 12.2, 20.5_
     - Commit: `feat(dashboard): timeline with infinite scroll and type filter`
 
-  - [ ] 5.11 Implement the RulesEditor component
+  - [x] 5.11 Implement the RulesEditor component
     - Write the failing tests first. In `dashboard/components/RulesEditor.test.tsx`, cover: loads and shows the config from `getConfig`; saving a cap, adding a path, and removing a path each send the full Guardrail_Config via `putConfig`; success shows the returned config; failure shows an error in `role="alert"` and keeps the draft; an empty cap input sends `null`.
     - Implement `dashboard/components/RulesEditor.tsx`.
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 12.3, 12.4_
     - Commit: `feat(dashboard): rules editor`
 
-  - [ ] 5.12 Build the agent detail page
+  - [x] 5.12 Build the agent detail page
     - Write the failing tests first. In `dashboard/app/agent/page.test.tsx`, cover: reads `?id=` and renders `Timeline` and `RulesEditor` for it; missing `id` shows a message with a link back; `AuthError` shows the credentials form.
     - Implement `dashboard/app/agent/page.tsx` (wrap `useSearchParams` in `Suspense` for static export).
     - _Requirements: 12.1, 12.3, 12.4_
