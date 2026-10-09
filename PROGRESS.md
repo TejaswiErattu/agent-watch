@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-08 by Kiro session (group 4)
+Last updated: 2026-10-09 by Kiro session (5.13 deploy)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -25,16 +25,16 @@ Last updated: 2026-10-08 by Kiro session (group 4)
 
 - Group 5 dashboard (5.4–5.12): Next.js 14 App Router static-export app under `dashboard/`, TypeScript + Tailwind + hand-authored shadcn/ui (Button, Input, Table, Select, Alert), vitest + Testing Library + jsdom. `lib/types.ts` mirrors InventoryItem/TimelineItem/GuardrailConfig/ConfigResponse. `lib/credentials.ts` (SHA-256 via `crypto.subtle`, stores only {ownerId, keyHash}), `lib/api.ts` (credential headers, AuthError/ApiError, getInventory/getTimeline/getConfig/putConfig). Components: CredentialsForm, InventoryTable, AddAgentForm, Timeline (infinite scroll + type filter), RulesEditor. Pages: inventory `/` (30s polling, auth/clear handling) and agent detail `/agent?id=` (Suspense-wrapped useSearchParams). `npm run build` produces `out/` with `/` and `/agent` prerendered. Dashboard suite: 46 passed. Next bumped to 14.2.35 to clear a published advisory.
 
-- 5.13 (local half only): `dashboard/amplify.yml` (`baseDirectory: out`, `npm ci` + `npm run build`) and `dashboard/lib/build.test.ts` added and passing. The AWS half (connect repo in Amplify, set `NEXT_PUBLIC_API_URL`, set `DashboardOrigin` + `sam deploy`) is NOT done — needs AWS.
+- 5.13 DONE (deployed): the dashboard is live on AWS Amplify Hosting. App id `d65rs0iutjwy8`, URL https://main.d65rs0iutjwy8.amplifyapp.com, auto-building from `main`. The repo-root `amplify.yml` is a monorepo spec (`applications:` + `appRoot: dashboard`). `backend/template.yaml` was deployed with `DashboardOrigin` set to the Amplify URL, so the API's CORS origin is that URL. `dashboard/lib/build.test.ts` reads the root file and asserts the `applications` key and `appRoot: dashboard`.
 
 ## In progress
 - (none)
 
 ## Next step
-- Finish 5.13 (needs AWS): deploy `backend/template.yaml` with `sam deploy` so the new CORS config and `DashboardOrigin` take effect; connect the GitHub repo in AWS Amplify Hosting with `NEXT_PUBLIC_API_URL` set to the ApiUrl; once the Amplify URL exists, pass it as `DashboardOrigin` and `sam deploy` again. Then do 5.14 checkpoint (run vitest in dashboard/ + pytest in backend/ and sdk/, click through the deployed dashboard).
+- 5.14 checkpoint (manual, needs the deployed stack): run `npx vitest --run` in `dashboard/` and `pytest` in `backend/` and `sdk/` (all green), then on https://main.d65rs0iutjwy8.amplifyapp.com enter credentials, see `bad-bot` in the inventory, open it, and confirm the blocked event shows in the timeline. Then start group 6 (spend cap): 6.1 `get_spend` + `GET /agents/{agentId}/spend`.
 
 ## Blocked
-- 5.13 Amplify deploy + CORS redeploy: needs AWS access (Amplify console + `sam deploy`). Local config and tests are ready.
+- (none)
 
 ## Decisions
 - 2026-10-08 firstSeen is the ts of the first event to arrive, not the earliest ts. It matches Property 12 and is a single `if_not_exists` in the transaction (no read-compare-write).
@@ -78,6 +78,13 @@ Last updated: 2026-10-08 by Kiro session (group 4)
 - 2026-10-08 (5.8) Agent links use `/agent?id=<id>` (query param) instead of a dynamic route, which is simpler for static export (no generateStaticParams needed).
 - 2026-10-08 (5.10/5.12) Timeline type filter uses a native `<select>` (easy to drive with Testing Library `selectOptions`); the detail page wraps `useSearchParams` in `<Suspense>`, required by static export.
 - 2026-10-08 (5.11) RulesEditor always PUTs the full GuardrailConfig (backend replaces config wholesale); an empty cap input is sent as `null`.
+
+- 2026-10-09 (5.13 deploy) Amplify + CORS gotchas learned while deploying:
+  - The root `amplify.yml` must use the monorepo `applications:` + `appRoot: dashboard` format. A flat `frontend:` spec fails with "Monorepo spec provided without 'applications' key".
+  - The Amplify app platform must be `WEB` (not `WEB_COMPUTE`). `WEB_COMPUTE` fails on a static export (`output: "export"`); there is no server runtime to host.
+  - CORS config must live under `Globals.HttpApi` in `template.yaml`. An explicit `ServerlessHttpApi` resource is ignored by SAM, leaving the live `CorsConfiguration` null.
+  - CORS `AllowOrigins` can't contain duplicates (API Gateway: "Duplicated values are not allowed in allow-origins"), so localhost can't be listed both literally and as the `DashboardOrigin` default.
+  - localhost is no longer an allowed origin: `AllowOrigins` is just `!Ref DashboardOrigin`, now set to the Amplify URL. Local dev against the deployed API needs `DashboardOrigin` overridden back to localhost and a redeploy.
 
 ## Open bugs
 - (none known)

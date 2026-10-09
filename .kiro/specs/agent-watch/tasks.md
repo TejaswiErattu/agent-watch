@@ -393,7 +393,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 12.1, 12.3, 12.4_
     - Commit: `feat(dashboard): agent detail page`
 
-  - [ ] 5.13 Deploy the dashboard to Amplify Hosting
+  - [x] 5.13 Deploy the dashboard to Amplify Hosting
     - Write the failing tests first. Add `dashboard/lib/build.test.ts` asserting `amplify.yml` exists with `baseDirectory: out` and runs `npm ci` and `npm run build`; run `npm run build` locally and confirm `out/` is produced.
     - Create `dashboard/amplify.yml`; connect the repo in Amplify with `NEXT_PUBLIC_API_URL`; set the deployed origin as the `DashboardOrigin` parameter and `sam deploy` again.
     - _Requirements: 11.1, 15.8, 18.3_
