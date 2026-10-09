@@ -43,6 +43,7 @@ Last updated: 2026-10-08 by Kiro session
 
 - 2026-10-08 (3.17) Every str/bytes/PathLike tool argument is a candidate path, so `search(".env")` is blocked too. Over-blocking is the safe direction, and the SDK can't know which strings a tool treats as paths.
 - 2026-10-08 (3.17) A path whose normalization raises (e.g. a NUL byte) is blocked and reported with `meta.entry = "<unnormalizable path>"`. Fail closed.
+- 2026-10-08 (3.17 regression fix) Fail-closed applies only to named path args (`PATH_ARG_NAMES` / `path_arg`). Other candidates that fail normalization are skipped, so `write_file("out.zip", data)` with NUL bytes in `data` isn't blocked. A NUL can't name a real file, so skipping it only lets non-path data through.
 - 2026-10-08 (3.18) The inode match only adds blocks and runs only for directory entries that exist. Ancestor ids are computed lazily, once per attempted path.
 - 2026-10-08 (3.19) The endpoint check parses with `urlsplit` instead of matching a prefix, so `http://localhost.evil.com` and `http://localhost@evil.com` are rejected.
 - 2026-10-08 (3.20) While no fetch has succeeded, the "NOT active" line replaces the "keeping last good config" warning and the failure reason drops to DEBUG, so the warning text stays exact.

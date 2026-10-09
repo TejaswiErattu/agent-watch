@@ -353,22 +353,27 @@ class Watcher:
         except Exception:
             pass
 
-    def _check_paths(self, tool_name: str, candidates: list) -> None:
-        """Block if any candidate matches (Req 8.13). A path that can't be normalized is blocked (8.14)."""
+    def _check_paths(self, tool_name: str, named: list, candidates: list) -> None:
+        """Block if any candidate matches (Req 8.13). A named path arg that can't be normalized is
+        blocked (8.14); any other candidate that can't be normalized (e.g. binary data) is skipped."""
         self._maybe_refresh_config()  # Req 8.8
         blocked_paths = self._config.blocked_paths
         if not blocked_paths:
             return
+        named_ids = {id(v) for v in named}
         for value in candidates:
+            failed = False
             try:
                 path = os.fsdecode(os.fspath(value))
             except Exception:
-                path, entry = _safe_str(value), "<unreadable path>"
+                path, entry, failed = _safe_str(value), "<unreadable path>", True
             else:
                 try:
                     entry = blocked_entry_for(path, blocked_paths)
                 except Exception:  # e.g. ValueError: embedded null byte
-                    entry = "<unnormalizable path>"
+                    entry, failed = "<unnormalizable path>", True
+            if failed and id(value) not in named_ids:
+                continue  # not a named path arg: unnormalizable means "not a path" (e.g. binary data)
             if entry is None:
                 continue
             # The server keeps only violationType/attemptedPath on blocked events, so context goes in meta.
@@ -419,7 +424,7 @@ class Watcher:
             named = _named_paths(bound, path_arg)
             candidates = _candidate_paths(named, args, kwargs)
             if candidates:
-                self._check_paths(tool_name, candidates)  # raises PathBlocked
+                self._check_paths(tool_name, named, candidates)  # raises PathBlocked
             target = _short(_safe_str(named[0])) if named else _first_arg_repr(args, kwargs)
             meta = {"args": _fit_args([_short(repr(a)) for a in (*args, *kwargs.values())][:MAX_ARGS])}
             try:

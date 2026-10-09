@@ -111,7 +111,7 @@ Modules:
 #### Tool wrapper
 
 1. Collect candidate paths (Req 8.13): every bound argument named in `path_arg` (a name or a list of names) or in `PATH_ARG_NAMES = path, file_path, filepath, filename, file, src, dst, source, destination, target_path`, plus every str/bytes/PathLike in `*args`/`**kwargs` and one level inside list/tuple values. A tool with no candidates skips the blocklist. Checking every string over-blocks a non-path string that happens to equal a blocked name (e.g. `search(".env")`); that is the safe direction.
-2. If there are candidates: refresh config if stale, then `blocked_entry_for(os.fsdecode(os.fspath(value)), blocked_paths)` for each. The first match (or a value whose normalization raises, e.g. a NUL byte, Req 8.14) sends one blocked event synchronously and raises `PathBlocked`.
+2. If there are candidates: refresh config if stale, then `blocked_entry_for(os.fsdecode(os.fspath(value)), blocked_paths)` for each. The first match (or a named path argument whose normalization raises, e.g. a NUL byte, Req 8.14; other values that fail normalization, such as binary `bytes` content, are skipped) sends one blocked event synchronously and raises `PathBlocked`.
 3. Call the tool and queue a `tool_call` event with `tool`, `target` (the path, else `repr` of the first argument, truncated to 200 chars), and `meta.args` (each argument's `repr` truncated to 200 chars, at most 10 args).
 4. If the tool raises, still queue the event with `meta.error = type(e).__name__`, then re-raise.
 

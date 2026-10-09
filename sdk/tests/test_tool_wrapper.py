@@ -335,6 +335,44 @@ def test_path_that_fails_normalization_is_blocked():
     assert sent[0]["attemptedPath"] == "bad\x00name"
 
 
+def test_binary_content_with_nul_is_allowed():
+    aw, t = make(paths=[".env"])
+    written = []
+
+    def write_file(path, data):
+        written.append((path, data))
+
+    blob = b"PK\x03\x04\x00\x00binary"
+    aw.tools({"write_file": write_file})["write_file"]("out.zip", blob)
+    assert written == [("out.zip", blob)]
+    (e,) = events(aw, t)
+    assert e["type"] == "tool_call"
+
+
+def test_nul_in_unnamed_str_arg_is_skipped():
+    aw, _ = make(paths=[".env"])
+
+    def echo(text):
+        return text
+
+    assert aw.tools({"echo": echo})["echo"]("a\x00b") == "a\x00b"
+
+
+def test_nul_in_custom_path_arg_is_blocked():
+    aw, t = make(paths=[".env"])
+    called = []
+
+    @aw.tool(name="load", path_arg="where")
+    def load(where, data=b""):
+        called.append(where)
+
+    with pytest.raises(PathBlocked):
+        load("x\x00y", b"\x00")
+    assert called == []
+    sent = [r["json"] for r in t.requests if r["url"].endswith("/events")]
+    assert len(sent) == 1 and sent[0]["meta"]["entry"] == "<unnormalizable path>"
+
+
 def test_unrelated_strings_still_allowed():
     aw, t = make(paths=[".env"])
 
