@@ -1,5 +1,7 @@
 # Demo-only dependencies (never SDK deps). Install from the repo root:
 #   pip install -r demo/requirements.txt
 boto3==1.43.109
+# Needed when AWS credentials come from `aws login` (botocore uses CRT for that credential provider).
+botocore[crt]==1.43.109
 anthropic==1.12.1
 -e ./sdk

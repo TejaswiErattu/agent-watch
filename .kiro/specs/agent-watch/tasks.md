@@ -309,7 +309,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 16.1, 16.5, 16.6_
     - Commit: `feat(demo): well-behaved demo agent with Bedrock fallback`
 
-  - [ ] 4.6 Checkpoint: deploy and see the `.env` block and email
+  - [x] 4.6 Checkpoint: deploy and see the `.env` block and email
     - Write the failing tests first. Before deploying, run `pytest` in `backend/` and `sdk/` (all green), and confirm `test_template.py` passes.
     - Run `sam build && sam deploy --guided --region us-west-2` from `backend/` with `AlertEmail`; confirm the SNS subscription email.
     - `curl` a `PUT /agents/bad-bot/config` with `{"dailySpendCapUsd": null, "blockedPaths": [".env"]}`, then run `python demo/bad_agent.py` with `AGENTWATCH_ENDPOINT` set. Expect `PathBlocked` in the terminal and the alert email within about 10 s.

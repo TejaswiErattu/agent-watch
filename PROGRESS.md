@@ -13,15 +13,22 @@ Last updated: 2026-10-08 by Kiro session (group 4)
 - 3.17 regression fix (pushed as `fix(sdk)`): fail-closed on unnormalizable values now applies only to named path args. Binary `bytes` with a NUL in another arg is skipped. Req 8.14 and design updated.
 - Group 4 (4.1–4.5): `alerts.py` (`format_alert`, `publish_alert`, `SnsPublisher`) and Properties 16 and 17; step 7 of `ingest_event` publishes only for newly stored blocked events; the handler builds `SnsPublisher(TOPIC_ARN)`. `demo/bad_agent.py`, `demo/demo_agent.py` (Bedrock probe, Anthropic fallback), `demo/common.py`, `demo/notes.txt`, `demo/requirements.txt`. Checkpoint: SDK 195 passed, backend 397 on main (404 with `test_template.py` on the PR branch).
 
+- 4.3 SAM template: PR #1 (`feat/sam-template`), approved by Tejaswi and merged into main. Backend suite: 404 passed.
+- 4.6 Checkpoint, verified manually by Tejaswi:
+  - Stack `agent-watch` is deployed in us-west-2. `ApiUrl`: https://ypdid9bish.execute-api.us-west-2.amazonaws.com
+  - The SNS subscription email was confirmed.
+  - `bad_agent.py` printed `PathBlocked`, and the alert email arrived.
+  - Replaying an existing event with a wrong key returned 403, and nothing was written.
+  - `demo_agent.py` events were stored.
+
 ## In progress
-- 4.3 SAM template (`backend/template.yaml`, `samconfig.toml`, `tests/test_template.py`) is on branch `feat/sam-template`, pushed with `main` merged in. `sam validate --lint` passes. Waiting for Tejaswi's approval before merging. The PR isn't open yet (see Blocked).
-- 4.6 deploy: waiting on Tejaswi to run `sam deploy` (commands are in the session summary). Run it after the 4.3 merge.
+- (none)
 
 ## Next step
-- Open the 4.3 PR, get approval, merge `feat/sam-template` into main. Tejaswi runs the 4.6 deploy and demo commands, then records `ApiUrl` here. After that: task 5.1 (`list_inventory` and `GET /agents`).
+- Task 5.1 (`list_inventory` and `GET /agents`).
 
 ## Blocked
-- Opening the 4.3 PR through the GitHub MCP server. `.kiro/settings/mcp.json` defines `github`, but its tools weren't exposed to the agent this session (needs `GITHUB_TOKEN` set and the server connected in the MCP panel). Fallback, if Tejaswi okays it: `gh pr create`.
+- (none)
 
 ## Decisions
 - 2026-10-08 firstSeen is the ts of the first event to arrive, not the earliest ts. It matches Property 12 and is a single `if_not_exists` in the transaction (no read-compare-write).
@@ -56,6 +63,8 @@ Last updated: 2026-10-08 by Kiro session (group 4)
 - 2026-10-08 (4.1) Alert email fields escape non-printable chars, so an attempted path can't forge email lines. The subject is capped at 100 chars (SNS limit). Publish failures log only the exception type.
 - 2026-10-08 (4.2) Alerts are at-most-once. Publishing happens synchronously after a "stored" write, so a crash between write and publish loses the email but never duplicates it. DynamoDB Streams would make it reliable, and that's a next step.
 - 2026-10-08 (4.4/4.5) Demo setup comes from env vars `AGENTWATCH_ENDPOINT`, `AGENTWATCH_OWNER`, `AGENTWATCH_KEY`. `make_client` sends a 1-token Bedrock probe so a fallback happens at startup, not mid-demo.
+
+- 2026-10-08 (4.6) `demo/requirements.txt` pins `botocore[crt]` to the same version as `boto3`. `aws login` credentials need the CRT extra.
 
 ## Open bugs
 - (none known)
