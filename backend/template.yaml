@@ -21,25 +21,26 @@ Globals:
       Variables:
         TABLE_NAME: !Ref EventTable
         TOPIC_ARN: !Ref AlertTopic
+  HttpApi:
+    # CORS on the implicit HTTP API. An explicit ServerlessHttpApi resource is
+    # ignored by SAM here, so the config must live under Globals to take effect.
+    # DashboardOrigin defaults to http://localhost:3000, so localhost is listed
+    # only once literally; the Amplify URL arrives via the parameter at deploy time.
+    CorsConfiguration:
+      AllowOrigins:
+        - http://localhost:3000
+        - !Ref DashboardOrigin
+      AllowMethods:
+        - GET
+        - PUT
+        - POST
+        - OPTIONS
+      AllowHeaders:
+        - content-type
+        - x-agentwatch-owner
+        - x-agentwatch-key-hash
 
 Resources:
-  ServerlessHttpApi:
-    Type: AWS::Serverless::HttpApi
-    Properties:
-      CorsConfiguration:
-        AllowOrigins:
-          - http://localhost:3000
-          - !Ref DashboardOrigin
-        AllowMethods:
-          - GET
-          - PUT
-          - POST
-          - OPTIONS
-        AllowHeaders:
-          - content-type
-          - x-agentwatch-owner
-          - x-agentwatch-key-hash
-
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:

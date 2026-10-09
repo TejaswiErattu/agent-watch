@@ -104,11 +104,16 @@ def test_function_policies_scoped(tpl):
 
 def test_cors_configuration(tpl):
     assert tpl["Parameters"]["DashboardOrigin"]["Type"] == "String"
-    http_api = res(tpl, "ServerlessHttpApi")
-    cors = http_api["Properties"]["CorsConfiguration"]
+    # CORS must live under Globals.HttpApi so it applies to the implicit API.
+    # An explicit ServerlessHttpApi resource is ignored by SAM (CloudFormation
+    # reports "No updates are to be performed" and the live CorsConfiguration is null).
+    assert "ServerlessHttpApi" not in tpl.get("Resources", {})
+    cors = tpl["Globals"]["HttpApi"]["CorsConfiguration"]
     origins = cors["AllowOrigins"]
     assert "http://localhost:3000" in origins
     assert {"Ref": "DashboardOrigin"} in origins
+    # DashboardOrigin defaults to http://localhost:3000; don't list it twice.
+    assert origins.count("http://localhost:3000") == 1
     assert {"GET", "PUT"} <= set(cors["AllowMethods"])
     allowed_headers = {h.lower() for h in cors["AllowHeaders"]}
     assert {"content-type", "x-agentwatch-owner", "x-agentwatch-key-hash"} <= allowed_headers
