@@ -27,11 +27,15 @@ Last updated: 2026-10-09 by Kiro session (5.13 deploy)
 
 - 5.13 DONE (deployed): the dashboard is live on AWS Amplify Hosting. App id `d65rs0iutjwy8`, URL https://main.d65rs0iutjwy8.amplifyapp.com, auto-building from `main`. The repo-root `amplify.yml` is a monorepo spec (`applications:` + `appRoot: dashboard`). `backend/template.yaml` was deployed with `DashboardOrigin` set to the Amplify URL, so the API's CORS origin is that URL. `dashboard/lib/build.test.ts` reads the root file and asserts the `applications` key and `appRoot: dashboard`.
 
+- 5.14 DONE (verified manually by Tejaswi on the deployed dashboard, 2026-10-09): `bad-bot` and `demo-bot` both show in the inventory, and `bad-bot` shows the `.env` rule and the blocked event in its timeline.
+  - The original demo API key was lost. The demo data was deleted and recreated with a new key. The key now lives in a private file outside the repo. Never commit or print it.
+- 5.15 DONE: inventory "Total spend" now shows 4 decimals (`$0.0006` instead of `$0.00`), and `<$0.0001` for nonzero amounts below that. Dashboard suite: 51 passed. Pushed as `fix(dashboard)`; Amplify rebuilds from `main`.
+
 ## In progress
 - (none)
 
 ## Next step
-- 5.14 checkpoint (manual, needs the deployed stack): run `npx vitest --run` in `dashboard/` and `pytest` in `backend/` and `sdk/` (all green), then on https://main.d65rs0iutjwy8.amplifyapp.com enter credentials, see `bad-bot` in the inventory, open it, and confirm the blocked event shows in the timeline. Then start group 6 (spend cap): 6.1 `get_spend` + `GET /agents/{agentId}/spend`.
+- Group 6 (spend cap): 6.1 `get_spend` + `GET /agents/{agentId}/spend`.
 
 ## Blocked
 - (none)
@@ -85,6 +89,8 @@ Last updated: 2026-10-09 by Kiro session (5.13 deploy)
   - CORS config must live under `Globals.HttpApi` in `template.yaml`. An explicit `ServerlessHttpApi` resource is ignored by SAM, leaving the live `CorsConfiguration` null.
   - CORS `AllowOrigins` can't contain duplicates (API Gateway: "Duplicated values are not allowed in allow-origins"), so localhost can't be listed both literally and as the `DashboardOrigin` default.
   - localhost is no longer an allowed origin: `AllowOrigins` is just `!Ref DashboardOrigin`, now set to the Amplify URL. Local dev against the deployed API needs `DashboardOrigin` overridden back to localhost and a redeploy.
+
+- 2026-10-09 (5.15) Spend shows 4 decimals, not `<$0.01`. A `<$0.01` label would still hide demo-sized spend ($0.0006), which is the number students need to see. The floor label is `<$0.0001` so a tiny nonzero spend never reads as `$0.0000`.
 
 ## Open bugs
 - (none known)

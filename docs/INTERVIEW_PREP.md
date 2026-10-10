@@ -433,3 +433,9 @@ Format per task:
 
 **Q:** Why `npm ci` instead of `npm install` in CI? **A:** `npm ci` installs exactly from the lockfile, is faster, and fails if `package.json` and the lockfile disagree, giving reproducible builds.
 **Q:** How does the dashboard learn the API URL and how does the API learn the dashboard origin? **A:** The dashboard gets `NEXT_PUBLIC_API_URL` at build time in Amplify; the API gets the Amplify origin via the `DashboardOrigin` SAM parameter on `sam deploy`, closing the CORS loop.
+
+## 5.15 Sub-cent spend in the inventory
+
+**Q:** Why not just show `<$0.01` for small amounts? **A:** A single Claude call costs fractions of a cent, so `<$0.01` hides the actual number. Four decimals keep real per-agent spend readable, and `<$0.0001` covers the rare nonzero amount below that.
+
+**Q:** Is the displayed spend the billing source of truth? **A:** No. It's a server-side estimate from the pricing table (rounded to 6 dp on write). It's for awareness and guardrails, not invoicing; AWS Budgets is the real billing backstop.
