@@ -439,3 +439,15 @@ Format per task:
 **Q:** Why not just show `<$0.01` for small amounts? **A:** A single Claude call costs fractions of a cent, so `<$0.01` hides the actual number. Four decimals keep real per-agent spend readable, and `<$0.0001` covers the rare nonzero amount below that.
 
 **Q:** Is the displayed spend the billing source of truth? **A:** No. It's a server-side estimate from the pricing table (rounded to 6 dp on write). It's for awareness and guardrails, not invoicing; AWS Budgets is the real billing backstop.
+
+## 6.1 Rolling 24h spend endpoint
+
+**Conceptual:** The SDK needs a server-side "how much has this agent spent today" so a spend cap survives restarts and multiple processes. `GET /agents/{agentId}/spend` sums event costs over `now - 24h < ts <= now` and returns the window it used.
+
+**Technical:** Event SKs are `ts#eventId`, so a time window is an SK range in the agent's partition. DynamoDB `BETWEEN` is inclusive, so both bounds get the suffix `#~` (sorts after any hex id): the lower bound skips events exactly at `now - 24h`, the upper keeps events exactly at `now`. `now` is floored to milliseconds to match event precision. Tradeoff: a Query over a day of events per call instead of a precomputed counter; exact and simple, fine at MVP volume.
+
+**Q:** Why query the partition instead of keeping a daily counter? **A:** A rolling window can't be maintained with one atomic counter without bucketing; querying the SK range is exact by definition and cheap for one agent's day of events.
+
+**Q:** How do you get an exclusive lower bound from an inclusive `BETWEEN`? **A:** Append a suffix that sorts after every real eventId (`#~`), so `ts#~` is greater than every SK at that ts. Same trick on the upper bound includes all events at `now`.
+
+**Q:** Does a read of an unknown agent leak or create anything? **A:** No. It returns 0.0 and writes nothing (Property 6). A mismatched key gets 403, same gate as every other route.

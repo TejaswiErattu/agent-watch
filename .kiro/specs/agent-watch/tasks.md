@@ -410,7 +410,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Commit: `fix(dashboard): show sub-cent spend in inventory`
 
 - [ ] 6. Spend cap
-  - [ ] 6.1 Implement get_spend and GET /agents/{agentId}/spend
+  - [x] 6.1 Implement get_spend and GET /agents/{agentId}/spend
     - Write the failing tests first. In `backend/tests/test_service_spend.py`, cover: response `{"agentId","rollingSpendUsd","windowStart","windowEnd"}`; events exactly at `now - 24h` are excluded and at `now` are included; missing agent returns 0.0 and creates nothing; mismatch returns 403. Add Property 11 to `backend/tests/test_properties_spend.py` and extend Property 6 with the `get_spend` clause.
     - Implement `get_spend(store, creds, agent_id, now)` in `backend/src/agentwatch_api/service.py`; add the route in `handlers/api.py` and `backend/template.yaml` (update `test_template.py`).
     - Property tests (required): **Property 11: Rolling 24h spend matches the window sum**, **Property 6: Read routes never create records** (`get_spend` clause).
