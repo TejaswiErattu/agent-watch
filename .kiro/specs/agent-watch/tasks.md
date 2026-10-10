@@ -453,6 +453,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
   - [ ] 7.1 Complete the SAM template
     - Write the failing tests first. Extend `backend/tests/test_template.py`: all six routes map to `ApiFunction`; default route throttling is rate 10, burst 20; `CostBudget` is `AWS::Budgets::Budget` at 10 USD monthly with an actual > 100% email notification to `AlertEmail`; `ApiFunction` policies are exactly `DynamoDBCrudPolicy` on `EventTable` and `SNSPublishMessagePolicy` on `AlertTopic`.
     - Update `backend/template.yaml`; `sam validate` and `sam deploy`.
+    - Code DONE on `feat/sam-hardening` (2026-10-09): tests added, template updated, `sam validate --lint` clean, backend 434 passed. Remaining: Tejaswi reviews and merges the PR, then runs `sam deploy` (check the change set first). Tick after deploy.
     - _Requirements: 15.5, 15.7, 18.5_
     - Commit: `feat(infra): throttling, budget, least-privilege policies`
 
