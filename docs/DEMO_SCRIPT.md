@@ -8,7 +8,7 @@ Target length is about 3 minutes, and both guardrails fire live. All commands ru
 2. Check `aws sts get-caller-identity` works (Bedrock), or set `ANTHROPIC_API_KEY` for the fallback.
 3. Open the dashboard (https://main.d65rs0iutjwy8.amplifyapp.com). Enter Owner ID and API key, then click **Save credentials**.
 4. Open `bad-bot` (inventory link, or type `bad-bot` under **Agent ID** and click **Open**). If `.env` is already under **Blocked paths**, click **Remove** and then **Save rules**, so you can add it live.
-5. Open `demo-bot`. Look at its spend in the inventory and pick a **Daily spend cap (USD)** a little above its current 24h spend, about $0.003 more. Leave the cap empty for now.
+5. Open `demo-bot`. Look at its spend in the inventory and pick a **Daily spend cap (USD)** a little above its current 24h spend, about $0.002 more. Leave the cap empty for now.
 6. Have the alert inbox open in a second window.
 7. Optional: do one full dry run, then reset steps 4 and 5.
 

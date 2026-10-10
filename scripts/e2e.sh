@@ -119,7 +119,7 @@ run_agent "bad-bot: PathBlocked" "PathBlocked" "$PYBIN" demo/bad_agent.py
 
 # --- 3. spend cap on demo-bot -----------------------------------------------
 SPEND_JSON=$(aw_api GET /agents/demo-bot/spend) || fail_stop "demo-bot: read 24h spend"
-CAP=$("$PYBIN" -c 'import json, sys; print(round(json.loads(sys.argv[1])["rollingSpendUsd"] + 0.003, 6))' "$SPEND_JSON") \
+CAP=$("$PYBIN" -c 'import json, sys; print(round(json.loads(sys.argv[1])["rollingSpendUsd"] + 0.002, 6))' "$SPEND_JSON") \
   || fail_stop "demo-bot: read 24h spend"
 record "demo-bot: 24h spend read, cap set to \$$CAP" PASS
 cfg_edit demo-bot cap "$CAP" || fail_stop "demo-bot: cap saved"

@@ -130,6 +130,7 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 - 2026-10-09 (7.1) Throttling goes in `Globals.HttpApi.DefaultRouteSettings`, not on an explicit API resource. That keeps `ServerlessHttpApi` implicit, so the URL survives. The SAM translator source lists `DefaultRouteSettings` as a supported HttpApi global. A local transform with SAM CLI 1.167.0's translator (no AWS calls) put the settings on `ServerlessHttpApiApiGatewayDefaultStage` with unchanged logical ids. The budget emails `AlertEmail` directly instead of going through SNS, so no topic policy is needed for budgets.amazonaws.com. Tejaswi's deploy confirmed both: the change set and live throttling.
 
 - 2026-10-09 (7.6) `e2e.sh` makes its API calls through an inline Python helper (not curl), so the key is hashed in-process and neither key nor hash ever appears in argv, output, or files. Cleanup runs from an `EXIT` trap, so a mid-run failure still resets both demo agents. Since the cap is spend + 0.003, the block landed on run 5 of 5 this time; if a future run finishes 5 runs without a block, lower the margin.
+- 2026-10-10 Margin lowered to + 0.002 in `e2e.sh` and DEMO_SCRIPT prep step 5. The last run spent about $0.0005 per run with a $0.001055 next-call estimate, so + 0.002 should block around run 3 of 5 and leave room either way. Not yet re-run.
 
 ## Open bugs
 - (none known)
