@@ -481,7 +481,8 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Follow `docs/DEMO_SCRIPT.md` on the deployed stack: add `.env` in the dashboard, run `bad_agent.py`, see `PathBlocked` and the email within 10 s; set a tiny cap and run `demo_agent.py --loop 5`, see the `spend_cap` block; confirm inventory and timeline update. Note timings and any issue in `PROGRESS.md`.
     - _Requirements: 5.4, 6.2, 10.4, 16.3, 16.4, 24.3_
 
-  - [ ] 7.6 Add the pre-recording smoke test `scripts/e2e.sh`
+  - [x] 7.6 Add the pre-recording smoke test `scripts/e2e.sh`
+    - DONE 2026-10-09: ran once against the deployed stack, all 11 steps PASS.
     - Write the failing tests first. Add `backend/tests/test_e2e_script.py`: the script exists, reads the API key only via `"$(cat ~/.agentwatch_key)"`, contains no literal key or 64-hex hash, never echoes/logs/writes the key or its hash, and has no `set -x`.
     - Write `scripts/e2e.sh` (owner `tejaswi`, the deployed endpoint): run `pytest` in `backend/` and `sdk/` and `npx vitest --run` in `dashboard/`, stopping on failure; add `.env` to `bad-bot`, run `bad_agent.py`, expect `PathBlocked`; set `demo-bot`'s cap to its rolling 24h spend + 0.003, run `demo_agent.py --loop 5`, expect `SpendCapExceeded`; confirm a new `blocked_path` and `spend_cap` event via `GET /agents/{id}/events?type=blocked`; always clear the cap and remove `.env` at the end; print a PASS/FAIL line per step.
     - Run it once against the deployed stack (2 alert emails, under a cent) and record the summary in `PROGRESS.md`.

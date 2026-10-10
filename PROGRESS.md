@@ -49,11 +49,20 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 - 7.3 DONE: `docs/ARCHITECTURE.md` (diagram, block sequence, routes, data model, decisions), `docs/DEMO_SCRIPT.md` (prep checklist, on-camera click-path using the real UI labels and alert subjects, troubleshooting), and `docs/SUBMISSION.md` (pitch, AWS and security choices, Kiro usage, next steps). `test_readme.py` checks headings, both demo moments, the next-steps list, and that no live key or 64-hex hash appears in README/docs. Backend: 440 passed.
 - 7.4 (optional, moto tests) SKIPPED for now. It would add a new dev dependency late in the project, and `test_store_dynamo.py` already pins the exact DynamoDB request shapes. Pick it up only if time is left after 7.5.
 
+- DEMO_SCRIPT fixes (pushed as `fix(docs)`): prep step 1 sets `AGENTWATCH_KEY="$(cat ~/.agentwatch_key)"`; on-camera step 3 lists the real inventory columns (Agent, Model, Last activity, Total spend). `test_readme.py` pins both and allows the from-file form in the secret scan.
+- 7.6 DONE: `scripts/e2e.sh` pre-recording smoke test plus `backend/tests/test_e2e_script.py` (key read only from `~/.agentwatch_key`, no literal key/hash, never echoed, no xtrace). Run once on 2026-10-09 against the deployed stack, all PASS:
+  - backend pytest, sdk pytest, dashboard vitest
+  - bad-bot: `.env` added, `PathBlocked`
+  - demo-bot: cap set to $0.009025 (24h spend + 0.003); runs 1–4 succeeded, run 5 `SpendCapExceeded` ($0.008178 spent + $0.001055 est)
+  - new `blocked_path` (bad-bot) and `spend_cap` (demo-bot) events stored
+  - cleanup: demo-bot cap null, `.env` removed from bad-bot
+  - Email arrival not checked by the script (look at the inbox).
+
 ## In progress
 - (none)
 
 ## Next step (needs Tejaswi)
-- 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`: path block on `bad-bot` plus email, spend cap on `demo-bot` plus email, inventory and timeline update. Note timings (block to email) and any issue here. Before that, run all three suites (`pytest` in `backend/` and `sdk/`, `npx vitest --run` in `dashboard/`).
+- 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
 
 ## Blocked
@@ -119,6 +128,8 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 - 2026-10-09 (6.5) A spend-cap block in `--loop` exits 0, because the block is the expected outcome of the demo. The loop catches only `SpendCapExceeded`; any other error still propagates. Notes are read once outside the loop, so the run shows one `tool_call` plus N LLM calls. With a 0.001 cap, expect the block before spend itself reaches 0.001, since the SDK adds a worst-case estimate (maxTokens 200) for the next call.
 - 2026-10-09 (6.5 AWS) The live run used a `0.007` cap instead of the `0.001` in tasks.md, so a couple of runs succeed before the block. Both exercise the same path. The block fired with $0.000988 of headroom left, as expected from the worst-case estimate. For the 7.5 rehearsal, size the cap above demo-bot's current rolling 24h spend.
 - 2026-10-09 (7.1) Throttling goes in `Globals.HttpApi.DefaultRouteSettings`, not on an explicit API resource. That keeps `ServerlessHttpApi` implicit, so the URL survives. The SAM translator source lists `DefaultRouteSettings` as a supported HttpApi global. A local transform with SAM CLI 1.167.0's translator (no AWS calls) put the settings on `ServerlessHttpApiApiGatewayDefaultStage` with unchanged logical ids. The budget emails `AlertEmail` directly instead of going through SNS, so no topic policy is needed for budgets.amazonaws.com. Tejaswi's deploy confirmed both: the change set and live throttling.
+
+- 2026-10-09 (7.6) `e2e.sh` makes its API calls through an inline Python helper (not curl), so the key is hashed in-process and neither key nor hash ever appears in argv, output, or files. Cleanup runs from an `EXIT` trap, so a mid-run failure still resets both demo agents. Since the cap is spend + 0.003, the block landed on run 5 of 5 this time; if a future run finishes 5 runs without a block, lower the margin.
 
 ## Open bugs
 - (none known)
