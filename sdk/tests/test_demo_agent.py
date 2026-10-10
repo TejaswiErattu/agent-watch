@@ -86,3 +86,47 @@ def test_main_runs_harmless_read_file(demo, tmp_path, capsys):
 
 def test_default_notes_file_exists(demo):
     assert Path(demo.NOTES_PATH).is_file()
+
+
+# ---- 6.5: --loop N trips the spend cap ----
+
+def capped_transport(demo, cap):
+    # Output-only pricing keeps the math exact: each ask (maxTokens 200) is estimated at
+    # 200 * 10 / 1e6 = 0.002 and FakeBedrock's 50 output tokens actually cost 0.0005.
+    pricing = {"models": {demo.BEDROCK_MODEL_ID: {"inputPerMTokUsd": 0.0, "outputPerMTokUsd": 10.0}}}
+    return FakeTransport([Response(200, {"guardrails": {"dailySpendCapUsd": cap, "blockedPaths": []},
+                                         "pricing": pricing})])
+
+
+def test_loop_stops_cleanly_on_spend_cap(demo, tmp_path, capsys):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("study plan")
+    # call 1: 0 + .002 ok; call 2: .0005 + .002 ok; call 3: .001 + .002 = .003 > .0027 blocked.
+    t, br = capped_transport(demo, 0.0027), FakeBedrock(in_tok=100, out_tok=50)
+    assert demo.main(client=br, transport=t, notes_path=str(notes), loop=3) == 0
+    out = capsys.readouterr().out
+    assert len(br.calls) == 2
+    assert "SpendCapExceeded" in out and "run 3/3" in out
+    blocked = [e for e in events(t) if e["type"] == "blocked"]
+    assert [b["violationType"] for b in blocked] == ["spend_cap"]
+
+
+def test_loop_without_cap_runs_n_times(demo, tmp_path, capsys):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("study plan")
+    t, br = capped_transport(demo, None), FakeBedrock()
+    assert demo.main(client=br, transport=t, notes_path=str(notes), loop=4) == 0
+    assert len(br.calls) == 4
+    assert "SpendCapExceeded" not in capsys.readouterr().out
+    assert [e["type"] for e in events(t)].count("tool_call") == 1  # notes are read once
+
+
+@pytest.mark.parametrize("argv,want", [([], 1), (["--loop", "5"], 5)])
+def test_parse_args_loop(demo, argv, want):
+    assert demo.parse_args(argv).loop == want
+
+
+@pytest.mark.parametrize("bad", ["0", "-2", "x"])
+def test_parse_args_rejects_non_positive_loop(demo, bad):
+    with pytest.raises(SystemExit):
+        demo.parse_args(["--loop", bad])
