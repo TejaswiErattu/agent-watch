@@ -42,12 +42,13 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 - 6.5 AWS half DONE (verified manually by Tejaswi, 2026-10-09): with a `0.007` cap on `demo-bot`, `python demo/demo_agent.py --loop 5` completed runs 1 and 2. Run 3 raised `SpendCapExceeded` ($0.006012 spent + $0.001055 estimated > $0.007 cap). The `spend_cap` blocked event was stored and the alert email arrived.
 - 6.6 Checkpoint DONE: backend 429 passed, SDK 229 passed, dashboard vitest 51 passed. Group 6 complete.
 
+- 7.1 DONE (PR #2 merged, deployed and verified by Tejaswi on 2026-10-09). Stack is UPDATE_COMPLETE, throttling 10/20 is live on the `$default` stage, and `CostBudget` was created. CORS and the API URL are unchanged. The change adds `Globals.HttpApi.DefaultRouteSettings` (rate 10, burst 20) and `CostBudget` (`AWS::Budgets::Budget`, 10 USD monthly, ACTUAL > 100% emails `AlertEmail`). Tests pin exactly six routes on the implicit API, exactly two policies with no custom Role, and the live identity: no explicit `ServerlessHttpApi`, no `TableName`, and `AlertEmail`/`DashboardOrigin` unchanged. `sam validate --lint` is clean. Backend: 434 passed.
+
 ## In progress
-- 7.1 SAM template on branch `feat/sam-hardening`, PR open, NOT merged, NOT deployed. Adds `Globals.HttpApi.DefaultRouteSettings` (rate 10, burst 20) and `CostBudget` (`AWS::Budgets::Budget`, 10 USD monthly, ACTUAL > 100% emails `AlertEmail`). Tests pin exactly six routes on the implicit API, exactly two policies with no custom Role, and the live identity: no explicit `ServerlessHttpApi`, no `TableName`, and `AlertEmail`/`DashboardOrigin` unchanged. `sam validate --lint` is clean. Backend: 434 passed.
+- 7.2 README with Known limitations.
 
 ## Next step
-- Tejaswi: review and merge the 7.1 PR, then `sam deploy` from `backend/`. In the change set, expect Add `CostBudget` and Modify `ServerlessHttpApiApiGatewayDefaultStage` (throttling). Nothing should show Replacement. After deploy, tick 7.1. You'll get a budget email only if account spend passes $10.
-- Then 7.2 README with Known limitations.
+- 7.2, then 7.3 docs.
 
 ## Blocked
 - (none)
@@ -111,7 +112,7 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 - 2026-10-09 (resolved) The deployed stack used to lag `main` on the spend route; it's deployed now.
 - 2026-10-09 (6.5) A spend-cap block in `--loop` exits 0, because the block is the expected outcome of the demo. The loop catches only `SpendCapExceeded`; any other error still propagates. Notes are read once outside the loop, so the run shows one `tool_call` plus N LLM calls. With a 0.001 cap, expect the block before spend itself reaches 0.001, since the SDK adds a worst-case estimate (maxTokens 200) for the next call.
 - 2026-10-09 (6.5 AWS) The live run used a `0.007` cap instead of the `0.001` in tasks.md, so a couple of runs succeed before the block. Both exercise the same path. The block fired with $0.000988 of headroom left, as expected from the worst-case estimate. For the 7.5 rehearsal, size the cap above demo-bot's current rolling 24h spend.
-- 2026-10-09 (7.1) Throttling goes in `Globals.HttpApi.DefaultRouteSettings`, not on an explicit API resource. That keeps `ServerlessHttpApi` implicit, so the URL survives. The SAM translator source lists `DefaultRouteSettings` as a supported HttpApi global. A local transform with SAM CLI 1.167.0's translator (no AWS calls) put the settings on `ServerlessHttpApiApiGatewayDefaultStage` with unchanged logical ids. The budget emails `AlertEmail` directly instead of going through SNS, so no topic policy is needed for budgets.amazonaws.com. Not verified until Tejaswi deploys: the CloudFormation change set and live throttling.
+- 2026-10-09 (7.1) Throttling goes in `Globals.HttpApi.DefaultRouteSettings`, not on an explicit API resource. That keeps `ServerlessHttpApi` implicit, so the URL survives. The SAM translator source lists `DefaultRouteSettings` as a supported HttpApi global. A local transform with SAM CLI 1.167.0's translator (no AWS calls) put the settings on `ServerlessHttpApiApiGatewayDefaultStage` with unchanged logical ids. The budget emails `AlertEmail` directly instead of going through SNS, so no topic policy is needed for budgets.amazonaws.com. Tejaswi's deploy confirmed both: the change set and live throttling.
 
 ## Open bugs
 - (none known)
