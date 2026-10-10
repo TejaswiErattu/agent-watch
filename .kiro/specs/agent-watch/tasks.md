@@ -424,7 +424,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 7.2, 7.3, 7.4, 7.9, 7.10_
     - Commit: `feat(sdk): local spend total with 60s server sync`
 
-  - [ ] 6.3 Implement estimate_pending_cost and spend_decision
+  - [x] 6.3 Implement estimate_pending_cost and spend_decision
     - Write the failing tests first. In `sdk/tests/test_pricing.py`, cover: `estimate_input_tokens` is `ceil(len(json.dumps(messages + system, default=str)) / 4)`; max tokens from Anthropic `max_tokens` and Bedrock `inferenceConfig.maxTokens`, defaulting to 4096 for Bedrock; `estimate_pending_cost` uses `cost_from_table`. In `sdk/tests/test_guardrails_spend.py`, `spend_decision(t, e, c)` is `"block"` iff `t + e > c` (exactly equal allows).
     - Implement `estimate_input_tokens`, `estimate_pending_cost` in `sdk/agentwatch/pricing.py` and `spend_decision` in `sdk/agentwatch/guardrails.py`.
     - _Requirements: 7.5, 7.6, 7.7_

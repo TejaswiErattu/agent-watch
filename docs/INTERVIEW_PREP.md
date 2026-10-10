@@ -463,3 +463,13 @@ Format per task:
 **Q:** What happens if the spend endpoint is down at startup? **A:** The total starts at 0.0, a warning is logged, and local calls still accumulate. The cap still bounds this process's own spend; it just can't see earlier spend until a sync succeeds.
 
 **Q:** Why validate the response so strictly? **A:** A malformed value (string, NaN, negative) replacing the total could silently disable the cap. Treating it as a failed sync keeps the last good number.
+
+## 6.3 Pending cost estimate and spend decision
+
+**Conceptual:** To block a call before it spends money, the SDK has to guess what it will cost. It estimates input tokens from the request size and assumes the full output budget (`max_tokens`), so the guess is an upper bound. The decision itself is one pure rule: block iff total + estimate > cap.
+
+**Technical:** `estimate_input_tokens` is `ceil(len(json.dumps(messages + system, default=str)) / 4)`, so there's no tokenizer dependency. Max output comes from Anthropic `max_tokens` or Bedrock `inferenceConfig.maxTokens`, defaulting to 4096. Bools and negatives fall back to the default. Tradeoff: chars/4 is crude and can misjudge non-English text, but it costs nothing and errs toward blocking.
+
+**Q:** Why estimate with the full `max_tokens` instead of an average? **A:** A guardrail should be conservative. Using the output ceiling means a call that's allowed can't push spend far past the cap.
+
+**Q:** Why is "exactly at the cap" allowed? **A:** The requirement defines the cap as a maximum you may reach. Using `>` makes the boundary unambiguous and easy to test.
