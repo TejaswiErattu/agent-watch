@@ -113,3 +113,8 @@ def blocked_entry_for(path: str, blocked_paths) -> str | None:
         if _matches(att, entry):
             return entry
     return None
+
+
+def spend_decision(local_total: float, est_cost: float, cap: float) -> str:
+    """"block" iff local_total + est_cost > cap; exactly reaching the cap is allowed (Req 7.6, 7.7)."""
+    return "block" if local_total + est_cost > cap else "allow"

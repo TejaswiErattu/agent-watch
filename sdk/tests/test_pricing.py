@@ -92,3 +92,49 @@ def test_wrapper_does_not_warn_with_empty_config(caplog):
         client.messages.create(model="claude-unknown-x", max_tokens=1, messages=[])
     aw._sender.flush(5)
     assert _warnings(caplog) == []
+
+
+# ---- 6.3: pending cost estimate ----
+
+import json  # noqa: E402
+import math  # noqa: E402
+
+from agentwatch.pricing import (  # noqa: E402
+    DEFAULT_MAX_TOKENS, estimate_input_tokens, estimate_pending_cost, max_output_tokens,
+)
+
+MSGS = [{"role": "user", "content": [{"text": "hello there"}]}]
+
+
+def test_estimate_input_tokens_is_quarter_of_json_length_rounded_up():
+    sys_list = [{"text": "be brief"}]
+    req = {"messages": MSGS, "system": sys_list}
+    assert estimate_input_tokens(req) == math.ceil(len(json.dumps(MSGS + sys_list, default=str)) / 4)
+
+
+def test_estimate_input_tokens_string_system_and_missing_parts():
+    req = {"messages": MSGS, "system": "be brief"}
+    assert estimate_input_tokens(req) == math.ceil(len(json.dumps(MSGS + ["be brief"], default=str)) / 4)
+    assert estimate_input_tokens({}) == math.ceil(len(json.dumps([])) / 4)
+
+
+def test_estimate_input_tokens_handles_non_json_content():
+    req = {"messages": [{"role": "user", "content": [{"image": {"bytes": b"\x00\x01"}}]}]}
+    assert estimate_input_tokens(req) > 0  # default=str, never raises
+
+
+def test_max_output_tokens_per_provider():
+    assert max_output_tokens({"max_tokens": 300}) == 300                      # Anthropic
+    assert max_output_tokens({"inferenceConfig": {"maxTokens": 128}}) == 128  # Bedrock
+    assert max_output_tokens({"inferenceConfig": {}}) == DEFAULT_MAX_TOKENS
+    assert max_output_tokens({}) == DEFAULT_MAX_TOKENS == 4096
+    assert max_output_tokens({"max_tokens": True}) == DEFAULT_MAX_TOKENS     # bool is not a count
+    assert max_output_tokens({"max_tokens": -5}) == DEFAULT_MAX_TOKENS
+
+
+def test_estimate_pending_cost_uses_cost_from_table():
+    req = {"messages": MSGS, "max_tokens": 200}
+    expected = cost_from_table(TABLE, "m", estimate_input_tokens(req), 200)
+    assert estimate_pending_cost(TABLE, "m", req, 200) == expected
+    assert estimate_pending_cost(TABLE, "unknown", req, 200) == 0.0
+    assert estimate_pending_cost({}, "m", req, 200) == 0.0
