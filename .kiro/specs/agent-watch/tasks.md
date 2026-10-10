@@ -440,6 +440,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
   - [ ] 6.5 Add the demo spend-cap run
     - Write the failing tests first. Extend `sdk/tests/test_demo_agent.py`: running `demo_agent.main(loop=3)` against a fake transport whose config has a tiny cap raises and catches `SpendCapExceeded` and prints the block.
     - Add a `--loop N` option to `demo/demo_agent.py` that repeats the question so a small cap trips. Redeploy the backend (spend route), set a `0.001` cap in the dashboard, run it, and see the `spend_cap` email.
+    - Local half DONE (2026-10-09, commit `feat(demo): spend cap demo loop`). Remaining: Tejaswi runs the AWS demo (cap `0.001` on `demo-bot`, `--loop 5`, confirm terminal block + email), then tick this box.
     - _Requirements: 7.6, 10.1, 10.4_
     - Commit: `feat(demo): spend cap demo loop`
 

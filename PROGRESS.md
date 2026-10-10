@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4)
+Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4, 6.5 local half)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -37,13 +37,14 @@ Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4)
   - 6.3 `estimate_input_tokens`, `max_output_tokens` (default 4096), `estimate_pending_cost`, `spend_decision` (block iff total + est > cap).
   - 6.4 `Watcher.check_spend` runs before every Bedrock `converse` and Anthropic `messages.create`. Over the cap it sends a `spend_cap` blocked event synchronously and raises `SpendCapExceeded`; the client is never called. Property 21 added.
   - Suites: backend 429 passed, SDK 222 passed, dashboard 51 passed.
+- `GET /agents/{agentId}/spend` is deployed and verified by Tejaswi (200 with the right key, 403 with a wrong key).
+- 6.5 local half: `demo/demo_agent.py --loop N` (N >= 1, default 1). Notes are read once, the question is asked up to N times, and `SpendCapExceeded` prints `run i/N: SpendCapExceeded: ...`, stops the loop, and exits 0. Tests added to `sdk/tests/test_demo_agent.py`. SDK suite: 229 passed.
 
 ## In progress
-- (none)
+- 6.5 AWS half (Tejaswi): set a `0.001` cap on `demo-bot` in the dashboard, run `python demo/demo_agent.py --loop 5`, confirm the `spend_cap` block in the terminal and the email. Then tick 6.5 in `tasks.md`.
 
 ## Next step
-- 6.5 (needs AWS). Local half first, test-first: extend `sdk/tests/test_demo_agent.py` so `demo_agent.main(loop=3)` with a tiny cap catches and prints `SpendCapExceeded`, then add `--loop N` to `demo/demo_agent.py`. Then Tejaswi runs `sam build && sam deploy` from `backend/` (keeps `DashboardOrigin` = the Amplify URL) so `GET /agents/{agentId}/spend` is live, sets a `0.001` cap on `demo-bot` in the dashboard, runs `python demo/demo_agent.py --loop 5`, and confirms the `spend_cap` block in the terminal and the email.
-- Then 6.6 checkpoint (rerun `pytest` in `backend/` and `sdk/`).
+- Finish the 6.5 AWS half above, then 6.6 checkpoint (rerun `pytest` in `backend/` and `sdk/`).
 
 ## Blocked
 - (none)
@@ -104,7 +105,8 @@ Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4)
 - 2026-10-09 (6.2) Test `FakeTransport` sends `/spend` requests to their own queue and log (`spend_outcomes`, `spend_requests`; default 200 with 0.0). This way the new init-time spend fetch doesn't shift the config/event queues of ~15 older tests. Raw `ApiClient` tests pass `route_spend=False`.
 - 2026-10-09 (6.2) A spend response only replaces Local_Spend_Total if `rollingSpendUsd` is a finite, non-negative, non-bool number. Anything else counts as a failed sync. A bad value could otherwise silently disable the cap.
 - 2026-10-09 (6.4) Spend-cap blocked events put `{model, localSpendUsd, capUsd}` in `meta` (checked against backend validation). Check and accumulate aren't atomic across threads, so concurrent calls can overshoot by about one call each. Holding a lock across the provider call would serialize every LLM call.
-- 2026-10-09 Deployed stack lags `main`: `GET /agents/{agentId}/spend` isn't live yet. Until `sam deploy`, the SDK's spend fetch gets a 404, logs "spend sync failed", and starts at 0.0 (fails open for prior spend; the cap still applies to this process's own calls).
+- 2026-10-09 (resolved) The deployed stack used to lag `main` on the spend route; it's deployed now.
+- 2026-10-09 (6.5) A spend-cap block in `--loop` exits 0, because the block is the expected outcome of the demo. The loop catches only `SpendCapExceeded`; any other error still propagates. Notes are read once outside the loop, so the run shows one `tool_call` plus N LLM calls. With a 0.001 cap, expect the block before spend itself reaches 0.001, since the SDK adds a worst-case estimate (maxTokens 200) for the next call.
 
 ## Open bugs
 - (none known)

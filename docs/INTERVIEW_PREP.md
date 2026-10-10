@@ -485,3 +485,10 @@ Format per task:
 **Q:** What if the server is unreachable when the cap trips? **A:** The block still happens: reporting failures are swallowed and the exception is raised anyway. Enforcement never depends on the network.
 
 **Q:** Could a race let two concurrent calls both pass the cap? **A:** Yes, by at most one call's cost per thread, since check and accumulate aren't atomic. Holding a lock across the provider call would serialize all LLM calls, which is a worse tradeoff.
+
+## 6.5 Demo spend-cap loop (local half)
+
+**Conceptual:** The cap only matters if a runaway loop actually gets stopped. `--loop N` simulates that loop with a real agent: the same question N times, so a small cap trips on screen and the alert email fires. Hitting the cap is the expected outcome here, so the script treats it as a clean stop, not a crash.
+**Technical:** `main(loop=N)` reads the notes once, then calls `common.ask` up to N times inside a `try`. `SpendCapExceeded` prints `run i/N: SpendCapExceeded: <detail>`, breaks, and still returns 0; `finally` flushes queued events. `argparse` rejects `--loop 0` or negatives with exit 2. Tradeoff: the cap check uses a worst-case estimate (`maxTokens`), so the block can come one call earlier than the actual spend alone would suggest.
+**Q:** Why does the block fire before spend actually reaches the cap? **A:** The SDK blocks when spent plus the estimated worst-case cost of the next call exceeds the cap. Blocking on the estimate is the only way to stop a call before it's paid for.
+**Q:** Why exit 0 on a block? **A:** For this script, the block is the success case: the guardrail worked. A non-zero code would make a demo or CI run look like a failure when the system did its job.
