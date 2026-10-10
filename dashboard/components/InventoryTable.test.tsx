@@ -30,6 +30,20 @@ describe("InventoryTable", () => {
     expect(cells.getByText(/1\.23/)).toBeInTheDocument();
   });
 
+  it.each([
+    [0.0006, "$0.0006"],
+    [0.00004, "<$0.0001"],
+    [0, "$0.0000"],
+    [0.01, "$0.0100"],
+    [1.23456, "$1.2346"],
+  ])("formats total spend %s as %s", (usd, expected) => {
+    render(<InventoryTable agents={[{ ...reported, totalSpendUsd: usd }]} />);
+    const row = screen.getByText("bot1").closest("tr")!;
+    const spendCell = within(row).getAllByRole("cell")[3];
+    expect(spendCell).toHaveTextContent(expected);
+    expect(spendCell.textContent).toBe(expected);
+  });
+
   it("links each row to the agent detail page", () => {
     render(<InventoryTable agents={[reported]} />);
     const link = screen.getByRole("link", { name: /bot1/ });

@@ -276,7 +276,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 21.7_
     - Commit: `fix(sdk): warn when guardrails are not active`
 
-- [ ] 4. The `.env` block and SNS alert, end to end
+- [x] 4. The `.env` block and SNS alert, end to end
   - [x] 4.1 Implement format_alert and publish_alert
     - Write the failing tests first. In `backend/tests/test_alerts.py`, cover: subject names the agentId and violation; body for spend_cap includes `attemptedCostUsd`, for blocked_path includes `attemptedPath`; `publish_alert` calls `publisher.publish(subject, body)` and returns True; a raising publisher returns False and logs `alert_publish_failed` with agentId and eventId. Add `backend/tests/test_properties_alerts.py` with Property 17.
     - Create `backend/src/agentwatch_api/alerts.py` with `format_alert(event)`, `publish_alert(publisher, event)`, and `SnsPublisher(topic_arn, client=None)`.
@@ -399,9 +399,15 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 11.1, 15.8, 18.3_
     - Commit: `feat(dashboard): Amplify build config`
 
-  - [ ] 5.14 Checkpoint: dashboard
+  - [x] 5.14 Checkpoint: dashboard
     - Write the failing tests first. Run `npx vitest --run` in `dashboard/` and `pytest` in `backend/` and `sdk/`; ensure all tests pass, ask the user if questions arise.
     - On the deployed dashboard, enter credentials, see `bad-bot` in the inventory, open it, and see the blocked event in the timeline.
+
+  - [ ] 5.15 Show sub-cent spend in the inventory
+    - Write the failing tests first. Extend `dashboard/components/InventoryTable.test.tsx`: spend renders with 4 decimals (`0.0006` → `$0.0006`, `0` → `$0.0000`, `0.01` → `$0.0100`, `1.23456` → `$1.2346`); nonzero spend under $0.0001 renders `<$0.0001`.
+    - Update `formatSpend(usd)` in `InventoryTable.tsx`.
+    - _Requirements: 11.2_
+    - Commit: `fix(dashboard): show sub-cent spend in inventory`
 
 - [ ] 6. Spend cap
   - [ ] 6.1 Implement get_spend and GET /agents/{agentId}/spend
