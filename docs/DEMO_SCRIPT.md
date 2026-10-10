@@ -4,7 +4,7 @@ Target length is about 3 minutes, and both guardrails fire live. All commands ru
 
 ## Before recording (about 5 min, off camera)
 
-1. In a terminal, run `source .venv/bin/activate` and export `AGENTWATCH_ENDPOINT=<ApiUrl>`, `AGENTWATCH_OWNER=<owner-id>`, `AGENTWATCH_KEY=<your-key>`. Read the key from your private file. Never show it on screen or paste it into the repo.
+1. In a terminal, run `source .venv/bin/activate` and export `AGENTWATCH_ENDPOINT=<ApiUrl>`, `AGENTWATCH_OWNER=<owner-id>`, and `AGENTWATCH_KEY="$(cat ~/.agentwatch_key)"`. The key is read from your private file, so it is never typed, shown on screen, or pasted into the repo.
 2. Check `aws sts get-caller-identity` works (Bedrock), or set `ANTHROPIC_API_KEY` for the fallback.
 3. Open the dashboard (https://main.d65rs0iutjwy8.amplifyapp.com). Enter Owner ID and API key, then click **Save credentials**.
 4. Open `bad-bot` (inventory link, or type `bad-bot` under **Agent ID** and click **Open**). If `.env` is already under **Blocked paths**, click **Remove** and then **Save rules**, so you can add it live.
@@ -16,7 +16,7 @@ Target length is about 3 minutes, and both guardrails fire live. All commands ru
 
 1. **Problem (20 s).** "Student agents run on personal API keys. Nothing shows what they touched or what they cost. One careless tool reads `.env`, and one loop drains the budget."
 2. **3 lines (20 s).** Show the snippet in `README.md`: `agentwatch.init`, `aw.wrap(client)`, `aw.tools(TOOLS)`.
-3. **Inventory (15 s).** Show the dashboard inventory: agents, owner, model, first and last seen, total spend.
+3. **Inventory (15 s).** Show the dashboard inventory columns: **Agent**, **Model**, **Last activity**, **Total spend**.
 4. **Path block (60 s).** This is the demo moment.
    - Open `bad-bot`. Under **Add path**, type `.env`, click **Add path**, then **Save rules**.
    - In the terminal: `python demo/bad_agent.py`

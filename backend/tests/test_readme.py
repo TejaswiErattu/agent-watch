@@ -60,9 +60,29 @@ def test_submission_lists_next_steps():
         assert item in body, item
 
 
+KEY_FROM_FILE = 'AGENTWATCH_KEY="$(cat ~/.agentwatch_key)"'
+
+
+def test_demo_script_prep_reads_key_from_file():
+    text = (DOCS / "DEMO_SCRIPT.md").read_text()
+    prep = _section(text, "Before recording (about 5 min, off camera)")
+    step1 = next(line for line in prep.splitlines() if line.startswith("1."))
+    assert KEY_FROM_FILE in step1
+    assert "<your-key>" not in text
+
+
+def test_demo_script_inventory_lists_real_columns():
+    # Must match the <TableHead> labels in dashboard/components/InventoryTable.tsx.
+    on_camera = _section((DOCS / "DEMO_SCRIPT.md").read_text(), "On camera")
+    step3 = next(line for line in on_camera.splitlines() if line.startswith("3."))
+    for col in ("Agent", "Model", "Last activity", "Total spend"):
+        assert f"**{col}**" in step3, col
+    assert "first and last seen" not in step3
+
+
 def test_docs_contain_no_live_secrets():
-    # The demo key lives outside the repo; docs must use placeholders only.
+    # The demo key lives outside the repo; docs use placeholders or read it from ~/.agentwatch_key.
     for path in [README, *DOCS.glob("*.md")]:
-        text = path.read_text()
+        text = path.read_text().replace(KEY_FROM_FILE, "AGENTWATCH_KEY=<from-file>")
         assert not re.search(r"AGENTWATCH_KEY=(?!<)[^\s`]+", text), path.name
         assert not re.search(r"\b[0-9a-f]{64}\b", text), path.name
