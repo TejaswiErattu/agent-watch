@@ -473,3 +473,15 @@ Format per task:
 **Q:** Why estimate with the full `max_tokens` instead of an average? **A:** A guardrail should be conservative. Using the output ceiling means a call that's allowed can't push spend far past the cap.
 
 **Q:** Why is "exactly at the cap" allowed? **A:** The requirement defines the cap as a maximum you may reach. Using `>` makes the boundary unambiguous and easy to test.
+
+## 6.4 Enforce the spend cap in the LLM wrapper
+
+**Conceptual:** This is where the cap actually stops money from being spent. Before every Bedrock `converse` or Anthropic `messages.create`, the wrapper checks whether this call could push the agent over its daily cap. If so, the real client is never called, a `spend_cap` blocked event goes to the server (which emails the owner), and `SpendCapExceeded` is raised.
+
+**Technical:** `check_spend` refreshes config and spend if stale, then applies `spend_decision(local_total, estimate, cap)`. The blocked event is sent synchronously on the caller's thread, so it lands before the exception even if the agent then crashes. Tradeoff: the check and the later accumulation aren't one atomic step, so two threads could both pass at the edge. Acceptable for a per-process guardrail.
+
+**Q:** Why enforce in the SDK instead of a proxy in front of the LLM provider? **A:** No extra hop or infrastructure, and the student's provider key never leaves their machine. The cost is that enforcement depends on the student using the wrapper; a proxy would be stronger but heavier.
+
+**Q:** What if the server is unreachable when the cap trips? **A:** The block still happens: reporting failures are swallowed and the exception is raised anyway. Enforcement never depends on the network.
+
+**Q:** Could a race let two concurrent calls both pass the cap? **A:** Yes, by at most one call's cost per thread, since check and accumulate aren't atomic. Holding a lock across the provider call would serialize all LLM calls, which is a worse tradeoff.

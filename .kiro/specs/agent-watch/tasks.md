@@ -430,7 +430,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 7.5, 7.6, 7.7_
     - Commit: `feat(sdk): pending cost estimate and spend decision`
 
-  - [ ] 6.4 Enforce the spend cap in the LLM wrapper
+  - [x] 6.4 Enforce the spend cap in the LLM wrapper
     - Write the failing tests first. In `sdk/tests/test_llm_wrapper.py`, cover: over the cap raises `SpendCapExceeded`, the fake client is never called, and one `blocked` event with `violationType="spend_cap"` and `attemptedCostUsd == e` is sent synchronously; at or under the cap the call proceeds; no cap always proceeds; the check runs before every call for both providers. Add Property 21 to `sdk/tests/test_properties_spend.py`.
     - Implement `check_spend` and call it at the top of both LLM wrappers in `sdk/agentwatch/client.py`.
     - Property test: **Property 21: Spend cap decision** (required).
