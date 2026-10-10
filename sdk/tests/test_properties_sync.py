@@ -57,3 +57,42 @@ def test_property_23_config_sync_timing_and_last_good(outcomes, gaps):
             assert aw.config is EMPTY
         else:
             assert aw.config == last_good
+
+
+# ---- 6.2: spend clause ----
+
+from fakes import spend_body  # noqa: E402
+
+spend_outcome = st.one_of(st.floats(0, 50, allow_nan=False).map(lambda v: ("ok", v)),
+                          st.sampled_from([("net", None), ("500", None), ("bad", None)]))
+
+
+def _spend(kind, v):
+    return {"ok": lambda: Response(200, spend_body(v)), "net": lambda: TransportError("x"),
+            "500": lambda: Response(500, None), "bad": lambda: Response(200, {"rollingSpendUsd": "x"})}[kind]()
+
+
+# Feature: agent-watch, Property 23: Sync timing and last-good cache
+@settings(max_examples=100, deadline=None)
+@given(outcomes=st.lists(spend_outcome, min_size=1, max_size=10),
+       gaps=st.lists(st.floats(0, 150, allow_nan=False), max_size=12))
+def test_property_23_spend_sync_timing_and_last_good(outcomes, gaps):
+    t = FakeTransport(spend_outcomes=[_spend(*o) for o in outcomes], spend_default=Response(500, None))
+    now = [0.0]
+    aw = agentwatch.init("bot", "tejaswi", "sk-key", endpoint="https://x", transport=t,
+                         clock=lambda: now[0], sleep=lambda s: None)
+    queue = list(outcomes)
+    kind, v = queue.pop(0)
+    local = v if kind == "ok" else 0.0
+    last_attempt, attempts = 0.0, 1
+    assert aw.local_spend == local
+    for g in gaps:
+        now[0] += g
+        aw._maybe_sync_spend()
+        if now[0] - last_attempt >= SYNC:
+            last_attempt, attempts = now[0], attempts + 1
+            kind, v = queue.pop(0) if queue else ("500", None)
+            if kind == "ok":  # only a successful response replaces the total
+                local = v
+        assert len(t.spend_requests) == attempts
+        assert aw.local_spend == local

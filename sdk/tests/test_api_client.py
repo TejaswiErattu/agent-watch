@@ -21,7 +21,7 @@ def test_post_event_sends_json_to_events():
 
 
 def test_get_config_and_spend_urls():
-    t = FakeTransport()
+    t = FakeTransport(route_spend=False)
     c = client(t)
     c.get_config("bot")
     c.get_spend("bot")

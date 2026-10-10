@@ -25,7 +25,7 @@ def _make(o):
 def test_property_19_credentials_sent_secrets_never_leaked(caplog, api_key, steps):
     caplog.clear()
     caplog.set_level(logging.DEBUG)
-    t = FakeTransport([_make(o) for _, o in steps])
+    t = FakeTransport([_make(o) for _, o in steps], route_spend=False)
     c = ApiClient("https://api.example.com", "tejaswi", key_hash(api_key), transport=t)
     for name, _ in steps:
         try:

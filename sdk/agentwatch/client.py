@@ -12,6 +12,7 @@ import hashlib
 import inspect
 import json as _json
 import logging
+import math
 import os
 import queue
 import threading
@@ -22,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
 from .guardrails import blocked_entry_for
-from .pricing import warn_unknown_model
+from .pricing import cost_from_table, warn_unknown_model
 
 REQUEST_TIMEOUT_S = 2.0
 _log = logging.getLogger("agentwatch")
@@ -286,6 +287,14 @@ def parse_config_response(body) -> ConfigResponse | None:
     return ConfigResponse(None if cap is None else float(cap), tuple(paths), p)
 
 
+def _parse_spend(body) -> float | None:
+    """rollingSpendUsd from a spend response, or None if missing/malformed (a failed sync)."""
+    v = body.get("rollingSpendUsd") if isinstance(body, dict) else None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
+        return None
+    return float(v)
+
+
 class Watcher:
     """One per agent. Holds credentials, the cached config, and the sender."""
 
@@ -300,6 +309,10 @@ class Watcher:
         self._config: ConfigResponse = EMPTY
         self._last_config_ok: float | None = None
         self._last_config_attempt: float | None = None
+        # Local_Spend_Total: server Rolling_24h_Spend at the last good sync, plus calls since (Req 7.2-7.4).
+        self._spend_lock = threading.Lock()
+        self._local_spend = 0.0
+        self._last_spend_attempt: float | None = None
 
     def __repr__(self) -> str:
         return f"Watcher(agent_id={self.agent_id!r}, owner_id={self.owner_id!r})"
@@ -337,6 +350,42 @@ class Watcher:
             if last is not None and self._clock() - last < SYNC_INTERVAL_S:
                 return
             self._fetch_config()
+
+    # ---- spend sync (task 6.2) ----
+
+    @property
+    def local_spend(self) -> float:
+        with self._spend_lock:
+            return self._local_spend
+
+    def _add_spend(self, cost: float) -> None:
+        with self._spend_lock:
+            self._local_spend += cost
+
+    def _fetch_spend(self) -> None:
+        """Replace Local_Spend_Total with the server value. Any failure keeps it and warns (Req 7.9)."""
+        self._last_spend_attempt = self._clock()
+        try:
+            resp = self._api.get_spend(self.agent_id)  # 2 s timeout via ApiClient
+        except TransportError as e:
+            return _log.warning("agentwatch: spend sync failed (%s); keeping local spend total", e)
+        except Exception as e:
+            return _log.warning("agentwatch: spend sync failed (%s); keeping local spend total",
+                                type(e).__name__)
+        value = _parse_spend(resp.body) if 200 <= resp.status < 300 else None
+        if value is None:
+            return _log.warning("agentwatch: spend sync failed (status %s); keeping local spend total",
+                                resp.status)
+        with self._spend_lock:
+            self._local_spend = value
+
+    def _maybe_sync_spend(self) -> None:
+        """Resync when a Sync_Interval has passed since the last attempt (Req 7.4)."""
+        with self._lock:
+            last = self._last_spend_attempt
+            if last is not None and self._clock() - last < SYNC_INTERVAL_S:
+                return
+            self._fetch_spend()
 
     # ---- events (task 3.11) ----
 
@@ -397,6 +446,7 @@ class Watcher:
         # Only warn once a real table was fetched; EMPTY would flag every model (Req 3.10, 21.4).
         if self._last_config_ok is not None:
             warn_unknown_model(self._config.pricing, model)
+        self._add_spend(cost_from_table(self._config.pricing, model, in_tok, out_tok))  # Req 7.3
         self._sender.enqueue(self._new_event("llm_call", model=model, inputTokens=in_tok,
                                              outputTokens=out_tok, meta={"provider": provider, **meta}))
 
@@ -528,7 +578,7 @@ def _first_arg_repr(args, kwargs) -> str:
 def init(agent_id: str, owner_id: str, api_key: str, endpoint: str | None = None, *,
          transport: Transport | None = None, clock: Callable[[], float] | None = None,
          sleep: Callable[[float], None] | None = None) -> Watcher:
-    """Create a Watcher: hash the key, fetch config once, start the sender thread."""
+    """Create a Watcher: hash the key, fetch config and spend once, start the sender thread."""
     endpoint = endpoint or os.environ.get("AGENTWATCH_ENDPOINT")
     if not endpoint:
         raise ValueError("agentwatch.init needs endpoint= or the AGENTWATCH_ENDPOINT env var")
@@ -536,6 +586,7 @@ def init(agent_id: str, owner_id: str, api_key: str, endpoint: str | None = None
     sender = Sender(api, sleep=sleep or time.sleep)
     w = Watcher(agent_id, owner_id, api, sender, clock or time.monotonic)
     w._maybe_refresh_config()
+    w._maybe_sync_spend()  # Req 7.2; a failure starts Local_Spend_Total at 0.0 (Req 7.10)
     return w
 
 

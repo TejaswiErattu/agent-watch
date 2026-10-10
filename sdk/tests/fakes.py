@@ -5,18 +5,38 @@ from __future__ import annotations
 from agentwatch.client import Response, TransportError
 
 
-class FakeTransport:
-    """Records every request. `outcomes` is a queue of Response or Exception; default 200 {}."""
+def spend_body(usd=0.0):
+    return {"agentId": "bot", "rollingSpendUsd": usd,
+            "windowStart": "2026-10-08T12:00:00.000Z", "windowEnd": "2026-10-09T12:00:00.000Z"}
 
-    def __init__(self, outcomes=None, default=None):
+
+class FakeTransport:
+    """Records every request. `outcomes` is a queue of Response or Exception; default 200 {}.
+
+    GET .../spend requests made by a Watcher are routed separately: they pop from
+    `spend_outcomes` (default 200 with 0.0 spend) and are recorded in `spend_requests`, not
+    `requests`. That keeps the config/event queues and request counts of tests that predate
+    spend sync unchanged. Pass `route_spend=False` for raw ApiClient tests that want one queue.
+    """
+
+    def __init__(self, outcomes=None, default=None, spend_outcomes=None, spend_default=None,
+                 route_spend=True):
+        self.route_spend = route_spend
         self.requests: list[dict] = []
         self.outcomes = list(outcomes or [])
         self.default = default or Response(200, {})
+        self.spend_requests: list[dict] = []
+        self.spend_outcomes = list(spend_outcomes or [])
+        self.spend_default = spend_default or Response(200, spend_body())
 
     def request(self, method, url, *, headers, json=None, timeout):
-        self.requests.append({"method": method, "url": url, "headers": dict(headers),
-                              "json": json, "timeout": timeout})
-        out = self.outcomes.pop(0) if self.outcomes else self.default
+        rec = {"method": method, "url": url, "headers": dict(headers), "json": json, "timeout": timeout}
+        if self.route_spend and url.endswith("/spend"):
+            self.spend_requests.append(rec)
+            out = self.spend_outcomes.pop(0) if self.spend_outcomes else self.spend_default
+        else:
+            self.requests.append(rec)
+            out = self.outcomes.pop(0) if self.outcomes else self.default
         if isinstance(out, Exception):
             raise out
         return out
