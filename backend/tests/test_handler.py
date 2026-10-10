@@ -75,6 +75,20 @@ def test_get_config_missing_agent(store):
     assert store.items == {}
 
 
+def test_get_spend_route(store):
+    call(http_event("POST /events", event_body()))
+    status, body = call(http_event("GET /agents/{agentId}/spend", agent_id="bot"))
+    assert status == 200
+    assert body["agentId"] == "bot" and body["rollingSpendUsd"] == 0.0
+    assert set(body) == {"agentId", "rollingSpendUsd", "windowStart", "windowEnd"}
+
+
+def test_get_spend_missing_agent_creates_nothing(store):
+    status, body = call(http_event("GET /agents/{agentId}/spend", agent_id="ghost"))
+    assert status == 200 and body["rollingSpendUsd"] == 0.0
+    assert store.items == {}
+
+
 @pytest.mark.parametrize("raw", ["{not json", "", "[1,", "{" * 100000 + "}" * 100000])
 @pytest.mark.parametrize("route,agent_id", [("POST /events", None), ("PUT /agents/{agentId}/config", "bot")])
 def test_invalid_json_400(store, raw, route, agent_id):

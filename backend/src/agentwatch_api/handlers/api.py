@@ -105,12 +105,19 @@ def _put_config(deps, creds, event, log_ctx):
     return service.put_config(deps.store, creds, agent_id, _json_body(event))
 
 
+def _get_spend(deps, creds, event, log_ctx):
+    agent_id = _agent_id(event)
+    log_ctx["agent_id"] = _valid_or_none(agent_id)
+    return service.get_spend(deps.store, creds, agent_id, datetime.now(timezone.utc))
+
+
 ROUTES = {
     "POST /events": _post_events,
     "GET /agents": _get_agents,
     "GET /agents/{agentId}/events": _get_events,
     "GET /agents/{agentId}/config": _get_config,
     "PUT /agents/{agentId}/config": _put_config,
+    "GET /agents/{agentId}/spend": _get_spend,
 }
 
 

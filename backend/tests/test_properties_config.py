@@ -1,10 +1,12 @@
+from datetime import datetime, timezone
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from agentwatch_api.auth import Credentials
 from agentwatch_api.pricing import pricing_table
 from agentwatch_api.rules import EMPTY_CONFIG, to_json
-from agentwatch_api.service import get_config, get_timeline, list_inventory
+from agentwatch_api.service import get_config, get_spend, get_timeline, list_inventory
 from agentwatch_api.store import InMemoryStore
 
 agent_ids = st.from_regex(r"[A-Za-z0-9._-]{1,128}", fullmatch=True)
@@ -28,6 +30,11 @@ def test_get_config_never_creates_records(agent_id, creds):
     t = get_timeline(s, creds, agent_id, {})
     assert t.status == 200
     assert t.body == {"events": [], "nextCursor": None}
+    assert s.items == {}
+    # get_spend clause: an agent with no record has 0.0 rolling spend and nothing is created.
+    sp = get_spend(s, creds, agent_id, datetime(2026, 10, 9, 12, tzinfo=timezone.utc))
+    assert sp.status == 200
+    assert sp.body["rollingSpendUsd"] == 0.0
     assert s.items == {}
 
 

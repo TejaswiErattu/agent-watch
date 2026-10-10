@@ -71,7 +71,8 @@ def test_routes(tpl):
     routes = {(e["Properties"]["Method"].upper(), e["Properties"]["Path"])
               for e in events.values() if e["Type"] == "HttpApi"}
     assert {("POST", "/events"), ("GET", "/agents"), ("GET", "/agents/{agentId}/events"),
-            ("GET", "/agents/{agentId}/config"), ("PUT", "/agents/{agentId}/config")} <= routes
+            ("GET", "/agents/{agentId}/config"), ("PUT", "/agents/{agentId}/config"),
+            ("GET", "/agents/{agentId}/spend")} <= routes
 
 
 def test_event_table(tpl):

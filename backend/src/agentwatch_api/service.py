@@ -10,7 +10,7 @@ import binascii
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, Protocol, runtime_checkable
 
 from . import auth
@@ -255,3 +255,36 @@ def put_config(store: Store, creds: Credentials, agent_id: str, body) -> Result:
     if found != "created" and not store.put_config(agent_id, cfg, auth.key_verifier(creds.key_hash)):
         return Result(403, FORBIDDEN)  # verifier replaced mid-flight
     return Result(200, {"guardrails": to_json(cfg)})
+
+
+SPEND_WINDOW = timedelta(hours=24)
+# Suffix that sorts after every "#<32 hex>" SK tail ("~" > "f"), so for an inclusive BETWEEN
+# `ts#~` as a lower bound skips every event at ts and as an upper bound keeps them all.
+_AFTER_ALL_IDS = "#~"
+
+
+def _fmt_ts(dt: datetime) -> str:
+    """Event ts format: YYYY-MM-DDTHH:MM:SS.mmmZ (UTC, millisecond precision)."""
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
+
+
+def get_spend(store: Store, creds: Credentials, agent_id: str, now: datetime) -> Result:
+    """GET /agents/{agentId}/spend. Rolling_24h_Spend over now - 24h < ts <= now.
+
+    A missing record returns 0.0 and creates nothing (Req 24.2).
+    """
+    if (e := validate_agent_id(agent_id)) is not None:
+        return _bad(e)
+    end = now.replace(microsecond=now.microsecond // 1000 * 1000)  # event ts precision
+    window_start, window_end = _fmt_ts(end - SPEND_WINDOW), _fmt_ts(end)
+
+    found = authorize(store, agent_id, creds)
+    if found == "forbidden":
+        return Result(403, FORBIDDEN)
+    spend = 0.0
+    if found is not None:
+        spend = round_cost(store.sum_spend(agent_id, window_start + _AFTER_ALL_IDS,
+                                           window_end + _AFTER_ALL_IDS))
+    return Result(200, {"agentId": agent_id, "rollingSpendUsd": spend,
+                        "windowStart": window_start, "windowEnd": window_end})
+

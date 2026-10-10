@@ -80,6 +80,11 @@ Resources:
           Properties:
             Method: PUT
             Path: /agents/{agentId}/config
+        GetSpend:
+          Type: HttpApi
+          Properties:
+            Method: GET
+            Path: /agents/{agentId}/spend
 
   EventTable:
     Type: AWS::DynamoDB::Table
