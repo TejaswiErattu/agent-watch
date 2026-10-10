@@ -46,11 +46,15 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 
 - 7.2 DONE: `README.md` replaces the starter-kit README. It covers what Agent Watch is, the 3-line integration, deploy (`sam deploy` + Amplify), demos, tests, and Known limitations (Req 26 plus case over-blocking, hardlink/TOCTOU, first-come ids, at-most-once alerts, stage-wide throttling). `backend/tests/test_readme.py` pins the required statements. Backend: 436 passed.
 
-## In progress
-- 7.3 docs.
+- 7.3 DONE: `docs/ARCHITECTURE.md` (diagram, block sequence, routes, data model, decisions), `docs/DEMO_SCRIPT.md` (prep checklist, on-camera click-path using the real UI labels and alert subjects, troubleshooting), and `docs/SUBMISSION.md` (pitch, AWS and security choices, Kiro usage, next steps). `test_readme.py` checks headings, both demo moments, the next-steps list, and that no live key or 64-hex hash appears in README/docs. Backend: 440 passed.
+- 7.4 (optional, moto tests) SKIPPED for now. It would add a new dev dependency late in the project, and `test_store_dynamo.py` already pins the exact DynamoDB request shapes. Pick it up only if time is left after 7.5.
 
-## Next step
-- 7.3 ARCHITECTURE.md, DEMO_SCRIPT.md, SUBMISSION.md.
+## In progress
+- (none)
+
+## Next step (needs Tejaswi)
+- 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`: path block on `bad-bot` plus email, spend cap on `demo-bot` plus email, inventory and timeline update. Note timings (block to email) and any issue here. Before that, run all three suites (`pytest` in `backend/` and `sdk/`, `npx vitest --run` in `dashboard/`).
+- After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
 
 ## Blocked
 - (none)

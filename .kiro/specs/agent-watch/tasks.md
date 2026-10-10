@@ -465,7 +465,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 26.1, 26.2, 26.3_
     - Commit: `feat(docs): README with known limitations`
 
-  - [ ] 7.3 Write ARCHITECTURE.md, DEMO_SCRIPT.md, and SUBMISSION.md
+  - [x] 7.3 Write ARCHITECTURE.md, DEMO_SCRIPT.md, and SUBMISSION.md
     - Write the failing tests first. Extend `backend/tests/test_readme.py` to assert `docs/ARCHITECTURE.md`, `docs/DEMO_SCRIPT.md`, and `docs/SUBMISSION.md` exist and each has a top-level heading; `DEMO_SCRIPT.md` mentions `bad_agent.py` and `.env`.
     - Write the three docs (architecture diagram and decisions from the design, the demo click-path, submission text with the "next steps" list).
     - _Requirements: 16.1, 16.2_

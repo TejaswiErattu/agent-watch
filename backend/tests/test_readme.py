@@ -37,3 +37,32 @@ def test_readme_core_sections():
     assert "amplify" in text.lower()
     assert "bad_agent.py" in text and "demo_agent.py" in text
     assert "npx vitest --run" in text and "pytest" in text
+
+
+DOCS = ROOT / "docs"
+
+
+def test_submission_docs_exist_with_title():
+    for name in ("ARCHITECTURE.md", "DEMO_SCRIPT.md", "SUBMISSION.md"):
+        text = (DOCS / name).read_text()
+        assert re.search(r"^# \S", text, re.MULTILINE), name
+
+
+def test_demo_script_covers_both_demo_moments():
+    text = (DOCS / "DEMO_SCRIPT.md").read_text()
+    assert "bad_agent.py" in text and ".env" in text
+    assert "demo_agent.py --loop" in text and "SpendCapExceeded" in text
+
+
+def test_submission_lists_next_steps():
+    body = _section((DOCS / "SUBMISSION.md").read_text(), "Next steps").lower()
+    for item in ("multi-framework", "auth", "mobile", "anomaly detection", "risk scoring"):
+        assert item in body, item
+
+
+def test_docs_contain_no_live_secrets():
+    # The demo key lives outside the repo; docs must use placeholders only.
+    for path in [README, *DOCS.glob("*.md")]:
+        text = path.read_text()
+        assert not re.search(r"AGENTWATCH_KEY=(?!<)[^\s`]+", text), path.name
+        assert not re.search(r"\b[0-9a-f]{64}\b", text), path.name
