@@ -451,3 +451,15 @@ Format per task:
 **Q:** How do you get an exclusive lower bound from an inclusive `BETWEEN`? **A:** Append a suffix that sorts after every real eventId (`#~`), so `ts#~` is greater than every SK at that ts. Same trick on the upper bound includes all events at `now`.
 
 **Q:** Does a read of an unknown agent leak or create anything? **A:** No. It returns 0.0 and writes nothing (Property 6). A mismatched key gets 403, same gate as every other route.
+
+## 6.2 SDK local spend total with 60 s sync
+
+**Conceptual:** The cap check runs before every LLM call, so it can't wait on the network each time. The SDK keeps a local running total: seeded from the server's rolling 24h spend at init, increased by each completed call's actual cost, and replaced by a fresh server value at most once a minute. Restarts and multiple processes converge through the server.
+
+**Technical:** `_maybe_sync_spend` mirrors the config refresh: timed from the last attempt on an injectable clock, 2 s timeout, and only a well-formed, finite, non-negative `rollingSpendUsd` replaces the total. Accumulation happens under a lock after the provider returns, using the fetched pricing table. Tradeoff: between syncs, a second process's spend is invisible, so the cap can overshoot by up to a minute of the other process's calls.
+
+**Q:** Why not ask the server before every call? **A:** It would add a network round trip to every LLM call and make the agent fail when the API is down. A local estimate with periodic sync keeps the check fast and the agent running.
+
+**Q:** What happens if the spend endpoint is down at startup? **A:** The total starts at 0.0, a warning is logged, and local calls still accumulate. The cap still bounds this process's own spend; it just can't see earlier spend until a sync succeeds.
+
+**Q:** Why validate the response so strictly? **A:** A malformed value (string, NaN, negative) replacing the total could silently disable the cap. Treating it as a failed sync keeps the last good number.

@@ -417,7 +417,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 24.1, 24.2, 24.4_
     - Commit: `feat(backend): rolling 24h spend endpoint`
 
-  - [ ] 6.2 Implement SDK spend sync and Local_Spend_Total
+  - [x] 6.2 Implement SDK spend sync and Local_Spend_Total
     - Write the failing tests first. In `sdk/tests/test_spend_sync.py`, cover: `init` fetches spend and sets Local_Spend_Total; a failing first fetch starts at 0.0; each completed LLM call adds `cost_from_table` of actual usage under the lock; a failing or slow (>2 s) sync keeps the value and warns; a successful sync replaces it. Add Property 22 to `sdk/tests/test_properties_spend.py` and extend Property 23 in `sdk/tests/test_properties_sync.py` with the spend clause.
     - Implement `_maybe_sync_spend` and the post-call accumulation in `sdk/agentwatch/client.py`.
     - Property tests (required): **Property 22: Local spend accounting**, **Property 23: Sync timing and last-good cache** (spend clause).
