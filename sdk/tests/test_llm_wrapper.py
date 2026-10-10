@@ -105,3 +105,84 @@ def test_wrap_rejects_unknown_client():
     aw, _ = make()
     with pytest.raises(TypeError, match="Bedrock|Anthropic"):
         aw.wrap(object())
+
+
+# ---- 6.4: spend cap enforcement ----
+
+from agentwatch import SpendCapExceeded  # noqa: E402
+from agentwatch.pricing import estimate_pending_cost  # noqa: E402
+from fakes import spend_body  # noqa: E402
+
+PRICED = {"models": {"m": {"inputPerMTokUsd": 3.0, "outputPerMTokUsd": 15.0}}}
+
+
+def make_capped(cap, spent=0.0):
+    cfg = Response(200, {"guardrails": {"dailySpendCapUsd": cap, "blockedPaths": []}, "pricing": PRICED})
+    t = FakeTransport([cfg], spend_outcomes=[Response(200, spend_body(spent))])
+    aw = agentwatch.init("bot", "tejaswi", "sk-key", endpoint="https://x", transport=t,
+                         clock=lambda: 0.0, sleep=lambda s: None)
+    return aw, t
+
+
+def blocked_events(t):
+    return [r["json"] for r in t.requests if r["url"].endswith("/events") and r["json"]["type"] == "blocked"]
+
+
+@pytest.mark.parametrize("provider", ["bedrock", "anthropic"])
+def test_over_cap_raises_never_calls_client_and_reports_sync(provider):
+    aw, t = make_capped(cap=0.01, spent=0.0099)
+    if provider == "bedrock":
+        raw = FakeBedrock()
+        req = {"modelId": "m", "messages": MSGS_BEDROCK, "inferenceConfig": {"maxTokens": 1000}}
+        call = lambda: aw.wrap(raw).converse(**req)  # noqa: E731
+        est = estimate_pending_cost(PRICED, "m", req, 1000)
+    else:
+        raw = FakeAnthropic()
+        req = {"model": "m", "messages": MSGS_ANTHROPIC, "max_tokens": 1000}
+        call = lambda: aw.wrap(raw).messages.create(**req)  # noqa: E731
+        est = estimate_pending_cost(PRICED, "m", req, 1000)
+    with pytest.raises(SpendCapExceeded) as ei:
+        call()
+    assert raw.calls == []
+    # Sent synchronously, before the raise: no flush needed.
+    (b,) = blocked_events(t)
+    assert b["violationType"] == "spend_cap" and b["attemptedCostUsd"] == est
+    assert ei.value.violation_type == "spend_cap"
+    assert aw.local_spend == 0.0099  # a blocked call adds nothing
+
+
+def test_at_cap_proceeds():
+    req = {"model": "m", "messages": MSGS_ANTHROPIC, "max_tokens": 100}
+    est = estimate_pending_cost(PRICED, "m", req, 100)
+    aw, t = make_capped(cap=0.5, spent=0.5 - est)
+    raw = FakeAnthropic(in_tok=1, out_tok=1)
+    aw.wrap(raw).messages.create(**req)
+    assert len(raw.calls) == 1 and blocked_events(t) == []
+
+
+def test_no_cap_always_proceeds():
+    aw, t = make_capped(cap=None, spent=1e6)
+    raw = FakeBedrock()
+    aw.wrap(raw).converse(modelId="m", messages=MSGS_BEDROCK)
+    assert len(raw.calls) == 1 and blocked_events(t) == []
+
+
+def test_check_runs_before_every_call_and_accumulated_spend_trips_it():
+    # The estimate is tiny (empty messages, maxTokens 0) so the first call is allowed, but its
+    # actual cost is 1000 * 3 / 1e6 = 0.003 > cap 0.002, so the second call is blocked.
+    aw, t = make_capped(cap=0.002)
+    raw = FakeBedrock(in_tok=1000, out_tok=0)
+    c = aw.wrap(raw)
+    req = {"modelId": "m", "messages": [], "inferenceConfig": {"maxTokens": 0}}
+    c.converse(**req)
+    with pytest.raises(SpendCapExceeded):
+        c.converse(**req)
+    assert len(raw.calls) == 1
+
+
+def test_block_still_raises_when_reporting_fails():
+    from agentwatch.client import TransportError
+    aw, t = make_capped(cap=0.0, spent=1.0)
+    t.outcomes = [TransportError("down")] * 4
+    with pytest.raises(SpendCapExceeded):
+        aw.wrap(FakeBedrock()).converse(modelId="m", messages=MSGS_BEDROCK)

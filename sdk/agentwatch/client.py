@@ -22,8 +22,8 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
-from .guardrails import blocked_entry_for
-from .pricing import cost_from_table, warn_unknown_model
+from .guardrails import blocked_entry_for, spend_decision
+from .pricing import cost_from_table, estimate_pending_cost, max_output_tokens, warn_unknown_model
 
 REQUEST_TIMEOUT_S = 2.0
 _log = logging.getLogger("agentwatch")
@@ -442,6 +442,21 @@ class Watcher:
         raise TypeError("aw.wrap expects a Bedrock runtime client (converse) or an Anthropic client "
                         "(messages.create)")
 
+    def check_spend(self, model: str, request: dict) -> None:
+        """Run before every LLM call (Req 7.1, 7.8). Raises SpendCapExceeded after reporting the block."""
+        self._maybe_refresh_config()  # Req 21.2
+        self._maybe_sync_spend()      # Req 7.4, 7.9
+        cap = self._config.daily_spend_cap_usd
+        if cap is None:
+            return
+        est = estimate_pending_cost(self._config.pricing, model, request, max_output_tokens(request))
+        total = self.local_spend
+        if spend_decision(total, est, cap) == "block":
+            self._send_blocked_sync(violationType="spend_cap", attemptedCostUsd=est,
+                                    meta={"model": str(model)[:200], "localSpendUsd": round(total, 6),
+                                          "capUsd": cap})
+            raise SpendCapExceeded(f"${total:.6f} spent + ${est:.6f} estimated > ${cap:.6f} cap")
+
     def _record_llm(self, provider: str, model: str, in_tok: int, out_tok: int, meta: dict) -> None:
         # Only warn once a real table was fetched; EMPTY would flag every model (Req 3.10, 21.4).
         if self._last_config_ok is not None:
@@ -629,6 +644,7 @@ class _BedrockProxy(_Proxy):
         msgs = kwargs.get("messages") or []
         system = kwargs.get("system") or []
         max_tokens = (kwargs.get("inferenceConfig") or {}).get("maxTokens")
+        self._watcher.check_spend(model, kwargs)  # before the call; raises on block
         start = time.monotonic()
         resp = self._inner.converse(**kwargs)  # provider errors propagate, no event
         latency = int((time.monotonic() - start) * 1000)
@@ -649,6 +665,7 @@ class _AnthropicMessagesProxy(_Proxy):
     def create(self, **kwargs):
         model = kwargs.get("model", "")
         msgs = kwargs.get("messages") or []
+        self._watcher.check_spend(model, kwargs)  # before the call; raises on block
         start = time.monotonic()
         msg = self._inner.create(**kwargs)
         latency = int((time.monotonic() - start) * 1000)
