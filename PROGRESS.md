@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-09 by Kiro session (5.13 deploy)
+Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -31,11 +31,19 @@ Last updated: 2026-10-09 by Kiro session (5.13 deploy)
   - The original demo API key was lost. The demo data was deleted and recreated with a new key. The key now lives in a private file outside the repo. Never commit or print it.
 - 5.15 DONE: inventory "Total spend" now shows 4 decimals (`$0.0006` instead of `$0.00`), and `<$0.0001` for nonzero amounts below that. Dashboard suite: 51 passed. Pushed as `fix(dashboard)`; Amplify rebuilds from `main`.
 
+- Group 6 (6.1–6.4), each pushed as its own `feat` commit:
+  - 6.1 `get_spend` + `GET /agents/{agentId}/spend` (route added to `handlers/api.py` and `template.yaml`). Window is `now - 24h < ts <= now`. Properties 11 and 6 (spend clause) added. NOT deployed.
+  - 6.2 SDK Local_Spend_Total: fetched at `init`, increased by each completed LLM call's actual cost, resynced at most every 60 s; a failed or malformed sync keeps the value and warns. Properties 22 and 23 (spend clause) added.
+  - 6.3 `estimate_input_tokens`, `max_output_tokens` (default 4096), `estimate_pending_cost`, `spend_decision` (block iff total + est > cap).
+  - 6.4 `Watcher.check_spend` runs before every Bedrock `converse` and Anthropic `messages.create`. Over the cap it sends a `spend_cap` blocked event synchronously and raises `SpendCapExceeded`; the client is never called. Property 21 added.
+  - Suites: backend 429 passed, SDK 222 passed, dashboard 51 passed.
+
 ## In progress
 - (none)
 
 ## Next step
-- Group 6 (spend cap): 6.1 `get_spend` + `GET /agents/{agentId}/spend`.
+- 6.5 (needs AWS). Local half first, test-first: extend `sdk/tests/test_demo_agent.py` so `demo_agent.main(loop=3)` with a tiny cap catches and prints `SpendCapExceeded`, then add `--loop N` to `demo/demo_agent.py`. Then Tejaswi runs `sam build && sam deploy` from `backend/` (keeps `DashboardOrigin` = the Amplify URL) so `GET /agents/{agentId}/spend` is live, sets a `0.001` cap on `demo-bot` in the dashboard, runs `python demo/demo_agent.py --loop 5`, and confirms the `spend_cap` block in the terminal and the email.
+- Then 6.6 checkpoint (rerun `pytest` in `backend/` and `sdk/`).
 
 ## Blocked
 - (none)
@@ -91,6 +99,12 @@ Last updated: 2026-10-09 by Kiro session (5.13 deploy)
   - localhost is no longer an allowed origin: `AllowOrigins` is just `!Ref DashboardOrigin`, now set to the Amplify URL. Local dev against the deployed API needs `DashboardOrigin` overridden back to localhost and a redeploy.
 
 - 2026-10-09 (5.15) Spend shows 4 decimals, not `<$0.01`. A `<$0.01` label would still hide demo-sized spend ($0.0006), which is the number students need to see. The floor label is `<$0.0001` so a tiny nonzero spend never reads as `$0.0000`.
+
+- 2026-10-09 (6.1) The exclusive lower bound uses the SK suffix `#~` on both bounds of the inclusive `BETWEEN`. `~` sorts after every hex eventId, so `start#~` skips events exactly at `now - 24h` and `end#~` keeps events exactly at `now`. `now` is floored to ms to match event ts precision. The rolling sum is rounded to 6 dp like other costs.
+- 2026-10-09 (6.2) Test `FakeTransport` sends `/spend` requests to their own queue and log (`spend_outcomes`, `spend_requests`; default 200 with 0.0). This way the new init-time spend fetch doesn't shift the config/event queues of ~15 older tests. Raw `ApiClient` tests pass `route_spend=False`.
+- 2026-10-09 (6.2) A spend response only replaces Local_Spend_Total if `rollingSpendUsd` is a finite, non-negative, non-bool number. Anything else counts as a failed sync. A bad value could otherwise silently disable the cap.
+- 2026-10-09 (6.4) Spend-cap blocked events put `{model, localSpendUsd, capUsd}` in `meta` (checked against backend validation). Check and accumulate aren't atomic across threads, so concurrent calls can overshoot by about one call each. Holding a lock across the provider call would serialize every LLM call.
+- 2026-10-09 Deployed stack lags `main`: `GET /agents/{agentId}/spend` isn't live yet. Until `sam deploy`, the SDK's spend fetch gets a 404, logs "spend sync failed", and starts at 0.0 (fails open for prior spend; the cap still applies to this process's own calls).
 
 ## Open bugs
 - (none known)
