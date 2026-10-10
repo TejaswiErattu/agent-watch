@@ -122,5 +122,80 @@ def test_cors_configuration(tpl):
     assert {"content-type", "x-agentwatch-owner", "x-agentwatch-key-hash"} <= allowed_headers
 
 
+SIX_ROUTES = {("POST", "/events"), ("GET", "/agents"), ("GET", "/agents/{agentId}/events"),
+              ("GET", "/agents/{agentId}/config"), ("PUT", "/agents/{agentId}/config"),
+              ("GET", "/agents/{agentId}/spend")}
+
+
+def test_exactly_six_routes_on_api_function_implicit_api(tpl):
+    # Every HttpApi event lives on ApiFunction and none sets ApiId, so all six
+    # attach to the implicit ServerlessHttpApi (the live API URL).
+    routes = []
+    for name, r in tpl["Resources"].items():
+        if r["Type"] != "AWS::Serverless::Function":
+            continue
+        for e in r["Properties"].get("Events", {}).values():
+            if e["Type"] == "HttpApi":
+                assert name == "ApiFunction"
+                assert "ApiId" not in e["Properties"]
+                routes.append((e["Properties"]["Method"].upper(), e["Properties"]["Path"]))
+    assert len(routes) == 6
+    assert set(routes) == SIX_ROUTES
+
+
+def test_default_route_throttling(tpl):
+    drs = tpl["Globals"]["HttpApi"]["DefaultRouteSettings"]
+    assert drs["ThrottlingRateLimit"] == 10
+    assert drs["ThrottlingBurstLimit"] == 20
+
+
+def test_cost_budget(tpl):
+    b = res(tpl, "CostBudget")
+    assert b["Type"] == "AWS::Budgets::Budget"
+    budget = b["Properties"]["Budget"]
+    assert budget["BudgetType"] == "COST"
+    assert budget["TimeUnit"] == "MONTHLY"
+    assert float(budget["BudgetLimit"]["Amount"]) == 10
+    assert budget["BudgetLimit"]["Unit"] == "USD"
+    (nws,) = b["Properties"]["NotificationsWithSubscribers"]
+    n = nws["Notification"]
+    assert n["NotificationType"] == "ACTUAL"
+    assert n["ComparisonOperator"] == "GREATER_THAN"
+    assert float(n["Threshold"]) == 100
+    assert n["ThresholdType"] == "PERCENTAGE"
+    assert nws["Subscribers"] == [{"SubscriptionType": "EMAIL", "Address": {"Ref": "AlertEmail"}}]
+
+
+def test_function_policies_exactly_two(tpl):
+    props = res(tpl, "ApiFunction")["Properties"]
+    assert "Role" not in props  # a custom Role would bypass the scoped policies
+    assert props["Policies"] == [
+        {"DynamoDBCrudPolicy": {"TableName": {"Ref": "EventTable"}}},
+        {"SNSPublishMessagePolicy": {"TopicName": {"Fn::GetAtt": ["AlertTopic", "TopicName"]}}},
+    ]
+    assert "Policies" not in tpl.get("Globals", {}).get("Function", {})
+
+
+def test_live_stack_identity_preserved(tpl):
+    # The stack is live. Renaming or replacing these would change the API URL or
+    # drop the event data, so their logical ids and replacement-triggering
+    # properties must stay as deployed.
+    assert "ServerlessHttpApi" not in tpl["Resources"]  # stays implicit
+    assert "ServerlessHttpApi" in tpl["Outputs"]["ApiUrl"]["Value"]["Fn::Sub"]
+    table = res(tpl, "EventTable")["Properties"]
+    assert "TableName" not in table  # setting a name forces replacement
+    params = tpl["Parameters"]
+    assert set(params) == {"AlertEmail", "DashboardOrigin"}
+    assert params["AlertEmail"] == {
+        "Type": "String",
+        "Description": "Email address that receives guardrail alerts (confirm the SNS subscription once).",
+    }
+    assert params["DashboardOrigin"] == {
+        "Type": "String",
+        "Default": "http://localhost:3000",
+        "Description": "Deployed dashboard origin allowed by CORS (set to the Amplify URL once it exists).",
+    }
+
+
 def test_samconfig_region():
     assert 'region = "us-west-2"' in SAMCONFIG.read_text()

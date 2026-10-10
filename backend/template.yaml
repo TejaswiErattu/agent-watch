@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Agent Watch ingest/config API, event table, and alert topic (minimal demo stack; full routes, CORS, throttling, and budget come in task 7.1).
+Description: Agent Watch ingest/config API, event table, alert topic, route throttling, and a 10 USD monthly cost budget.
 
 Parameters:
   AlertEmail:
@@ -39,6 +39,12 @@ Globals:
         - content-type
         - x-agentwatch-owner
         - x-agentwatch-key-hash
+    # Stage-level throttling on the implicit API's $default stage: caps abuse of
+    # the public endpoint (and the Lambda/DynamoDB bill it drives). Applied as an
+    # in-place stage update; ServerlessHttpApi and its URL are unchanged.
+    DefaultRouteSettings:
+      ThrottlingRateLimit: 10
+      ThrottlingBurstLimit: 20
 
 Resources:
   ApiFunction:
@@ -116,6 +122,28 @@ Resources:
       Subscription:
         - Protocol: email
           Endpoint: !Ref AlertEmail
+
+  # Account-wide cost guard. Budgets is a global service, so it works from a
+  # us-west-2 stack (CloudWatch billing metrics exist only in us-east-1).
+  # Budgets emails AlertEmail directly; no SNS topic policy needed.
+  CostBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: 10
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
 
 Outputs:
   ApiUrl:
