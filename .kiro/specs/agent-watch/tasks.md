@@ -457,7 +457,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 15.5, 15.7, 18.5_
     - Commit: `feat(infra): throttling, budget, least-privilege policies`
 
-  - [ ] 7.2 Write README.md with Known limitations
+  - [x] 7.2 Write README.md with Known limitations
     - Write the failing tests first. Add `backend/tests/test_readme.py` checking `README.md` has a "Known limitations" heading that mentions `open()`, shell commands, the recognized path arguments, and the spend under-count while events are queued.
     - Write `README.md`: what Agent Watch is, the 3-line integration, deploy steps (`sam deploy`, Amplify), running the demos and tests, and the Known limitations section (incl. case-insensitive over-blocking).
     - Known limitations: agent IDs are global and first-come; GET /config reveals whether a name is taken.

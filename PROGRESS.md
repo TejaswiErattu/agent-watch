@@ -44,11 +44,13 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 
 - 7.1 DONE (PR #2 merged, deployed and verified by Tejaswi on 2026-10-09). Stack is UPDATE_COMPLETE, throttling 10/20 is live on the `$default` stage, and `CostBudget` was created. CORS and the API URL are unchanged. The change adds `Globals.HttpApi.DefaultRouteSettings` (rate 10, burst 20) and `CostBudget` (`AWS::Budgets::Budget`, 10 USD monthly, ACTUAL > 100% emails `AlertEmail`). Tests pin exactly six routes on the implicit API, exactly two policies with no custom Role, and the live identity: no explicit `ServerlessHttpApi`, no `TableName`, and `AlertEmail`/`DashboardOrigin` unchanged. `sam validate --lint` is clean. Backend: 434 passed.
 
+- 7.2 DONE: `README.md` replaces the starter-kit README. It covers what Agent Watch is, the 3-line integration, deploy (`sam deploy` + Amplify), demos, tests, and Known limitations (Req 26 plus case over-blocking, hardlink/TOCTOU, first-come ids, at-most-once alerts, stage-wide throttling). `backend/tests/test_readme.py` pins the required statements. Backend: 436 passed.
+
 ## In progress
-- 7.2 README with Known limitations.
+- 7.3 docs.
 
 ## Next step
-- 7.2, then 7.3 docs.
+- 7.3 ARCHITECTURE.md, DEMO_SCRIPT.md, SUBMISSION.md.
 
 ## Blocked
 - (none)

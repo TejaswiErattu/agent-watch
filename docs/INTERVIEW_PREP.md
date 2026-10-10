@@ -507,3 +507,10 @@ Format per task:
 **Q:** Why throttle at API Gateway instead of in the Lambda? **A:** Throttled requests get a 429 at the edge and never invoke Lambda, so they cost nothing downstream. Rate limiting in code still pays for every invocation.
 **Q:** Why AWS Budgets and not a CloudWatch billing alarm? **A:** Billing metrics live only in us-east-1, and this stack is in us-west-2. Budgets is a global service, so a regional stack can create it and it watches account-wide spend.
 **Q:** How do you change infra on a live stack without losing data? **A:** Keep logical ids and replacement-triggering properties fixed (no `TableName`, no explicit API resource), test that in CI, and review the change set before executing. Here the only new resource is the budget.
+
+## 7.2 README with Known limitations
+
+**Conceptual:** A guardrail that people over-trust is worse than none. The README says exactly what the SDK covers (wrapped tools with path arguments, wrapped LLM clients) and what it doesn't: direct `open()`, shell commands, hardlinks, TOCTOU, and the brief spend under-count. That way a student doesn't assume protection they don't have.
+**Technical:** `backend/tests/test_readme.py` pulls out the "Known limitations" section by heading level and asserts the must-say facts: `open()`, shell commands, all ten recognized argument names, under-count while queued, case-insensitive over-blocking, hardlink/TOCTOU, and first-come ids. Tradeoff: keyword checks only prove the facts are present. Whether the wording is clear still needs a human read.
+**Q:** What's the threat model, and why does it matter for the docs? **A:** A careless agent, not a malicious one. In-process enforcement can be bypassed by code that wants to, so the docs must say that plainly instead of implying sandboxing.
+**Q:** Why test documentation? **A:** Limitations drift as code changes. A test that pins the required statements fails if someone deletes them, the same way a regression test protects behavior.
