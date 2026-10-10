@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4, 6.5 local half)
+Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 complete)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -39,12 +39,14 @@ Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4, 6.5 local half
   - Suites: backend 429 passed, SDK 222 passed, dashboard 51 passed.
 - `GET /agents/{agentId}/spend` is deployed and verified by Tejaswi (200 with the right key, 403 with a wrong key).
 - 6.5 local half: `demo/demo_agent.py --loop N` (N >= 1, default 1). Notes are read once, the question is asked up to N times, and `SpendCapExceeded` prints `run i/N: SpendCapExceeded: ...`, stops the loop, and exits 0. Tests added to `sdk/tests/test_demo_agent.py`. SDK suite: 229 passed.
+- 6.5 AWS half DONE (verified manually by Tejaswi, 2026-10-09): with a `0.007` cap on `demo-bot`, `python demo/demo_agent.py --loop 5` completed runs 1 and 2. Run 3 raised `SpendCapExceeded` ($0.006012 spent + $0.001055 estimated > $0.007 cap). The `spend_cap` blocked event was stored and the alert email arrived.
+- 6.6 Checkpoint DONE: backend 429 passed, SDK 229 passed, dashboard vitest 51 passed. Group 6 complete.
 
 ## In progress
-- 6.5 AWS half (Tejaswi): set a `0.001` cap on `demo-bot` in the dashboard, run `python demo/demo_agent.py --loop 5`, confirm the `spend_cap` block in the terminal and the email. Then tick 6.5 in `tasks.md`.
+- (none)
 
 ## Next step
-- Finish the 6.5 AWS half above, then 6.6 checkpoint (rerun `pytest` in `backend/` and `sdk/`).
+- Group 7, starting with 7.1 (complete the SAM template: throttling, `CostBudget`, least-privilege policies). It's an infra change, so per workflow it goes on `feat/<name>` with a PR for Tejaswi's approval.
 
 ## Blocked
 - (none)
@@ -107,6 +109,7 @@ Last updated: 2026-10-09 by Kiro session (5.14–5.15, 6.1–6.4, 6.5 local half
 - 2026-10-09 (6.4) Spend-cap blocked events put `{model, localSpendUsd, capUsd}` in `meta` (checked against backend validation). Check and accumulate aren't atomic across threads, so concurrent calls can overshoot by about one call each. Holding a lock across the provider call would serialize every LLM call.
 - 2026-10-09 (resolved) The deployed stack used to lag `main` on the spend route; it's deployed now.
 - 2026-10-09 (6.5) A spend-cap block in `--loop` exits 0, because the block is the expected outcome of the demo. The loop catches only `SpendCapExceeded`; any other error still propagates. Notes are read once outside the loop, so the run shows one `tool_call` plus N LLM calls. With a 0.001 cap, expect the block before spend itself reaches 0.001, since the SDK adds a worst-case estimate (maxTokens 200) for the next call.
+- 2026-10-09 (6.5 AWS) The live run used a `0.007` cap instead of the `0.001` in tasks.md, so a couple of runs succeed before the block. Both exercise the same path. The block fired with $0.000988 of headroom left, as expected from the worst-case estimate. For the 7.5 rehearsal, size the cap above demo-bot's current rolling 24h spend.
 
 ## Open bugs
 - (none known)

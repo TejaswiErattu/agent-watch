@@ -492,3 +492,10 @@ Format per task:
 **Technical:** `main(loop=N)` reads the notes once, then calls `common.ask` up to N times inside a `try`. `SpendCapExceeded` prints `run i/N: SpendCapExceeded: <detail>`, breaks, and still returns 0; `finally` flushes queued events. `argparse` rejects `--loop 0` or negatives with exit 2. Tradeoff: the cap check uses a worst-case estimate (`maxTokens`), so the block can come one call earlier than the actual spend alone would suggest.
 **Q:** Why does the block fire before spend actually reaches the cap? **A:** The SDK blocks when spent plus the estimated worst-case cost of the next call exceeds the cap. Blocking on the estimate is the only way to stop a call before it's paid for.
 **Q:** Why exit 0 on a block? **A:** For this script, the block is the success case: the guardrail worked. A non-zero code would make a demo or CI run look like a failure when the system did its job.
+
+## 6.5 Demo spend-cap loop (AWS half)
+
+**Conceptual:** End-to-end proof on the deployed stack: with a $0.007 cap on `demo-bot`, `--loop 5` ran twice, then run 3 was blocked before the call was paid for. The `spend_cap` event was stored and the alert email arrived.
+**Technical:** At run 3 the SDK held $0.006012 spent and estimated $0.001055 for the next call. 0.006012 + 0.001055 = 0.007067 > 0.007, so `spend_decision` returned block. The estimate is worst-case (prompt chars / 4 plus `maxTokens` output), which is why it fired with $0.000988 of headroom left. Tradeoff: the cap is slightly conservative, never permissive.
+**Q:** How would you prove the guardrail works beyond unit tests? **A:** Run it against the real stack with a cap sized to trip in a few calls, and check all three effects: the client raised, the blocked event is in DynamoDB, and SNS delivered the email.
+**Q:** How do you size a cap for a live demo? **A:** Above the agent's current rolling 24h spend plus a couple of calls' worth, so the audience sees successful runs before the block. Too small and run 1 is blocked; too big and the loop never trips.

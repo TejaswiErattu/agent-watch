@@ -318,7 +318,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: 10.4, 14.6, 16.3, 16.4_
 
-- [ ] 5. Dashboard
+- [x] 5. Dashboard
   - [x] 5.1 Implement list_inventory and GET /agents
     - Write the failing tests first. In `backend/tests/test_service_inventory.py`, cover: no matching records returns 200 `{"agents": []}`; two owners sharing an ownerId with different keys see only their own agents; an Unreported_Agent shows nulls and `totalSpendUsd: 0.0`; items have all InventoryItem fields and no `keyVerifier`. Add Property 13 to `backend/tests/test_properties_inventory.py`, and extend Property 5 in `backend/tests/test_properties_config.py` with the inventory clause.
     - Implement `list_inventory(store, creds)` in `backend/src/agentwatch_api/service.py`; add the `GET /agents` route in `handlers/api.py` and `backend/template.yaml` (update `test_template.py`).
@@ -403,13 +403,13 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - Write the failing tests first. Run `npx vitest --run` in `dashboard/` and `pytest` in `backend/` and `sdk/`; ensure all tests pass, ask the user if questions arise.
     - On the deployed dashboard, enter credentials, see `bad-bot` in the inventory, open it, and see the blocked event in the timeline.
 
-  - [ ] 5.15 Show sub-cent spend in the inventory
+  - [x] 5.15 Show sub-cent spend in the inventory
     - Write the failing tests first. Extend `dashboard/components/InventoryTable.test.tsx`: spend renders with 4 decimals (`0.0006` → `$0.0006`, `0` → `$0.0000`, `0.01` → `$0.0100`, `1.23456` → `$1.2346`); nonzero spend under $0.0001 renders `<$0.0001`.
     - Update `formatSpend(usd)` in `InventoryTable.tsx`.
     - _Requirements: 11.2_
     - Commit: `fix(dashboard): show sub-cent spend in inventory`
 
-- [ ] 6. Spend cap
+- [x] 6. Spend cap
   - [x] 6.1 Implement get_spend and GET /agents/{agentId}/spend
     - Write the failing tests first. In `backend/tests/test_service_spend.py`, cover: response `{"agentId","rollingSpendUsd","windowStart","windowEnd"}`; events exactly at `now - 24h` are excluded and at `now` are included; missing agent returns 0.0 and creates nothing; mismatch returns 403. Add Property 11 to `backend/tests/test_properties_spend.py` and extend Property 6 with the `get_spend` clause.
     - Implement `get_spend(store, creds, agent_id, now)` in `backend/src/agentwatch_api/service.py`; add the route in `handlers/api.py` and `backend/template.yaml` (update `test_template.py`).
@@ -437,15 +437,17 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 7.1, 7.6, 7.7, 7.8, 10.1, 20.4_
     - Commit: `feat(sdk): enforce daily spend cap before LLM calls`
 
-  - [ ] 6.5 Add the demo spend-cap run
+  - [x] 6.5 Add the demo spend-cap run
     - Write the failing tests first. Extend `sdk/tests/test_demo_agent.py`: running `demo_agent.main(loop=3)` against a fake transport whose config has a tiny cap raises and catches `SpendCapExceeded` and prints the block.
     - Add a `--loop N` option to `demo/demo_agent.py` that repeats the question so a small cap trips. Redeploy the backend (spend route), set a `0.001` cap in the dashboard, run it, and see the `spend_cap` email.
-    - Local half DONE (2026-10-09, commit `feat(demo): spend cap demo loop`). Remaining: Tejaswi runs the AWS demo (cap `0.001` on `demo-bot`, `--loop 5`, confirm terminal block + email), then tick this box.
+    - Local half DONE (2026-10-09, commit `feat(demo): spend cap demo loop`).
+    - AWS half DONE (2026-10-09, verified by Tejaswi): cap `0.007` on `demo-bot`, `--loop 5`; runs 1–2 succeeded, run 3 raised `SpendCapExceeded` ($0.006012 spent + $0.001055 est > $0.007), `spend_cap` blocked event stored, alert email received.
     - _Requirements: 7.6, 10.1, 10.4_
     - Commit: `feat(demo): spend cap demo loop`
 
-  - [ ] 6.6 Checkpoint: spend cap
+  - [x] 6.6 Checkpoint: spend cap
     - Write the failing tests first. Run `pytest` in `backend/` and `sdk/`; ensure all tests pass, ask the user if questions arise.
+    - DONE 2026-10-09: backend 429 passed, SDK 229 passed, dashboard vitest 51 passed.
 
 - [ ] 7. Infra polish, docs, and rehearsal
   - [ ] 7.1 Complete the SAM template
