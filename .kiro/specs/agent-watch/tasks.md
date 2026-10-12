@@ -489,6 +489,15 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 10.4, 16.3, 16.4_
     - Commit: `test(demo): pre-recording e2e smoke script`
 
+  - [x] 7.7 Dashboard visual refresh (green SaaS style)
+    - Branch `feat/dashboard-polish`, open a PR, do not merge without Tejaswi's approval.
+    - Code DONE 2026-10-12 on `feat/dashboard-polish`: dashboard vitest 66 passed, `npm run build` produces `out/`. PR open, awaiting approval.
+    - Write the failing tests first. `dashboard/lib/stats.test.ts`: `inventoryStats(agents, now)` returns count, total spend, active in last 24h, not yet reported, for an empty list, an all-null-lastSeen list, and a mixed list (24h boundary inclusive). `dashboard/components/StatTiles.test.tsx`: four tiles with the labels "Agents", "Total spend" (4 decimals via `formatSpend`), "Active in last 24h", "Not yet reported". `dashboard/lib/time.test.ts`: `relativeTime`. Extend `dashboard/components/Timeline.test.tsx`: blocked rows show a "Blocked" pill, `llm_call` a "LLM call" pill, `tool_call` a "Tool call" pill.
+    - Styling and layout only: palette (forest green, mint, off-white), white rounded-2xl cards, pill buttons, sidebar layout with "Agent Watch" logo and "Clear credentials" at the bottom, page header with subtitle, inventory in a card with model pills, relative last-activity with ISO `title`, right-aligned spend; agent page two-column Rules/Timeline with red-tinted blocked rows.
+    - No new dependencies, no data that isn't in the API responses, no API/polling/credential behavior changes. Keep every label the demo script and tests use. `npm run build` must still produce `out/`; responsive to ~375 px.
+    - _Requirements: 11.2, 12.2_
+    - Commit: `feat(dashboard): green visual refresh with stat tiles and status pills`
+
 ## Notes
 
 - Property tests are required and live inside the task that adds the logic. Only 7.4 is optional (`*`).

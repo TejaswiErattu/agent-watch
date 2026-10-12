@@ -1,6 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { InventoryItem } from "@/lib/types";
+import { relativeTime } from "@/lib/time";
 import {
   Table,
   TableHeader,
@@ -19,17 +20,18 @@ export function formatSpend(usd: number): string {
 
 export interface InventoryTableProps {
   agents: InventoryItem[];
+  now?: number;
 }
 
-export function InventoryTable({ agents }: InventoryTableProps) {
+export function InventoryTable({ agents, now = Date.now() }: InventoryTableProps) {
   return (
     <Table>
       <TableHeader>
-        <TableRow>
+        <TableRow className="hover:bg-transparent">
           <TableHead>Agent</TableHead>
           <TableHead>Model</TableHead>
           <TableHead>Last activity</TableHead>
-          <TableHead>Total spend</TableHead>
+          <TableHead className="text-right">Total spend</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -40,20 +42,30 @@ export function InventoryTable({ agents }: InventoryTableProps) {
               <TableCell>
                 <Link
                   href={`/agent?id=${encodeURIComponent(a.agentId)}`}
-                  className="font-medium text-blue-600 hover:underline"
+                  className="font-semibold text-brand underline-offset-2 hover:underline"
                 >
                   {a.agentId}
                 </Link>
               </TableCell>
-              <TableCell>{a.model ?? ""}</TableCell>
               <TableCell>
+                {a.model ? (
+                  <span className="inline-block max-w-[16rem] truncate rounded-full bg-gray-100 px-2.5 py-0.5 align-middle text-xs text-gray-700">
+                    {a.model}
+                  </span>
+                ) : null}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
                 {unreported ? (
-                  <span className="text-gray-500">not yet reported</span>
+                  <span className="text-gray-600">not yet reported</span>
                 ) : (
-                  a.lastSeen
+                  <time dateTime={a.lastSeen!} title={a.lastSeen!} className="text-gray-700">
+                    {relativeTime(a.lastSeen!, now)}
+                  </time>
                 )}
               </TableCell>
-              <TableCell>{formatSpend(a.totalSpendUsd)}</TableCell>
+              <TableCell className="text-right font-medium tabular-nums">
+                {formatSpend(a.totalSpendUsd)}
+              </TableCell>
             </TableRow>
           );
         })}

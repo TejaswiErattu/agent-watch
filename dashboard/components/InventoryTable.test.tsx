@@ -50,6 +50,13 @@ describe("InventoryTable", () => {
     expect(link).toHaveAttribute("href", "/agent?id=bot1");
   });
 
+  it("shows last activity as relative time with the ISO time as a tooltip", () => {
+    render(<InventoryTable agents={[reported]} />);
+    const row = screen.getByText("bot1").closest("tr")!;
+    const when = within(row).getByTitle("2026-10-08T12:00:00.000Z");
+    expect(when.textContent).toMatch(/ago|just now/);
+  });
+
   it("marks unreported agents and leaves the model cell empty", () => {
     render(<InventoryTable agents={[unreported]} />);
     const row = screen.getByText("bot2").closest("tr")!;

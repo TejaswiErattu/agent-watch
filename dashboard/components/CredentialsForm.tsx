@@ -30,9 +30,9 @@ export function CredentialsForm({ onSaved, error }: CredentialsFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-sm space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-1">
-        <label htmlFor="ownerId" className="text-sm font-medium">
+        <label htmlFor="ownerId" className="block text-sm font-medium text-gray-700">
           Owner ID
         </label>
         <Input
@@ -43,7 +43,7 @@ export function CredentialsForm({ onSaved, error }: CredentialsFormProps) {
         />
       </div>
       <div className="space-y-1">
-        <label htmlFor="apiKey" className="text-sm font-medium">
+        <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700">
           API key
         </label>
         <Input
@@ -55,7 +55,7 @@ export function CredentialsForm({ onSaved, error }: CredentialsFormProps) {
         />
       </div>
       {error ? <Alert variant="destructive">{error}</Alert> : null}
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" disabled={busy} className="w-full">
         Save credentials
       </Button>
     </form>

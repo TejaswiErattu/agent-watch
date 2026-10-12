@@ -71,7 +71,7 @@ export function RulesEditor({ creds, agentId }: RulesEditorProps) {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <label htmlFor="cap" className="text-sm font-medium">
+        <label htmlFor="cap" className="block text-sm font-medium text-gray-700">
           Daily spend cap (USD)
         </label>
         <Input
@@ -84,11 +84,17 @@ export function RulesEditor({ creds, agentId }: RulesEditorProps) {
       </div>
 
       <div className="space-y-2">
-        <span className="text-sm font-medium">Blocked paths</span>
-        <ul className="space-y-1">
+        <span className="block text-sm font-medium text-gray-700">Blocked paths</span>
+        {paths.length === 0 ? (
+          <p className="text-sm text-gray-600">None.</p>
+        ) : null}
+        <ul className="space-y-2">
           {paths.map((p) => (
-            <li key={p} className="flex items-center justify-between gap-2 text-sm">
-              <span>{p}</span>
+            <li
+              key={p}
+              className="flex items-center justify-between gap-2 rounded-xl bg-brand-mint/60 py-1 pl-3 pr-1 text-sm"
+            >
+              <code className="min-w-0 break-all font-mono text-brand">{p}</code>
               <Button
                 type="button"
                 variant="ghost"
@@ -101,9 +107,9 @@ export function RulesEditor({ creds, agentId }: RulesEditorProps) {
             </li>
           ))}
         </ul>
-        <div className="flex items-end gap-2">
-          <div className="space-y-1">
-            <label htmlFor="newPath" className="text-sm font-medium">
+        <div className="flex flex-wrap items-end gap-2 pt-2">
+          <div className="min-w-0 flex-1 space-y-1">
+            <label htmlFor="newPath" className="block text-sm font-medium text-gray-700">
               Add path
             </label>
             <Input
@@ -121,7 +127,7 @@ export function RulesEditor({ creds, agentId }: RulesEditorProps) {
 
       {error ? <Alert variant="destructive">{error}</Alert> : null}
       {saved && !error ? (
-        <p className="text-sm text-green-700">Saved.</p>
+        <p className="text-sm font-medium text-brand-mid" role="status">Saved.</p>
       ) : null}
 
       <Button type="button" onClick={handleSave}>

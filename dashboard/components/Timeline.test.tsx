@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { TimelineItem } from "@/lib/types";
 
@@ -67,6 +67,25 @@ describe("Timeline", () => {
     expect(screen.getByText(/claude/)).toBeInTheDocument();
     // desc order by default
     expect(getTimeline.mock.calls[0][2]).toMatchObject({ order: "desc" });
+  });
+
+  it("shows a status pill per event type and tints blocked rows", async () => {
+    getTimeline.mockResolvedValue({
+      events: [
+        ev({ type: "blocked", violationType: "blocked_path", attemptedPath: ".env" }),
+        ev({ type: "llm_call", model: "claude" }),
+        ev({ type: "tool_call", tool: "read_file" }),
+      ],
+      nextCursor: null,
+    });
+    render(<Timeline creds={creds} agentId="bot1" />);
+    const rows = await screen.findAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(within(rows[0]).getByText("Blocked")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("LLM call")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("Tool call")).toBeInTheDocument();
+    expect(rows[0].className).toMatch(/bg-red-50/);
+    expect(rows[1].className).not.toMatch(/bg-red-50/);
   });
 
   it("resets the list and passes the type when the filter changes", async () => {

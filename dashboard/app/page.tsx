@@ -8,13 +8,17 @@ import {
   type Credentials,
 } from "@/lib/credentials";
 import type { InventoryItem } from "@/lib/types";
+import { AppShell } from "@/components/AppShell";
 import { CredentialsForm } from "@/components/CredentialsForm";
 import { InventoryTable } from "@/components/InventoryTable";
 import { AddAgentForm } from "@/components/AddAgentForm";
+import { StatTiles } from "@/components/StatTiles";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { Card, CardTitle } from "@/components/ui/card";
 
 const POLL_MS = 30_000;
+const SUBTITLE = "Watch what your agents do and what they cost";
 
 export default function Home() {
   const [creds, setCreds] = React.useState<Credentials | null>(null);
@@ -68,30 +72,40 @@ export default function Home() {
 
   if (!creds || authFailed) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
-        <h1 className="text-2xl font-semibold">Agent Watch</h1>
-        <p className="mt-2 mb-6 text-sm text-gray-600">
-          Enter your owner ID and API key to see your agents.
-        </p>
-        <CredentialsForm
-          onSaved={handleSaved}
-          error={authFailed ? "Credentials not accepted" : undefined}
-        />
-      </main>
+      <AppShell title="Dashboard" subtitle={SUBTITLE}>
+        <Card className="mx-auto max-w-md">
+          <CardTitle>Connect</CardTitle>
+          <p className="mb-4 text-sm text-gray-600">
+            Enter your owner ID and API key to see your agents.
+          </p>
+          <CredentialsForm
+            onSaved={handleSaved}
+            error={authFailed ? "Credentials not accepted" : undefined}
+          />
+        </Card>
+      </AppShell>
     );
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Agent Watch</h1>
-        <Button variant="outline" onClick={handleClear}>
+    <AppShell
+      title="Dashboard"
+      subtitle={SUBTITLE}
+      sidebarFooter={
+        <Button variant="outline" size="sm" onClick={handleClear} className="md:w-full">
           Clear credentials
         </Button>
-      </div>
-      <AddAgentForm />
+      }
+    >
+      <StatTiles agents={agents} now={Date.now()} />
       {error ? <Alert variant="destructive">{error}</Alert> : null}
-      <InventoryTable agents={agents} />
-    </main>
+      <Card>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+          <h2 className="text-lg font-semibold text-gray-900">Agents</h2>
+          <AddAgentForm />
+        </div>
+        <InventoryTable agents={agents} />
+      </Card>
+    </AppShell>
   );
 }

@@ -529,3 +529,15 @@ Format per task:
 **Q:** How do you keep a secret out of shell history and process listings? **A:** Read it from a 600-mode file into an env var, never pass it as an argument (`ps` shows argv), never `set -x`, and do the hashing inside the child process.
 **Q:** Why set the cap relative to current spend instead of a fixed number? **A:** Rolling 24h spend changes with every run. A fixed cap either trips immediately or never; spend + $0.002 gives a couple of successful calls and then a block.
 **Q:** Why a trap for cleanup? **A:** A failure midway would leave the live demo agents misconfigured. `trap ... EXIT` runs the reset on success, failure, or Ctrl-C.
+
+## 7.7 Dashboard visual refresh
+
+**Conceptual:** The demo is watched on video, so the blocked event and the spend have to be readable at a glance. The refresh adds a sidebar shell, white cards, and four stat tiles. It also adds colored status pills, and blocked rows get a red tint. The constraint was "styling only": every number comes from the existing `GET /agents` and timeline responses, and every label the demo script and tests use is unchanged.
+
+**Technical:** The stat math lives in a pure `inventoryStats(agents, now)` in `lib/stats.ts`, and `now` is injected, so the 24h boundary, the empty list, and the all-unreported list are unit-tested without fake timers. Tiles use `role="group"` with an `aria-label`, so tests query by name, not by CSS. Tradeoff: there are no new dependencies, so the logo is an inline SVG and the font is the system stack plus Inter if it's installed. Fetching a web font would add a network call at build time.
+
+**Q:** How do you restyle a UI without breaking behavior? **A:** Keep the tests on accessible names and roles, not class names, and leave data fetching untouched. Then a green suite after the restyle means behavior survived.
+
+**Q:** Why compute the stats on the client instead of adding an API field? **A:** The inventory response already has everything. A new field means a backend change, a redeploy, and a contract change, all for one sum and three counts over a small list.
+
+**Q:** How did you handle accessibility for color-coded states? **A:** Color is never the only signal. Each pill has a text label ("Blocked"), and blocked rows also get a left border. The palette pairs were checked against the WCAG AA contrast ratio. Full compliance would still need testing with a screen reader.
