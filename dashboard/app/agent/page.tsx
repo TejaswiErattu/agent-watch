@@ -5,9 +5,22 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { loadCredentials, type Credentials } from "@/lib/credentials";
+import { AppShell } from "@/components/AppShell";
 import { CredentialsForm } from "@/components/CredentialsForm";
 import { Timeline } from "@/components/Timeline";
 import { RulesEditor } from "@/components/RulesEditor";
+import { Card, CardTitle } from "@/components/ui/card";
+
+function BackLink() {
+  return (
+    <Link
+      href="/"
+      className="inline-flex h-9 items-center rounded-full border border-brand bg-white px-4 text-sm font-medium text-brand hover:bg-brand-mint"
+    >
+      Back to inventory
+    </Link>
+  );
+}
 
 function AgentDetail() {
   const params = useSearchParams();
@@ -24,44 +37,42 @@ function AgentDetail() {
 
   if (!creds) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
-        <h1 className="text-2xl font-semibold">Agent Watch</h1>
-        <p className="mt-2 mb-6 text-sm text-gray-600">
-          Enter your credentials to view this agent.
-        </p>
-        <CredentialsForm onSaved={() => setCreds(loadCredentials())} />
-      </main>
+      <AppShell title={agentId ?? "Agent"} subtitle="Enter your credentials to view this agent.">
+        <Card className="mx-auto max-w-md">
+          <CardTitle>Connect</CardTitle>
+          <CredentialsForm onSaved={() => setCreds(loadCredentials())} />
+        </Card>
+      </AppShell>
     );
   }
 
   if (!agentId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
-        <p className="text-sm">No agent selected.</p>
-        <Link href="/" className="text-blue-600 hover:underline">
-          Back to inventory
-        </Link>
-      </main>
+      <AppShell title="Agent" actions={<BackLink />}>
+        <Card>
+          <p className="text-sm text-gray-700">No agent selected.</p>
+        </Card>
+      </AppShell>
     );
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{agentId}</h1>
-        <Link href="/" className="text-sm text-blue-600 hover:underline">
-          Back to inventory
-        </Link>
+    <AppShell
+      title={agentId}
+      subtitle="Rules and activity for this agent"
+      actions={<BackLink />}
+    >
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start">
+        <Card>
+          <CardTitle>Rules</CardTitle>
+          <RulesEditor creds={creds} agentId={agentId} />
+        </Card>
+        <Card>
+          <CardTitle>Timeline</CardTitle>
+          <Timeline creds={creds} agentId={agentId} />
+        </Card>
       </div>
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Rules</h2>
-        <RulesEditor creds={creds} agentId={agentId} />
-      </section>
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Timeline</h2>
-        <Timeline creds={creds} agentId={agentId} />
-      </section>
-    </main>
+    </AppShell>
   );
 }
 

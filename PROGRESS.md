@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 complete)
+Last updated: 2026-10-12 by Kiro session (7.7 dashboard polish, PR open)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -58,8 +58,15 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
   - cleanup: demo-bot cap null, `.env` removed from bad-bot
   - Email arrival not checked by the script (look at the inbox).
 
+- 7.7 code DONE on `feat/dashboard-polish` (2026-10-12), PR open, NOT merged. Styling and layout only:
+  - New `AppShell`: sidebar with the logo, Dashboard nav, and Clear credentials at the bottom; a top bar on mobile.
+  - New `Card`, `StatTiles`, `lib/stats.ts` (`inventoryStats`), and `lib/time.ts` (`relativeTime`).
+  - Pill buttons, model pills, relative last-activity with the ISO time in `title`, right-aligned spend.
+  - Agent page: two-column Rules/Timeline. Timeline status pills (Blocked/LLM call/Tool call), blocked rows tinted red.
+  - No API, polling, or credential changes, no new deps, all demo labels kept. Dashboard vitest: 66 passed (51 old + 15 new). `npm run build` produces `out/`.
+
 ## In progress
-- (none)
+- 7.7 PR waiting for Tejaswi's review. After merge, Amplify rebuilds from `main`. Do a quick visual check on the live URL at desktop and phone width before recording.
 
 ## Next step (needs Tejaswi)
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
@@ -131,6 +138,8 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
 
 - 2026-10-09 (7.6) `e2e.sh` makes its API calls through an inline Python helper (not curl), so the key is hashed in-process and neither key nor hash ever appears in argv, output, or files. Cleanup runs from an `EXIT` trap, so a mid-run failure still resets both demo agents. Since the cap is spend + 0.003, the block landed on run 5 of 5 this time; if a future run finishes 5 runs without a block, lower the margin.
 - 2026-10-10 Margin lowered to + 0.002 in `e2e.sh` and DEMO_SCRIPT prep step 5. The last run spent about $0.0005 per run with a $0.001055 next-call estimate, so + 0.002 should block around run 3 of 5 and leave room either way. Not yet re-run.
+
+- 2026-10-12 (7.7) The stat tiles are computed client-side from `GET /agents` (no new API field), with `now` injected for testable 24h math; exactly 24h ago counts as active. The timeline pill now carries the type word, so the detail text drops its "LLM call"/"Tool"/"Blocked" prefix. Model, tool, and path text are unchanged, so the timeline tests and demo still find `.env`, `read_file`, and model names. No web font fetch: Inter if installed, else the system sans stack.
 
 ## Open bugs
 - (none known)

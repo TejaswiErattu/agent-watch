@@ -24,9 +24,9 @@ export function AddAgentForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-end gap-2">
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2">
       <div className="space-y-1">
-        <label htmlFor="newAgentId" className="text-sm font-medium">
+        <label htmlFor="newAgentId" className="block text-sm font-medium text-gray-700">
           Agent ID
         </label>
         <Input
@@ -38,7 +38,7 @@ export function AddAgentForm() {
       </div>
       <Button type="submit">Open</Button>
       {error ? (
-        <Alert variant="destructive" className="ml-2">
+        <Alert variant="destructive" className="basis-full">
           {error}
         </Alert>
       ) : null}

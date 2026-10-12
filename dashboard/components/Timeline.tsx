@@ -4,6 +4,8 @@ import * as React from "react";
 import { getTimeline, type TimelineQuery } from "@/lib/api";
 import type { Credentials } from "@/lib/credentials";
 import type { EventType, TimelineItem } from "@/lib/types";
+import { relativeTime } from "@/lib/time";
+import { cn } from "@/lib/utils";
 
 type Filter = "" | EventType;
 
@@ -12,17 +14,38 @@ export interface TimelineProps {
   agentId: string;
 }
 
+// The status pill carries the event type, so details skip the type prefix.
 function describeEvent(e: TimelineItem): string {
   switch (e.type) {
     case "llm_call":
-      return `LLM call ${e.model ?? ""} (in ${e.inputTokens ?? 0}, out ${e.outputTokens ?? 0})`;
+      return `${e.model ?? ""} (in ${e.inputTokens ?? 0}, out ${e.outputTokens ?? 0})`;
     case "tool_call":
-      return `Tool ${e.tool ?? ""} -> ${e.target ?? ""}`;
+      return `${e.tool ?? ""} -> ${e.target ?? ""}`;
     case "blocked":
-      return `Blocked ${e.violationType ?? ""} ${e.attemptedPath ?? ""}`;
+      return `${e.violationType ?? ""} ${e.attemptedPath ?? ""}`.trim();
     default:
       return e.type ?? "event";
   }
+}
+
+const PILLS: Record<EventType, { label: string; className: string }> = {
+  blocked: { label: "Blocked", className: "bg-red-100 text-red-800" },
+  llm_call: { label: "LLM call", className: "bg-brand-mint text-brand" },
+  tool_call: { label: "Tool call", className: "bg-gray-100 text-gray-700" },
+};
+
+function StatusPill({ type }: { type: EventType | null }) {
+  const pill = type ? PILLS[type] : undefined;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+        pill?.className ?? "bg-gray-100 text-gray-700"
+      )}
+    >
+      {pill?.label ?? "Event"}
+    </span>
+  );
 }
 
 export function Timeline({ creds, agentId }: TimelineProps) {
@@ -74,16 +97,16 @@ export function Timeline({ creds, agentId }: TimelineProps) {
   }, [cursor, loading, filter, load]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <label htmlFor="typeFilter" className="text-sm font-medium">
+        <label htmlFor="typeFilter" className="text-sm font-medium text-gray-700">
           Filter
         </label>
         <select
           id="typeFilter"
           value={filter}
           onChange={(e) => setFilter(e.target.value as Filter)}
-          className="h-9 rounded-md border border-gray-300 bg-white px-2 text-sm"
+          className="h-9 rounded-full border border-gray-300 bg-white px-3 text-sm text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-mid"
         >
           <option value="">All</option>
           <option value="llm_call">LLM calls</option>
@@ -96,16 +119,30 @@ export function Timeline({ creds, agentId }: TimelineProps) {
           {error}
         </div>
       ) : null}
-      <ul className="divide-y rounded-md border">
+      <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-100">
         {events.map((e, i) => (
-          <li key={e.eventId ?? i} className="p-3 text-sm">
-            <span className="text-gray-500">{e.ts}</span>{" "}
-            <span>{describeEvent(e)}</span>
+          <li
+            key={e.eventId ?? i}
+            className={cn(
+              "flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-3 text-sm",
+              e.type === "blocked" ? "border-l-4 border-l-red-600 bg-red-50" : "bg-white"
+            )}
+          >
+            <StatusPill type={e.type} />
+            <span className="min-w-0 flex-1 break-all text-gray-900">{describeEvent(e)}</span>
+            {e.ts ? (
+              <time dateTime={e.ts} title={e.ts} className="shrink-0 text-xs text-gray-600">
+                {relativeTime(e.ts, Date.now())}
+              </time>
+            ) : null}
           </li>
         ))}
       </ul>
+      {!loading && events.length === 0 && !error ? (
+        <p className="text-sm text-gray-600">No events yet.</p>
+      ) : null}
       <div ref={sentinelRef} aria-hidden className="h-1" />
-      {loading ? <p className="text-sm text-gray-500">Loading…</p> : null}
+      {loading ? <p className="text-sm text-gray-600">Loading…</p> : null}
     </div>
   );
 }
