@@ -66,7 +66,7 @@ Last updated: 2026-10-12 by Kiro session (7.7 dashboard polish, PR open)
   - No API, polling, or credential changes, no new deps, all demo labels kept. Dashboard vitest: 66 passed (51 old + 15 new). `npm run build` produces `out/`.
 
 ## In progress
-- 7.7 PR waiting for Tejaswi's review. After merge, Amplify rebuilds from `main`. Do a quick visual check on the live URL at desktop and phone width before recording.
+- 7.7 PR #3 (https://github.com/TejaswiErattu/agent-watch/pull/3) waiting for Tejaswi's review. After merge, Amplify rebuilds from `main`. Do a quick visual check on the live URL at desktop and phone width before recording.
 
 ## Next step (needs Tejaswi)
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
