@@ -5,7 +5,7 @@ from agentwatch_api.rules import EMPTY_CONFIG
 from agentwatch_api.service import list_inventory, new_record
 from agentwatch_api.store import InMemoryStore
 
-INVENTORY_FIELDS = {"agentId", "ownerId", "model", "firstSeen", "lastSeen", "totalSpendUsd"}
+INVENTORY_FIELDS = {"agentId", "ownerId", "model", "firstSeen", "lastSeen", "totalSpendUsd", "paused"}
 
 CREDS_A = Credentials(owner_id="alice", key_hash="a" * 64)
 CREDS_B = Credentials(owner_id="alice", key_hash="b" * 64)  # same owner, different key

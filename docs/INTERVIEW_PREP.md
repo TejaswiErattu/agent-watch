@@ -529,3 +529,15 @@ Format per task:
 **Q:** How do you keep a secret out of shell history and process listings? **A:** Read it from a 600-mode file into an env var, never pass it as an argument (`ps` shows argv), never `set -x`, and do the hashing inside the child process.
 **Q:** Why set the cap relative to current spend instead of a fixed number? **A:** Rolling 24h spend changes with every run. A fixed cap either trips immediately or never; spend + $0.002 gives a couple of successful calls and then a block.
 **Q:** Why a trap for cleanup? **A:** A failure midway would leave the live demo agents misconfigured. `trap ... EXIT` runs the reset on success, failure, or Ctrl-C.
+
+## 8.1 Pause_State, get_status and put_status
+
+**Conceptual:** A kill switch has to be state the agent can read, not a config field someone might overwrite. `paused` and `pausedAt` are top-level attributes on the agent record, separate from `guardrails`, so a rules save from the dashboard can never un-pause an agent and a pause never touches the rules.
+
+**Technical:** `put_status` validates the body (exactly `{"paused": bool}`), registers the agent with an empty config if needed, then runs one `UpdateItem SET paused = :p, pausedAt = :t` conditioned on `keyVerifier = :kv`. `get_status` on a missing agent returns not-paused without writing. Tradeoff: first contact costs two writes (create, then set) instead of one, which keeps `new_record` unchanged.
+
+**Q:** Why is `pausedAt` set by the server and not the client? **A:** Clocks on student laptops drift, and the client could lie. The server floors its own time to milliseconds, the same format as event timestamps, so timelines line up.
+
+**Q:** How do you add attributes to a live DynamoDB table without a migration? **A:** Make them optional with defaults on read. An old record with no `paused` attribute reads as `False`, and a not-paused record writes nothing, so v1 and v2 items coexist.
+
+**Q:** Why reject `{"paused": 1}`? **A:** Python treats `1 == True`, but a kill switch should not depend on truthiness. Strict types mean a typo gets a 400 instead of silently pausing or resuming.

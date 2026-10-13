@@ -136,6 +136,7 @@ def _inventory_item(rec: AgentRecord) -> dict:
         "firstSeen": rec.first_seen,
         "lastSeen": rec.last_seen,
         "totalSpendUsd": rec.total_spend_usd,
+        "paused": rec.paused,
     }
 
 
@@ -288,3 +289,47 @@ def get_spend(store: Store, creds: Credentials, agent_id: str, now: datetime) ->
     return Result(200, {"agentId": agent_id, "rollingSpendUsd": spend,
                         "windowStart": window_start, "windowEnd": window_end})
 
+
+
+# ---- Pause_State (v2 Req 27.1-27.7) ----
+
+
+def _status_body(agent_id: str, paused: bool, paused_at: str | None) -> dict:
+    return {"agentId": agent_id, "paused": paused, "pausedAt": paused_at}
+
+
+def get_status(store: Store, creds: Credentials, agent_id: str) -> Result:
+    """GET /agents/{agentId}/status. A missing record reads as not paused and creates nothing."""
+    if (e := validate_agent_id(agent_id)) is not None:
+        return _bad(e)
+    found = authorize(store, agent_id, creds)
+    if found == "forbidden":
+        return Result(403, FORBIDDEN)
+    if found is None:
+        return Result(200, _status_body(agent_id, False, None))
+    return Result(200, _status_body(agent_id, found.paused, found.paused_at))
+
+
+def parse_status(body) -> bool | ValidationError:
+    """Accept exactly {"paused": <bool>}; anything else names the `paused` field."""
+    if not isinstance(body, dict) or set(body) != {"paused"}:
+        return ValidationError("paused", 'body must be exactly {"paused": true|false}')
+    if not isinstance(body["paused"], bool):  # rejects 1, "yes", null
+        return ValidationError("paused", "must be a boolean")
+    return body["paused"]
+
+
+def put_status(store: Store, creds: Credentials, agent_id: str, body, now: datetime) -> Result:
+    """PUT /agents/{agentId}/status. Registers the agent (empty config) if it has no record."""
+    if (e := validate_agent_id(agent_id)) is not None:
+        return _bad(e)
+    paused = parse_status(body)
+    if isinstance(paused, ValidationError):
+        return _bad(paused)
+    if authorize_or_register(store, agent_id, creds, EMPTY_CONFIG) == "forbidden":
+        return Result(403, FORBIDDEN)
+    # On "created" the record holds paused=False; one more conditional write applies the value.
+    paused_at = _fmt_ts(now.replace(microsecond=now.microsecond // 1000 * 1000)) if paused else None
+    if not store.set_paused(agent_id, paused, paused_at, auth.key_verifier(creds.key_hash)):
+        return Result(403, FORBIDDEN)  # verifier replaced mid-flight
+    return Result(200, _status_body(agent_id, paused, paused_at))

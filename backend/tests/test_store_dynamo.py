@@ -439,3 +439,64 @@ def test_get_event_cost_reads_stored_cost_consistently():
 def test_get_event_cost_missing_returns_none():
     store = DynamoStore(TABLE, client=FakeClient())
     assert store.get_event_cost("agent-1", "x#y") is None
+
+
+# ---- set_paused (v2 task 8.1, Req 27.4) ----
+
+
+def test_set_paused_pause_sends_update_with_verifier_condition():
+    c = FakeClient()
+    store = DynamoStore(TABLE, client=c)
+    assert store.set_paused("agent-1", True, "2026-10-14T18:02:11.000Z", KV) is True
+    name, kwargs = c.calls[-1]
+    assert name == "update_item"
+    assert kwargs["TableName"] == TABLE
+    assert kwargs["Key"] == {"agentId": {"S": "agent-1"}, "sk": {"S": META_SK}}
+    assert kwargs["UpdateExpression"] == "SET paused = :p, pausedAt = :t"
+    assert kwargs["ConditionExpression"] == "keyVerifier = :kv"
+    assert kwargs["ExpressionAttributeValues"] == {
+        ":p": {"BOOL": True},
+        ":t": {"S": "2026-10-14T18:02:11.000Z"},
+        ":kv": {"S": KV},
+    }
+
+
+def test_set_paused_resume_writes_null_paused_at():
+    c = FakeClient()
+    assert DynamoStore(TABLE, client=c).set_paused("agent-1", False, None, KV) is True
+    values = c.calls[-1][1]["ExpressionAttributeValues"]
+    assert values[":p"] == {"BOOL": False}
+    assert values[":t"] == {"NULL": True}
+
+
+def test_set_paused_returns_false_on_conditional_failure():
+    c = FakeClient()
+    c.raise_on["update_item"] = ClientError(
+        {"Error": {"Code": "ConditionalCheckFailedException", "Message": "x"}}, "UpdateItem"
+    )
+    assert DynamoStore(TABLE, client=c).set_paused("agent-1", True, "t", KV) is False
+
+
+def test_set_paused_reraises_other_errors():
+    c = FakeClient()
+    c.raise_on["update_item"] = ClientError(
+        {"Error": {"Code": "ProvisionedThroughputExceededException", "Message": "x"}}, "UpdateItem"
+    )
+    with pytest.raises(ClientError):
+        DynamoStore(TABLE, client=c).set_paused("agent-1", True, "t", KV)
+
+
+def test_paused_record_round_trips_and_v1_item_defaults_to_not_paused():
+    rec = make_record(paused=True, paused_at="2026-10-14T18:02:11.000Z")
+    item = record_to_item(rec)
+    assert item["paused"] is True and item["pausedAt"] == "2026-10-14T18:02:11.000Z"
+    av = {k: to_av(v) for k, v in item.items()}
+    assert item_to_record({k: from_av(v) for k, v in av.items()}) == rec
+    # A not-paused record writes neither attribute; a v1 item (none present) reads as not paused.
+    plain = record_to_item(make_record())
+    assert "paused" not in plain and "pausedAt" not in plain
+    back = item_to_record(plain)
+    assert back.paused is False and back.paused_at is None
+    # A resumed item stores pausedAt as NULL, which reads back as None.
+    resumed = item_to_record({**plain, "paused": False, "pausedAt": None})
+    assert resumed.paused is False and resumed.paused_at is None

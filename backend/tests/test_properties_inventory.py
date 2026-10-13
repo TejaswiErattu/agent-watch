@@ -8,7 +8,7 @@ from agentwatch_api.rules import EMPTY_CONFIG
 from agentwatch_api.service import list_inventory, new_record
 from agentwatch_api.store import InMemoryStore
 
-INVENTORY_FIELDS = {"agentId", "ownerId", "model", "firstSeen", "lastSeen", "totalSpendUsd"}
+INVENTORY_FIELDS = {"agentId", "ownerId", "model", "firstSeen", "lastSeen", "totalSpendUsd", "paused"}
 
 owner_ids = st.sampled_from(["alice", "bob", "carol"])
 key_hashes = st.sampled_from([c * 64 for c in "0123"])

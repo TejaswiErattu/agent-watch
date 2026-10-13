@@ -56,6 +56,9 @@ class AgentRecord:
     last_seen: str | None = None
     model: str | None = None
     total_spend_usd: float = 0.0
+    # Pause_State (v2 Req 27.1): top-level, not part of the Guardrail_Config.
+    paused: bool = False
+    paused_at: str | None = None
 
 
 def record_to_item(r: AgentRecord) -> dict:
@@ -72,6 +75,11 @@ def record_to_item(r: AgentRecord) -> dict:
     for attr, val in (("firstSeen", r.first_seen), ("lastSeen", r.last_seen), ("model", r.model)):
         if val is not None:
             item[attr] = val
+    # Absent paused means false, so v1 records need no migration (Req 36.3).
+    if r.paused:
+        item["paused"] = True
+    if r.paused_at is not None:
+        item["pausedAt"] = r.paused_at
     return item
 
 
@@ -88,6 +96,8 @@ def item_to_record(item: dict) -> AgentRecord:
         last_seen=item.get("lastSeen"),
         model=item.get("model"),
         total_spend_usd=float(item.get("totalSpendUsd", 0.0)),
+        paused=bool(item.get("paused", False)),
+        paused_at=item.get("pausedAt"),  # absent or NULL -> None
     )
 
 
@@ -98,6 +108,8 @@ class Store(Protocol):
     def create_agent_if_absent(self, record: AgentRecord) -> bool: ...
 
     def put_config(self, agent_id: str, cfg: GuardrailConfig, key_verifier: str) -> bool: ...
+
+    def set_paused(self, agent_id: str, paused: bool, paused_at: str | None, key_verifier: str) -> bool: ...
 
     def record_event(self, event, cost: float, key_verifier: str) -> RecordResult: ...
 
@@ -142,6 +154,15 @@ class InMemoryStore:
         if item is None or item["keyVerifier"] != key_verifier:  # keyVerifier = :kv
             return False
         item["guardrails"] = to_json(cfg)
+        return True
+
+    def set_paused(self, agent_id: str, paused: bool, paused_at: str | None, key_verifier: str) -> bool:
+        item = self.items.get((agent_id, META_SK))
+        if item is None or item["keyVerifier"] != key_verifier:  # keyVerifier = :kv
+            return False
+        # Mirrors SET paused = :p, pausedAt = :t (NULL on resume).
+        item["paused"] = paused
+        item["pausedAt"] = paused_at
         return True
 
     # ---- events and queries (tasks 1.9, 1.10) ----
@@ -330,6 +351,25 @@ class DynamoStore:
                 ConditionExpression="keyVerifier = :kv",
                 ExpressionAttributeValues={
                     ":g": to_av(to_json(cfg)),
+                    ":kv": {"S": key_verifier},
+                },
+            )
+            return True
+        except Exception as err:
+            if _is_conditional_failure(err):
+                return False
+            raise
+
+    def set_paused(self, agent_id: str, paused: bool, paused_at: str | None, key_verifier: str) -> bool:
+        try:
+            self.client.update_item(
+                TableName=self.table_name,
+                Key={"agentId": {"S": agent_id}, "sk": {"S": META_SK}},
+                UpdateExpression="SET paused = :p, pausedAt = :t",
+                ConditionExpression="keyVerifier = :kv",
+                ExpressionAttributeValues={
+                    ":p": {"BOOL": paused},
+                    ":t": to_av(paused_at),  # {"NULL": True} on resume
                     ":kv": {"S": key_verifier},
                 },
             )
