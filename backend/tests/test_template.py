@@ -122,13 +122,15 @@ def test_cors_configuration(tpl):
     assert {"content-type", "x-agentwatch-owner", "x-agentwatch-key-hash"} <= allowed_headers
 
 
-SIX_ROUTES = {("POST", "/events"), ("GET", "/agents"), ("GET", "/agents/{agentId}/events"),
-              ("GET", "/agents/{agentId}/config"), ("PUT", "/agents/{agentId}/config"),
-              ("GET", "/agents/{agentId}/spend")}
+# v2 8.2 adds the two status routes (Req 27.19); the v1 pin of six became eight.
+EIGHT_ROUTES = {("POST", "/events"), ("GET", "/agents"), ("GET", "/agents/{agentId}/events"),
+                ("GET", "/agents/{agentId}/config"), ("PUT", "/agents/{agentId}/config"),
+                ("GET", "/agents/{agentId}/spend"),
+                ("GET", "/agents/{agentId}/status"), ("PUT", "/agents/{agentId}/status")}
 
 
-def test_exactly_six_routes_on_api_function_implicit_api(tpl):
-    # Every HttpApi event lives on ApiFunction and none sets ApiId, so all six
+def test_exactly_eight_routes_on_api_function_implicit_api(tpl):
+    # Every HttpApi event lives on ApiFunction and none sets ApiId, so all eight
     # attach to the implicit ServerlessHttpApi (the live API URL).
     routes = []
     for name, r in tpl["Resources"].items():
@@ -139,8 +141,16 @@ def test_exactly_six_routes_on_api_function_implicit_api(tpl):
                 assert name == "ApiFunction"
                 assert "ApiId" not in e["Properties"]
                 routes.append((e["Properties"]["Method"].upper(), e["Properties"]["Path"]))
-    assert len(routes) == 6
-    assert set(routes) == SIX_ROUTES
+    assert len(routes) == 8
+    assert set(routes) == EIGHT_ROUTES
+
+
+def test_status_route_events(tpl):
+    events = res(tpl, "ApiFunction")["Properties"]["Events"]
+    assert events["GetStatus"] == {"Type": "HttpApi",
+                                   "Properties": {"Method": "GET", "Path": "/agents/{agentId}/status"}}
+    assert events["PutStatus"] == {"Type": "HttpApi",
+                                   "Properties": {"Method": "PUT", "Path": "/agents/{agentId}/status"}}
 
 
 def test_default_route_throttling(tpl):

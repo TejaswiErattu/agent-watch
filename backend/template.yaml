@@ -91,6 +91,16 @@ Resources:
           Properties:
             Method: GET
             Path: /agents/{agentId}/spend
+        GetStatus:
+          Type: HttpApi
+          Properties:
+            Method: GET
+            Path: /agents/{agentId}/status
+        PutStatus:
+          Type: HttpApi
+          Properties:
+            Method: PUT
+            Path: /agents/{agentId}/status
 
   EventTable:
     Type: AWS::DynamoDB::Table

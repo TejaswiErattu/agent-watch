@@ -17,6 +17,16 @@ def _clean(s: str) -> str:
     return "".join(c if c.isprintable() else repr(c)[1:-1] for c in s)
 
 
+def _meta_lines(meta: dict, keys: tuple[str, ...]) -> list[str]:
+    """`key: value` for each key whose meta value is a str, int, or float (bools and containers skipped)."""
+    out = []
+    for key in keys:
+        v = meta.get(key)
+        if isinstance(v, (str, int, float)) and not isinstance(v, bool):
+            out.append(f"{key}: {_clean(str(v))}")
+    return out
+
+
 def format_alert(event: Event) -> tuple[str, str]:
     """(subject, body) for a blocked event."""
     item = event.item
@@ -30,14 +40,17 @@ def format_alert(event: Event) -> tuple[str, str]:
         f"violationType: {violation}",
         f"ts: {event.ts}",
     ]
+    meta = item.get("meta") or {}
     if violation == "spend_cap":
         lines.append(f"attemptedCostUsd: {item['attemptedCostUsd']!r}")
+    elif violation == "paused":
+        lines.extend(_meta_lines(meta, ("action", "model", "tool")))
     else:
         lines.append(f"attemptedPath: {_clean(item['attemptedPath'])}")
-    meta = item.get("meta") or {}
-    for key in ("tool", "entry"):
-        if isinstance(meta.get(key), str):
-            lines.append(f"{key}: {_clean(meta[key])}")
+    if violation in ("spend_cap", "blocked_path"):
+        for key in ("tool", "entry"):  # v1 lines, unchanged
+            if isinstance(meta.get(key), str):
+                lines.append(f"{key}: {_clean(meta[key])}")
     lines.append(f"eventId: {event.event_id}")
     return subject, "\n".join(lines) + "\n"
 
