@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 complete)
+Last updated: 2026-10-12 by Kiro session (7.5 local suites green; deployed rehearsal pending)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -59,7 +59,7 @@ Last updated: 2026-10-09 by Kiro session (6.5 AWS half, 6.6 checkpoint; group 6 
   - Email arrival not checked by the script (look at the inbox).
 
 ## In progress
-- (none)
+- 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
 
 ## Next step (needs Tejaswi)
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
