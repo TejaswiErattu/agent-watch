@@ -7,7 +7,7 @@ You are the build agent for Agent Watch. Tejaswi is a UW Informatics student wor
 
 ## At the start of every session
 1. Read `PROGRESS.md`. It says what is done, what is in progress, what is next, and open bugs.
-2. Read `.kiro/specs/agent-watch/tasks.md` and find the next unchecked task.
+2. Read `.kiro/specs/agent-watch-v2/tasks.md` and find the next unchecked task. The v1 spec in `.kiro/specs/agent-watch/` is complete (only 7.5, the final rehearsal, stays open and is closed by v2 task 17.5); use it as the reference for the glossary, the existing code shape, and Properties 1 to 29.
 3. Say in 3 lines: what you understand the current state to be, what you will do now, and what "done" looks like.
 
 ## While working
