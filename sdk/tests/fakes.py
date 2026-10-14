@@ -10,17 +10,23 @@ def spend_body(usd=0.0):
             "windowStart": "2026-10-08T12:00:00.000Z", "windowEnd": "2026-10-09T12:00:00.000Z"}
 
 
+def status_body(paused=False):
+    return {"agentId": "bot", "paused": paused,
+            "pausedAt": "2026-10-09T12:00:00.000Z" if paused else None}
+
+
 class FakeTransport:
     """Records every request. `outcomes` is a queue of Response or Exception; default 200 {}.
 
-    GET .../spend requests made by a Watcher are routed separately: they pop from
-    `spend_outcomes` (default 200 with 0.0 spend) and are recorded in `spend_requests`, not
-    `requests`. That keeps the config/event queues and request counts of tests that predate
-    spend sync unchanged. Pass `route_spend=False` for raw ApiClient tests that want one queue.
+    GET .../spend and .../status requests made by a Watcher are routed separately: they pop
+    from `spend_outcomes` / `status_outcomes` (defaults: 200 with 0.0 spend, 200 not paused)
+    and are recorded in `spend_requests` / `status_requests`, not `requests`. That keeps the
+    config/event queues and request counts of older tests unchanged. Pass `route_spend=False`
+    for raw ApiClient tests that want one queue (it turns off both side queues).
     """
 
     def __init__(self, outcomes=None, default=None, spend_outcomes=None, spend_default=None,
-                 route_spend=True):
+                 route_spend=True, status_outcomes=None, status_default=None):
         self.route_spend = route_spend
         self.requests: list[dict] = []
         self.outcomes = list(outcomes or [])
@@ -28,12 +34,18 @@ class FakeTransport:
         self.spend_requests: list[dict] = []
         self.spend_outcomes = list(spend_outcomes or [])
         self.spend_default = spend_default or Response(200, spend_body())
+        self.status_requests: list[dict] = []
+        self.status_outcomes = list(status_outcomes or [])
+        self.status_default = status_default or Response(200, status_body())
 
     def request(self, method, url, *, headers, json=None, timeout):
         rec = {"method": method, "url": url, "headers": dict(headers), "json": json, "timeout": timeout}
         if self.route_spend and url.endswith("/spend"):
             self.spend_requests.append(rec)
             out = self.spend_outcomes.pop(0) if self.spend_outcomes else self.spend_default
+        elif self.route_spend and url.endswith("/status"):
+            self.status_requests.append(rec)
+            out = self.status_outcomes.pop(0) if self.status_outcomes else self.status_default
         else:
             self.requests.append(rec)
             out = self.outcomes.pop(0) if self.outcomes else self.default

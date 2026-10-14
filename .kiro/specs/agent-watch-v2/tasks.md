@@ -32,7 +32,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
 ## Tasks
 
 - [ ] 8. Kill switch (pause and resume)
-  - [ ] 8.1 Add Pause_State to the store and the status service functions
+  - [x] 8.1 Add Pause_State to the store and the status service functions
     - Write the failing tests first. In `backend/tests/test_service_status.py`: `get_status` for a missing agent returns 200 `{paused: false, pausedAt: null}` and creates nothing; `put_status` on a missing agent creates the record with `EMPTY_CONFIG` and the submitted state; PUT then GET round trip; `pausedAt` is the floored server ts when paused and null when resumed; a wrong key gets 403 and changes nothing; bodies `{}`, `{"paused": "yes"}`, `{"paused": 1}`, `{"paused": true, "x": 1}` get 400 naming the field. Extend `backend/tests/test_store_dynamo.py`: `set_paused` issues `UpdateItem` with `SET paused = :p, pausedAt = :t`, condition `keyVerifier = :kv`, NULL `:t` on resume, and maps `ConditionalCheckFailedException` to `False`. Add Property 31 in `backend/tests/test_properties_status.py` (extend the generator to check `guardrails` is unchanged by status PUTs and that the inventory `paused` mirrors the record).
     - Implement per the design: `AgentRecord.paused`/`paused_at` with defaults, `record_to_item`/`item_to_record`, `Store.set_paused`, `InMemoryStore.set_paused`, `DynamoStore.set_paused`, `service.get_status`, `service.parse_status`, `service.put_status`, `_inventory_item["paused"]`.
     - Extend Property 6 (read routes never create records) with a `get_status` clause in its existing test.
@@ -40,19 +40,20 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `feat(backend): pause state, get_status and put_status`
 
   - [ ] 8.2 Route the status endpoints and accept `paused` blocked events
+    - Code DONE on feat/status-routes (PR #4). Waiting for Tejaswi to merge, deploy, and check GET /status.
     - Write the failing tests first. In `backend/tests/test_handler.py`: `GET /agents/{agentId}/status` and `PUT /agents/{agentId}/status` route to the new service functions, 401 without headers, 400 on a bad body, and the route table has exactly eight entries. In `backend/tests/test_template.py`: eight `HttpApi` events including `GetStatus` and `PutStatus`, and still exactly two policies. In `backend/tests/test_validation.py` and `test_alerts.py`: a `blocked` event with `violationType: "paused"` and `meta: {action: "llm_call", model: "m"}` validates with cost 0.0; `format_alert` for it lists `action` and `model`. Start Property 39 in `backend/tests/test_properties_blocked_types.py` with the `paused` clause and Property 38 in `backend/tests/test_properties_alert_content.py` (extend both in later groups).
     - Implement: `ROUTES` entries and `_get_status`/`_put_status` in `handlers/api.py`; `GetStatus`/`PutStatus` events in `backend/template.yaml`; `VIOLATION_TYPES` gains `paused` and `TYPE_FIELDS[("blocked", "paused")]`; `format_alert` branch for `paused`.
     - Branch `feat/status-routes`, open a PR with the GitHub MCP server, and ask Tejaswi to approve. After merge, Tejaswi deploys with `UsePreviousValue` for `AlertEmail` and `DashboardOrigin`, then checks `GET /agents/demo-bot/status` returns 200 with the right key and 403 with a wrong one. Record the result in `PROGRESS.md`.
     - _Requirements: 27.2, 27.4, 27.12, 27.19, 15.5_
     - Commit: `feat(infra): status routes; feat(backend): paused blocked events and alert text`
 
-  - [ ] 8.3 SDK status poll, Pause_State cache, and `AgentPaused`
+  - [x] 8.3 SDK status poll, Pause_State cache, and `AgentPaused`
     - Write the failing tests first. In `sdk/tests/fakes.py`, route `/status` requests to `status_outcomes`/`status_requests` with a default `200 {agentId, paused: false, pausedAt: null}` (mirror the `/spend` routing so no older test changes). In `sdk/tests/test_status_sync.py`: `init` fetches status once; a refresh happens only when 5 s have passed on the fake clock; failures, non-2xx, and malformed bodies (`paused: "true"`, missing key) keep the last state and warn; `PAUSE_NOT_ACTIVE_MSG` is logged exactly while no fetch has ever succeeded; `AgentPaused` is a `GuardrailBlocked` with `violation_type == "paused"`; `__init__.py` exports it.
     - Implement per the design: `CONTROL_INTERVAL_S`, `PAUSE_NOT_ACTIVE_MSG`, `AgentPaused`, `ApiClient.get_status`, `Watcher._fetch_status`, `_maybe_refresh_status`, `_check_paused`, `_pause_reported` reset on resume, and the `init` call.
     - _Requirements: 27.8, 27.9, 27.10, 27.11_
     - Commit: `feat(sdk): status poll and AgentPaused`
 
-  - [ ] 8.4 Enforce the pause before every LLM and tool call, once-per-episode reporting
+  - [x] 8.4 Enforce the pause before every LLM and tool call, once-per-episode reporting
     - Write the failing tests first. In `sdk/tests/test_pause_enforcement.py`: while paused, a wrapped Bedrock `converse`, a wrapped Anthropic `messages.create`, and a wrapped tool with no path arguments all raise `AgentPaused` and never invoke the inner call; exactly one `paused` blocked event is sent for the first blocked call, none for the next ones; after a status response with `paused: false`, calls run again and a later pause sends one new event; the pause check runs before the spend check (a paused agent over its cap raises `AgentPaused`, not `SpendCapExceeded`). Add Property 30 in `sdk/tests/test_properties_pause.py` (`deadline=None`).
     - Implement: `_check_paused("llm_call", model=...)` as the first line of `check_spend`; `_check_paused("tool_call", tool=...)` as the first line of the tool wrapper, before candidates are computed.
     - _Requirements: 27.12, 27.13, 27.14_
@@ -64,7 +65,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 27.15, 27.16, 27.17, 29.10_
     - Commit: `feat(dashboard): pause and resume control, status column`
 
-  - [ ] 8.6 Demo loop: `--sleep`, catch every guardrail
+  - [x] 8.6 Demo loop: `--sleep`, catch every guardrail
     - Write the failing tests first. Extend `sdk/tests/test_demo_agent.py`: `--sleep 2` parses (floats ≥ 0, negative rejected); the loop calls the injected `sleep` between runs and not after the last; an `AgentPaused` from the wrapped client prints `run i/N: AgentPaused: ...`, breaks, and exits 0; `SpendCapExceeded` behaves as before.
     - Implement in `demo/demo_agent.py`: `--sleep` argument, `main(..., sleep_s=0.0, sleep=time.sleep)`, catch `GuardrailBlocked` and print `type(e).__name__` and `e.detail`.
     - _Requirements: 27.18_
@@ -219,8 +220,8 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 32.8, 32.9_
     - Commit: `feat(docs): quickstart with agentwatch init; chore(sdk): 0.2.0`
 
-- [ ]* 14. Secret redaction (optional; start only if 13 is done before 2026-10-18)
-  - [ ]* 14.1 `redact.py` pure functions
+- [ ] 14. Secret redaction (optional; start only if 13 is done before 2026-10-18)
+  - [ ] 14.1 `redact.py` pure functions
     - Write the failing tests first. `sdk/tests/test_redact.py`: each Secret_Pattern matches its canonical synthetic example (`AKIAIOSFODNN7EXAMPLE`, `sk-ant-` + 30 chars, `ghp_` + 36 chars, a three-part `eyJ…` JWT, `-----BEGIN RSA PRIVATE KEY-----`) and not near-misses (`AKIA` + 15 chars, `sk-ant` without the dash tail); `openai_api_key` does not match an Anthropic key; `redact_request` rewrites Bedrock and Anthropic text locations (string content, text blocks, system as string and as blocks) and leaves the input deep-equal. Add Property 40 in `sdk/tests/test_properties_redact.py`.
     - Implement `sdk/agentwatch/redact.py` per the design.
     - _Requirements: 33.6, 33.7_
@@ -232,39 +233,39 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 33.1, 33.2, 33.3, 33.4, 33.5, 33.8_
     - Commit: `feat(sdk): redact secrets before the model call; feat(backend): redactSecrets and secret_redacted`
 
-  - [ ]* 14.3 Dashboard checkbox and demo `--leak` step
+  - [ ] 14.3 Dashboard checkbox and demo `--leak` step
     - Write the failing tests first. `RulesEditor.test.tsx`: "Redact secrets in prompts" checkbox round-trips. `test_bad_agent.py`: `--leak` adds a third step whose prompt contains `AKIAIOSFODNN7EXAMPLE`; when redaction is on the script prints `redacted 1 secret(s) before the call` and exits 0.
     - Implement both.
     - _Requirements: 33.9, 33.10_
     - Commit: `feat(dashboard): redact secrets toggle; feat(demo): --leak step`
 
-- [ ]* 15. Domain allowlist (optional)
-  - [ ]* 15.1 `allowedDomains` config and `blocked_domain` events
+- [ ] 15. Domain allowlist (optional)
+  - [ ] 15.1 `allowedDomains` config and `blocked_domain` events
     - Write the failing tests first. `test_rules.py`: null default, valid lists, invalid entries (`"http://x"`, `"a b"`, 254 chars, 101 entries) → 400. `test_validation.py`/`test_alerts.py`: `blocked_domain` requires `attemptedUrl`; alert lists `attemptedUrl`, `tool`, `host`. Extend Properties 32, 38, 39.
     - Implement in `rules.py`, `validation.py` (`OPTIONAL += ("attemptedUrl",)`, `TIMELINE_FIELDS`), `alerts.py`.
     - _Requirements: 34.1, 34.2, 34.6_
     - Commit: `feat(backend): allowedDomains and blocked_domain events`
 
-  - [ ]* 15.2 SDK domain check in the tool wrapper
+  - [ ] 15.2 SDK domain check in the tool wrapper
     - Write the failing tests first. `sdk/tests/test_guardrails_domains.py`: `attempted_urls` finds http/https URLs in strings and list items, lowercases hosts, strips a trailing dot, ignores `ftp://` and bare words; `domain_allowed` handles exact and `*.` entries; the wrapped tool raises `DomainBlocked` with `attemptedUrl` and `meta.host`, sends one event, and runs when every host is allowed or the list is null. Add Property 41.
     - Implement in `guardrails.py` and `client.py` (`DomainBlocked` exported; order pause → paths → commands → domains).
     - _Requirements: 34.3, 34.4, 34.5_
     - Commit: `feat(sdk): domain allowlist in the tool wrapper`
 
-  - [ ]* 15.3 Dashboard allowed domains editor
+  - [ ] 15.3 Dashboard allowed domains editor
     - Write the failing tests first. `RulesEditor.test.tsx`: shows "unrestricted" when null, "Restrict domains" switches to a list, add/remove, save sends the list or null.
     - Implement.
     - _Requirements: 34.7_
     - Commit: `feat(dashboard): allowed domains editor`
 
-- [ ]* 16. Operational alarms and reliable alerts (optional; alarms are cheap, Streams is last)
-  - [ ]* 16.1 CloudWatch alarms
+- [ ] 16. Operational alarms and reliable alerts (optional; alarms are cheap, Streams is last)
+  - [ ] 16.1 CloudWatch alarms
     - Write the failing tests first. `test_template.py`: `ApiErrorsAlarm` and `Api5xxAlarm` with the metrics, `Period: 300`, `Threshold: 1`, `TreatMissingData: notBreaching`, and `AlarmActions` = the topic.
     - Implement in `template.yaml` on `feat/alarms`; PR; Tejaswi deploys.
     - _Requirements: 35.1, 35.2, 35.6_
     - Commit: `feat(infra): CloudWatch alarms on Lambda errors and API 5xx`
 
-  - [ ]* 16.2 Stream-based alerts
+  - [ ] 16.2 Stream-based alerts
     - Write the failing tests first. `backend/tests/test_stream_alerts.py`: the handler ignores non-INSERT records and non-blocked events; publishes once after a successful conditional `UpdateItem` (`alerted`) and not when the condition fails; one bad record does not stop the batch. `test_template.py`: `StreamSpecification`, `AlertFunction` with the stream event and exactly the three policies; `ingest_event` skips publishing when `STREAM_ALERTS=1`.
     - Implement `handlers/stream_alerts.py`, the template, and the env flag on `feat/stream-alerts`; PR; deploy; confirm one email per block (not two) in `e2e.sh`.
     - _Requirements: 35.3, 35.4, 35.5, 35.6_

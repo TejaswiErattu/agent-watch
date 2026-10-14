@@ -553,3 +553,37 @@ Format per task:
 **Q:** Why does a `paused` event have no required field beyond `violationType`? **A:** A pause block has no attempted resource the server must check (no path, no cost). The details go in `meta`, which is already size- and depth-limited. If we required `model`, a paused tool call would fail validation.
 
 **Q:** Why only print scalar meta values in the alert? **A:** `meta` comes from the client. Printing nested objects risks huge or confusing emails; printing raw strings risks header or line injection. Scalars only, control characters escaped, means the worst case is a misleading value, not a forged line.
+
+## 8.3 SDK status poll and AgentPaused
+
+**Conceptual:** The dashboard can flip `paused`, but only the SDK can actually stop the agent. So the SDK keeps a cached Pause_State and refreshes it every 5 s, which means a pause lands within about one interval without a push channel. If it can't reach the server, it keeps the last known state and says so loudly.
+
+**Technical:** `_maybe_refresh_status` is timed from the last attempt (not the last success) under the Watcher lock, so an outage costs at most one request per 5 s. Only a real JSON bool counts as a valid `paused`; anything else is a failed sync. Tradeoff: a polling pull, not a push. It's simpler and works through any network, at the cost of up to 5 s lag and one small GET per interval while the agent is active.
+
+**Q:** Why poll instead of WebSockets or a push? **A:** The SDK runs on a student laptop behind arbitrary NATs. A short GET on the existing API needs no new infra, and polling happens only when the agent makes a call, so idle agents cost nothing.
+
+**Q:** What happens if the status endpoint is down? **A:** It fails open. The agent keeps its last known state, and while no fetch has ever succeeded it logs "pause control NOT active", so the gap is never silent.
+
+**Q:** Why time the next poll from the last attempt? **A:** Timing from the last success would retry on every call during an outage, which hammers a struggling API. Timing from the last attempt bounds it to one request per interval.
+
+## 8.4 Pause enforcement before every call
+
+**Conceptual:** A kill switch only works if nothing slips past it. The pause check is the first thing every wrapped LLM call and every wrapped tool runs, ahead of the spend and path checks. So a paused agent can't do anything, even a tool with no path arguments. One alert per pause episode keeps the inbox readable while a runaway loop hammers the wrapper.
+
+**Technical:** `_check_paused` runs first in `check_spend` and first in the tool wrapper. A test-and-set on `_pause_reported` under the Watcher lock means concurrent threads report one episode exactly once. The blocked event is sent outside the lock. A status response with `paused: false` clears the flag, so the next pause starts a new episode. Tradeoff: the lock covers only the flag, not the network send, so a slow POST never stalls other threads.
+
+**Q:** Why check pause before the spend cap? **A:** Pause is the stronger, human-issued signal. If both fire, the alert should say "paused", not "over budget", so the owner sees their own action took effect.
+
+**Q:** How do you avoid an alert storm from a loop calling a paused agent 100 times a second? **A:** One event per Pause_Episode. The first blocked call reports synchronously and later ones just raise locally, with no network traffic.
+
+**Q:** Is there a race between two threads on the first blocked call? **A:** The check and the set of `_pause_reported` happen under one lock, so only one thread wins the report. The send happens after the lock is released.
+
+## 8.6 Demo loop: --sleep and generic guardrail handling
+
+**Conceptual:** The kill-switch demo needs a runaway agent that keeps going long enough for a human to press Pause on camera. `--loop 20 --sleep 2` gives a 40 s window. The loop now treats any guardrail block as the clean end of the run, so new guardrails (commands, rate limit) work in the demo with no new code.
+
+**Technical:** `main` sleeps between runs (not after the last), through an injected `sleep` so tests take no real time. It catches the base class `GuardrailBlocked` and prints `type(e).__name__` and `e.detail`. `--sleep` rejects negatives, NaN, and infinity at parse time. Tradeoff: catching the base class means a future guardrail also exits 0, which is right for a demo but would hide a block in a script that should fail.
+
+**Q:** Why inject `sleep` instead of patching `time.sleep`? **A:** Dependency injection keeps the test explicit and local. Patching a global can leak into other tests or the SDK's own retry backoff.
+
+**Q:** Why validate `--sleep` for NaN and infinity? **A:** `float("inf")` parses fine and would hang the demo forever. Rejecting it at the argument boundary turns a confusing hang into a clear usage error.
