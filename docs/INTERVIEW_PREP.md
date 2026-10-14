@@ -542,6 +542,18 @@ Format per task:
 
 **Q:** Why reject `{"paused": 1}`? **A:** Python treats `1 == True`, but a kill switch should not depend on truthiness. Strict types mean a typo gets a 400 instead of silently pausing or resuming.
 
+## 8.2 Status routes and `paused` blocked events
+
+**Conceptual:** 8.1 built the pause logic; 8.2 exposes it. Two new HTTP API routes reach the same Lambda, and the event schema learns a third Violation_Type, `paused`, so the SDK can report "I refused a call because I'm paused" and the owner gets an email about it. The validation and alert code is now organized as one clause per Violation_Type, so the four types still to come each add a clause instead of another if/else.
+
+**Technical:** `ROUTES` gains `GET`/`PUT /agents/{agentId}/status`, both behind the existing 401 gate; PUT passes `datetime.now(timezone.utc)` so the service never reads a clock. `template.yaml` adds `GetStatus`/`PutStatus` events on the implicit API. `paused` events are meta-only, and `format_alert` prints `action`, then `model` or `tool`, only for str/int/float values, escaped by `_clean`. Tradeoff: `meta` is client-controlled, so the alert can show a false model name; it can't forge email lines or carry objects into the body.
+
+**Q:** Adding routes to a live API Gateway HTTP API: what could break? **A:** Replacing the API would change its URL. These are new `HttpApi` events on the implicit API, which is an in-place change (the same API id and the same URL). The test pins exactly eight routes, still no `ApiId`, and still exactly two IAM policies, so the change set can't widen permissions.
+
+**Q:** Why does a `paused` event have no required field beyond `violationType`? **A:** A pause block has no attempted resource the server must check (no path, no cost). The details go in `meta`, which is already size- and depth-limited. If we required `model`, a paused tool call would fail validation.
+
+**Q:** Why only print scalar meta values in the alert? **A:** `meta` comes from the client. Printing nested objects risks huge or confusing emails; printing raw strings risks header or line injection. Scalars only, control characters escaped, means the worst case is a misleading value, not a forged line.
+
 ## 8.3 SDK status poll and AgentPaused
 
 **Conceptual:** The dashboard can flip `paused`, but only the SDK can actually stop the agent. So the SDK keeps a cached Pause_State and refreshes it every 5 s, which means a pause lands within about one interval without a push channel. If it can't reach the server, it keeps the last known state and says so loudly.

@@ -341,3 +341,24 @@ def test_fields_of_other_types_are_dropped(make, foreign):
     assert isinstance(ev, Event), ev
     for name in foreign:
         assert name not in ev.item
+
+
+# ---- v2 8.2: paused blocked events ----
+
+
+def test_paused_blocked_event_validates_with_zero_cost():
+    from agentwatch_api.service import event_cost
+
+    body = blocked("paused", meta={"action": "llm_call", "model": "m"})
+    ev = validate_event(body, NOW)
+    assert isinstance(ev, Event), ev
+    assert ev.item["violationType"] == "paused"
+    assert ev.item["meta"] == {"action": "llm_call", "model": "m"}
+    assert event_cost(ev) == 0.0
+
+
+def test_paused_drops_other_types_fields():
+    body = blocked("paused", attemptedPath=".env", attemptedCostUsd=1.0, meta={"action": "tool_call"})
+    ev = validate_event(body, NOW)
+    assert isinstance(ev, Event), ev
+    assert "attemptedPath" not in ev.item and "attemptedCostUsd" not in ev.item

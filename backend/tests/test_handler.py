@@ -276,3 +276,84 @@ def test_post_body_parsed_once(store, monkeypatch):
     monkeypatch.setattr(api, "_json_body", counting)
     status, _ = call(http_event("POST /events", event_body()))
     assert status == 200 and len(calls) == 1
+
+
+# ---- v2 8.2: status routes ----
+
+STATUS_ROUTES = [("GET /agents/{agentId}/status", None), ("PUT /agents/{agentId}/status", {"paused": True})]
+
+
+def test_route_table_has_exactly_eight_entries():
+    assert set(api.ROUTES) == {
+        "POST /events", "GET /agents", "GET /agents/{agentId}/events",
+        "GET /agents/{agentId}/config", "PUT /agents/{agentId}/config",
+        "GET /agents/{agentId}/spend",
+        "GET /agents/{agentId}/status", "PUT /agents/{agentId}/status",
+    }
+    assert len(api.ROUTES) == 8
+
+
+def test_get_status_missing_agent_creates_nothing(store):
+    status, body = call(http_event("GET /agents/{agentId}/status", agent_id="ghost"))
+    assert (status, body) == (200, {"agentId": "ghost", "paused": False, "pausedAt": None})
+    assert store.items == {}
+
+
+def test_put_then_get_status(store):
+    status, body = call(http_event("PUT /agents/{agentId}/status", {"paused": True}, agent_id="bot"))
+    assert status == 200 and body["paused"] is True and body["agentId"] == "bot"
+    assert isinstance(body["pausedAt"], str) and body["pausedAt"].endswith("Z")
+    assert call(http_event("GET /agents/{agentId}/status", agent_id="bot")) == (200, body)
+    status, body = call(http_event("PUT /agents/{agentId}/status", {"paused": False}, agent_id="bot"))
+    assert (status, body) == (200, {"agentId": "bot", "paused": False, "pausedAt": None})
+
+
+def test_put_status_routes_to_service_with_utc_now(store, monkeypatch):
+    seen = {}
+
+    def fake_put_status(st, creds, agent_id, body, now):
+        seen.update(agent_id=agent_id, body=body, now=now, owner=creds.owner_id)
+        return api.Result(200, {"ok": True})
+
+    monkeypatch.setattr(api.service, "put_status", fake_put_status)
+    assert call(http_event("PUT /agents/{agentId}/status", {"paused": True}, agent_id="bot")) == (200, {"ok": True})
+    assert seen["agent_id"] == "bot" and seen["body"] == {"paused": True} and seen["owner"] == "tejaswi"
+    assert seen["now"].tzinfo is not None and seen["now"].utcoffset().total_seconds() == 0
+
+
+def test_get_status_routes_to_service(store, monkeypatch):
+    seen = []
+    monkeypatch.setattr(api.service, "get_status",
+                        lambda st, creds, agent_id: seen.append(agent_id) or api.Result(200, {"x": 1}))
+    assert call(http_event("GET /agents/{agentId}/status", agent_id="bot")) == (200, {"x": 1})
+    assert seen == ["bot"]
+
+
+@pytest.mark.parametrize("headers", BAD_HEADERS)
+@pytest.mark.parametrize("route,body", STATUS_ROUTES)
+def test_status_routes_401_without_credentials(store, route, body, headers):
+    ev = NoBodyEvent(http_event(route, body, agent_id="bot", headers=headers))
+    assert call(ev) == (401, {"error": "unauthorized"})
+    assert store.items == {}
+
+
+@pytest.mark.parametrize("bad", [{}, {"paused": "yes"}, {"paused": 1}, {"paused": True, "x": 1}, [True]])
+def test_put_status_bad_body_400(store, bad):
+    status, body = call(http_event("PUT /agents/{agentId}/status", bad, agent_id="bot"))
+    assert status == 400 and "paused" in body["error"]
+    assert store.items == {}
+
+
+def test_put_status_invalid_json_400(store):
+    status, body = call(http_event("PUT /agents/{agentId}/status", raw_body="{nope", agent_id="bot"))
+    assert status == 400 and "JSON" in body["error"]
+    assert store.items == {}
+
+
+def test_status_forbidden_through_handler(store):
+    call(http_event("PUT /agents/{agentId}/config", CFG, agent_id="bot"))
+    snap = store.snapshot()
+    other = {"X-Agentwatch-Owner": "tejaswi", "X-Agentwatch-Key-Hash": "b" * 64}
+    for route, body in STATUS_ROUTES:
+        assert call(http_event(route, body, agent_id="bot", headers=other)) == (403, {"error": "forbidden"})
+    assert store.snapshot() == snap

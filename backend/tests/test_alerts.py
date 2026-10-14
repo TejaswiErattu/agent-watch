@@ -82,3 +82,40 @@ def test_sns_publisher_calls_client():
     c = FakeSns()
     SnsPublisher("arn:aws:sns:us-west-2:123456789012:t", client=c).publish("S", "B")
     assert c.kw == {"TopicArn": "arn:aws:sns:us-west-2:123456789012:t", "Subject": "S", "Message": "B"}
+
+
+# ---- v2 8.2: paused alert text ----
+
+
+def paused(meta) -> Event:
+    b = {"agentId": "demo-bot", "ownerId": "tejaswi", "ts": TS, "eventId": "cd" * 16,
+         "type": "blocked", "violationType": "paused", "meta": meta}
+    e = validate_event(b, NOW)
+    assert isinstance(e, Event), e
+    return e
+
+
+def test_paused_llm_call_body_lists_action_and_model():
+    subject, body = format_alert(paused({"action": "llm_call", "model": "m"}))
+    assert "paused" in subject and "demo-bot" in subject
+    lines = body.splitlines()
+    assert "action: llm_call" in lines and "model: m" in lines
+    assert lines.index("action: llm_call") < lines.index("model: m")
+    assert "attemptedPath" not in body and "attemptedCostUsd" not in body
+
+
+def test_paused_tool_call_body_lists_action_and_tool():
+    _, body = format_alert(paused({"action": "tool_call", "tool": "read_file"}))
+    lines = body.splitlines()
+    assert "action: tool_call" in lines and "tool: read_file" in lines
+
+
+def test_paused_meta_non_scalar_skipped_and_control_chars_escaped():
+    _, body = format_alert(paused({"action": "llm_call\nFAKE: x", "model": {"nested": 1}}))
+    assert "\nFAKE" not in body and "action: llm_call\\nFAKE: x" in body
+    assert "model:" not in body
+
+
+def test_paused_numeric_meta_printed():
+    _, body = format_alert(paused({"action": "tool_call", "tool": 7}))
+    assert "tool: 7" in body.splitlines()

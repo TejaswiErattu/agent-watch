@@ -32,6 +32,7 @@ TYPE_FIELDS = {
     "tool_call": ("tool", "target"),
     ("blocked", "spend_cap"): ("violationType", "attemptedCostUsd"),
     ("blocked", "blocked_path"): ("violationType", "attemptedPath"),
+    ("blocked", "paused"): ("violationType",),  # meta-only: {action, model? | tool?}
 }
 
 
@@ -142,7 +143,8 @@ def _validate_common(body: dict) -> ValidationError | None:
 
 
 STR_MAX = 1024
-VIOLATION_TYPES = ("spend_cap", "blocked_path")
+VIOLATION_TYPES = ("spend_cap", "blocked_path", "paused")
+META_ONLY_VIOLATIONS = ("paused",)  # no required field beyond violationType and meta
 
 
 def _req_str(body: dict, name: str, *, allow_empty: bool = False) -> ValidationError | None:
@@ -194,6 +196,8 @@ def _validate_type_specific(body: dict) -> ValidationError | None:
         c = body["attemptedCostUsd"]
         if isinstance(c, bool) or not isinstance(c, (int, float)) or not math.isfinite(c) or c < 0:
             return ValidationError("attemptedCostUsd", "must be a finite number >= 0")
+        return None
+    if vt in META_ONLY_VIOLATIONS:
         return None
     return _req_str(body, "attemptedPath")
 

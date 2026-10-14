@@ -111,6 +111,18 @@ def _get_spend(deps, creds, event, log_ctx):
     return service.get_spend(deps.store, creds, agent_id, datetime.now(timezone.utc))
 
 
+def _get_status(deps, creds, event, log_ctx):
+    agent_id = _agent_id(event)
+    log_ctx["agent_id"] = _valid_or_none(agent_id)
+    return service.get_status(deps.store, creds, agent_id)
+
+
+def _put_status(deps, creds, event, log_ctx):
+    agent_id = _agent_id(event)
+    log_ctx["agent_id"] = _valid_or_none(agent_id)
+    return service.put_status(deps.store, creds, agent_id, _json_body(event), datetime.now(timezone.utc))
+
+
 ROUTES = {
     "POST /events": _post_events,
     "GET /agents": _get_agents,
@@ -118,6 +130,8 @@ ROUTES = {
     "GET /agents/{agentId}/config": _get_config,
     "PUT /agents/{agentId}/config": _put_config,
     "GET /agents/{agentId}/spend": _get_spend,
+    "GET /agents/{agentId}/status": _get_status,
+    "PUT /agents/{agentId}/status": _put_status,
 }
 
 
