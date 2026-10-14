@@ -565,3 +565,13 @@ Format per task:
 **Q:** How do you avoid an alert storm from a loop calling a paused agent 100 times a second? **A:** One event per Pause_Episode. The first blocked call reports synchronously and later ones just raise locally, with no network traffic.
 
 **Q:** Is there a race between two threads on the first blocked call? **A:** The check and the set of `_pause_reported` happen under one lock, so only one thread wins the report. The send happens after the lock is released.
+
+## 8.6 Demo loop: --sleep and generic guardrail handling
+
+**Conceptual:** The kill-switch demo needs a runaway agent that keeps going long enough for a human to press Pause on camera. `--loop 20 --sleep 2` gives a 40 s window. The loop now treats any guardrail block as the clean end of the run, so new guardrails (commands, rate limit) work in the demo with no new code.
+
+**Technical:** `main` sleeps between runs (not after the last), through an injected `sleep` so tests take no real time. It catches the base class `GuardrailBlocked` and prints `type(e).__name__` and `e.detail`. `--sleep` rejects negatives, NaN, and infinity at parse time. Tradeoff: catching the base class means a future guardrail also exits 0, which is right for a demo but would hide a block in a script that should fail.
+
+**Q:** Why inject `sleep` instead of patching `time.sleep`? **A:** Dependency injection keeps the test explicit and local. Patching a global can leak into other tests or the SDK's own retry backoff.
+
+**Q:** Why validate `--sleep` for NaN and infinity? **A:** `float("inf")` parses fine and would hang the demo forever. Rejecting it at the argument boundary turns a confusing hang into a clear usage error.

@@ -65,7 +65,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 27.15, 27.16, 27.17, 29.10_
     - Commit: `feat(dashboard): pause and resume control, status column`
 
-  - [ ] 8.6 Demo loop: `--sleep`, catch every guardrail
+  - [x] 8.6 Demo loop: `--sleep`, catch every guardrail
     - Write the failing tests first. Extend `sdk/tests/test_demo_agent.py`: `--sleep 2` parses (floats ≥ 0, negative rejected); the loop calls the injected `sleep` between runs and not after the last; an `AgentPaused` from the wrapped client prints `run i/N: AgentPaused: ...`, breaks, and exits 0; `SpendCapExceeded` behaves as before.
     - Implement in `demo/demo_agent.py`: `--sleep` argument, `main(..., sleep_s=0.0, sleep=time.sleep)`, catch `GuardrailBlocked` and print `type(e).__name__` and `e.detail`.
     - _Requirements: 27.18_

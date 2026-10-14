@@ -130,3 +130,72 @@ def test_parse_args_loop(demo, argv, want):
 def test_parse_args_rejects_non_positive_loop(demo, bad):
     with pytest.raises(SystemExit):
         demo.parse_args(["--loop", bad])
+
+
+# ---- 8.6: --sleep and generic guardrail handling ----
+
+@pytest.mark.parametrize("argv,want", [([], 0.0), (["--sleep", "2"], 2.0), (["--sleep", "0.5"], 0.5),
+                                       (["--sleep", "0"], 0.0)])
+def test_parse_args_sleep(demo, argv, want):
+    assert demo.parse_args(argv).sleep == want
+
+
+@pytest.mark.parametrize("bad", ["-1", "-0.1", "x", "nan", "inf"])
+def test_parse_args_rejects_bad_sleep(demo, bad):
+    with pytest.raises(SystemExit):
+        demo.parse_args(["--sleep", bad])
+
+
+def test_loop_sleeps_between_runs_not_after_last(demo, tmp_path):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("study plan")
+    slept = []
+    assert demo.main(client=FakeBedrock(), transport=capped_transport(demo, None), notes_path=str(notes),
+                     loop=3, sleep_s=2.0, sleep=slept.append) == 0
+    assert slept == [2.0, 2.0]
+
+
+def test_loop_without_sleep_never_sleeps(demo, tmp_path):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("study plan")
+    slept = []
+    demo.main(client=FakeBedrock(), transport=capped_transport(demo, None), notes_path=str(notes),
+              loop=3, sleep=slept.append)
+    assert slept == []
+
+
+def test_loop_stops_cleanly_on_agent_paused(demo, tmp_path, capsys, monkeypatch):
+    import agentwatch
+    from agentwatch.client import CONTROL_INTERVAL_S
+    from fakes import status_body
+
+    notes = tmp_path / "notes.txt"
+    notes.write_text("study plan")
+    t = capped_transport(demo, None)
+    # init: not paused. The injected sleep advances a fake clock past the control interval,
+    # so the poll before run 2 sees paused: run 1 succeeds, run 2 raises AgentPaused.
+    t.status_outcomes = [Response(200, status_body(False)), Response(200, status_body(True))]
+    br = FakeBedrock()
+    clock = {"t": 0.0}
+    real_init = agentwatch.init
+    monkeypatch.setattr(agentwatch, "init", lambda **kw: real_init(**kw, clock=lambda: clock["t"]))
+
+    def sleep(s):
+        clock["t"] += CONTROL_INTERVAL_S
+
+    assert demo.main(client=br, transport=t, notes_path=str(notes), loop=5, sleep_s=1.0, sleep=sleep) == 0
+    out = capsys.readouterr().out
+    assert len(br.calls) == 1
+    assert "run 2/5: AgentPaused: agent demo-bot is paused" in out
+    assert "run 3/5" not in out
+    blocked = [e for e in events(t) if e["type"] == "blocked"]
+    assert [b["violationType"] for b in blocked] == ["paused"]
+
+
+def test_spend_cap_message_unchanged(demo, tmp_path, capsys):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("study plan")
+    demo.main(client=FakeBedrock(), transport=capped_transport(demo, 0.0027), notes_path=str(notes), loop=3)
+    out = capsys.readouterr().out
+    assert "run 3/3: SpendCapExceeded: " in out
+    assert "(Agent Watch stopped the call before it ran; an alert is on its way)" in out
