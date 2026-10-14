@@ -39,8 +39,8 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5, 27.6, 27.7, 36.3_
     - Commit: `feat(backend): pause state, get_status and put_status`
 
-  - [ ] 8.2 Route the status endpoints and accept `paused` blocked events
-    - Code DONE on feat/status-routes (PR #4). Waiting for Tejaswi to merge, deploy, and check GET /status.
+  - [x] 8.2 Route the status endpoints and accept `paused` blocked events
+    - DONE: PR #4 merged and deployed 2026-10-14. `GET /agents/demo-bot/status` returned 200 `{"paused": false}` with the right key and 403 with a wrong key.
     - Write the failing tests first. In `backend/tests/test_handler.py`: `GET /agents/{agentId}/status` and `PUT /agents/{agentId}/status` route to the new service functions, 401 without headers, 400 on a bad body, and the route table has exactly eight entries. In `backend/tests/test_template.py`: eight `HttpApi` events including `GetStatus` and `PutStatus`, and still exactly two policies. In `backend/tests/test_validation.py` and `test_alerts.py`: a `blocked` event with `violationType: "paused"` and `meta: {action: "llm_call", model: "m"}` validates with cost 0.0; `format_alert` for it lists `action` and `model`. Start Property 39 in `backend/tests/test_properties_blocked_types.py` with the `paused` clause and Property 38 in `backend/tests/test_properties_alert_content.py` (extend both in later groups).
     - Implement: `ROUTES` entries and `_get_status`/`_put_status` in `handlers/api.py`; `GetStatus`/`PutStatus` events in `backend/template.yaml`; `VIOLATION_TYPES` gains `paused` and `TYPE_FIELDS[("blocked", "paused")]`; `format_alert` branch for `paused`.
     - Branch `feat/status-routes`, open a PR with the GitHub MCP server, and ask Tejaswi to approve. After merge, Tejaswi deploys with `UsePreviousValue` for `AlertEmail` and `DashboardOrigin`, then checks `GET /agents/demo-bot/status` returns 200 with the right key and 403 with a wrong one. Record the result in `PROGRESS.md`.

@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-14 by Kiro session (v2 8.3, 8.4, 8.6 done on main; 8.2 waiting on PR #4)
+Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deployed)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -59,19 +59,17 @@ Last updated: 2026-10-14 by Kiro session (v2 8.3, 8.4, 8.6 done on main; 8.2 wai
   - Email arrival not checked by the script (look at the inbox).
 
 - v2 8.1 DONE (c6e00fb): Pause_State on the agent record, `get_status`/`put_status`, Property 31.
+- v2 8.2 DONE (PR #4, merged as b6f37e5, deployed and verified by Tejaswi on 2026-10-14). `GET`/`PUT /agents/{agentId}/status` are live, and `paused` blocked events and alert text are deployed. `GET /agents/demo-bot/status` returned 200 `{"paused": false}` with the right key and 403 with a wrong key. Backend: 501 passed.
 - v2 8.3 DONE (57b612c): SDK `ApiClient.get_status`, Watcher Pause_State cache polled every `CONTROL_INTERVAL_S` (5 s) from the last attempt, `PAUSE_NOT_ACTIVE_MSG` while no status fetch has succeeded, `AgentPaused` exported. `FakeTransport` routes `/status` to `status_outcomes`/`status_requests` (off with `route_spend=False`).
 - v2 8.4 DONE (e46d9b9): `_check_paused` is the first line of `check_spend` and of the tool wrapper (before paths). One `paused` blocked event per Pause_Episode (`meta {action, model|tool}`). Property 30 added.
 - v2 8.6 DONE (a2fa875): `demo_agent.py --sleep S` (finite, >= 0) sleeps between runs; the loop catches `GuardrailBlocked` and prints `run i/N: <Type>: <detail> (... an alert is on its way)`.
 - Suites after 8.6: backend 468 passed, SDK 277 passed. Dashboard not touched this session.
 
 ## In progress
-- 8.2 code DONE on `feat/status-routes` (PR #4), NOT merged or deployed. Waiting for Tejaswi.
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
 
 ## Next step (needs Tejaswi)
-- 2026-10-14: Review and merge PR #4 (`feat/status-routes`), then `sam deploy` with `UsePreviousValue` for `AlertEmail` and `DashboardOrigin`. Check `GET /agents/demo-bot/status` returns 200 with the right key and 403 with a wrong one. Record the result here and tick 8.2.
-- Next build task after the merge: 8.5 (dashboard pause button, Status column). Then 8.7, the kill-switch checkpoint on AWS: `python demo/demo_agent.py --loop 20 --sleep 2`, then press Pause.
-- Until PR #4 is deployed, the SDK's status poll gets a 404 from the live API. It fails open and logs `agentwatch: pause control NOT active (status fetch failed)` once per 5 s poll while an agent runs. That's expected, not a bug.
+- Next build task: 8.5 (dashboard pause button, Status column). Then 8.7, the kill-switch checkpoint on AWS: `python demo/demo_agent.py --loop 20 --sleep 2`, then press Pause.
 - v2 spec added 2026-10-12: `.kiro/specs/agent-watch-v2/` (requirements 27-37, Properties 30-42, task groups 8-17). (8.1, 8.3, 8.4, 8.6 are now done; see above.) Feature freeze 2026-10-19 (group 17). Do the 7.5 click-path rehearsal first (baseline timings), tick 7.5, then start v2 at 8.1. v2 task 17.5 is the final rehearsal before recording. Note: scripts/e2e.sh already ran on 2026-10-12 with the +0.002 margin: RESULT PASS, demo-bot blocked on run 3/5.
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
