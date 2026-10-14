@@ -47,7 +47,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 27.2, 27.4, 27.12, 27.19, 15.5_
     - Commit: `feat(infra): status routes; feat(backend): paused blocked events and alert text`
 
-  - [ ] 8.3 SDK status poll, Pause_State cache, and `AgentPaused`
+  - [x] 8.3 SDK status poll, Pause_State cache, and `AgentPaused`
     - Write the failing tests first. In `sdk/tests/fakes.py`, route `/status` requests to `status_outcomes`/`status_requests` with a default `200 {agentId, paused: false, pausedAt: null}` (mirror the `/spend` routing so no older test changes). In `sdk/tests/test_status_sync.py`: `init` fetches status once; a refresh happens only when 5 s have passed on the fake clock; failures, non-2xx, and malformed bodies (`paused: "true"`, missing key) keep the last state and warn; `PAUSE_NOT_ACTIVE_MSG` is logged exactly while no fetch has ever succeeded; `AgentPaused` is a `GuardrailBlocked` with `violation_type == "paused"`; `__init__.py` exports it.
     - Implement per the design: `CONTROL_INTERVAL_S`, `PAUSE_NOT_ACTIVE_MSG`, `AgentPaused`, `ApiClient.get_status`, `Watcher._fetch_status`, `_maybe_refresh_status`, `_check_paused`, `_pause_reported` reset on resume, and the `init` call.
     - _Requirements: 27.8, 27.9, 27.10, 27.11_

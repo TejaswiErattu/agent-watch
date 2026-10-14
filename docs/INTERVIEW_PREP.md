@@ -541,3 +541,15 @@ Format per task:
 **Q:** How do you add attributes to a live DynamoDB table without a migration? **A:** Make them optional with defaults on read. An old record with no `paused` attribute reads as `False`, and a not-paused record writes nothing, so v1 and v2 items coexist.
 
 **Q:** Why reject `{"paused": 1}`? **A:** Python treats `1 == True`, but a kill switch should not depend on truthiness. Strict types mean a typo gets a 400 instead of silently pausing or resuming.
+
+## 8.3 SDK status poll and AgentPaused
+
+**Conceptual:** The dashboard can flip `paused`, but only the SDK can actually stop the agent. So the SDK keeps a cached Pause_State and refreshes it every 5 s, which means a pause lands within about one interval without a push channel. If it can't reach the server, it keeps the last known state and says so loudly.
+
+**Technical:** `_maybe_refresh_status` is timed from the last attempt (not the last success) under the Watcher lock, so an outage costs at most one request per 5 s. Only a real JSON bool counts as a valid `paused`; anything else is a failed sync. Tradeoff: a polling pull, not a push. It's simpler and works through any network, at the cost of up to 5 s lag and one small GET per interval while the agent is active.
+
+**Q:** Why poll instead of WebSockets or a push? **A:** The SDK runs on a student laptop behind arbitrary NATs. A short GET on the existing API needs no new infra, and polling happens only when the agent makes a call, so idle agents cost nothing.
+
+**Q:** What happens if the status endpoint is down? **A:** It fails open. The agent keeps its last known state, and while no fetch has ever succeeded it logs "pause control NOT active", so the gap is never silent.
+
+**Q:** Why time the next poll from the last attempt? **A:** Timing from the last success would retry on every call during an outage, which hammers a struggling API. Timing from the last attempt bounds it to one request per interval.

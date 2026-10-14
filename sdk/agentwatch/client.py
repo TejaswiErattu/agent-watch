@@ -55,6 +55,11 @@ class PathBlocked(GuardrailBlocked):
         super().__init__("blocked_path", detail)
 
 
+class AgentPaused(GuardrailBlocked):
+    def __init__(self, detail: str) -> None:
+        super().__init__("paused", detail)
+
+
 @dataclass(frozen=True)
 class Credentials:
     """ownerId plus Key_Hash. The plaintext key is never kept; repr hides the hash."""
@@ -162,6 +167,9 @@ class ApiClient:
     def get_spend(self, agent_id: str) -> Response:
         return self._call("GET", f"/agents/{agent_id}/spend")
 
+    def get_status(self, agent_id: str) -> Response:
+        return self._call("GET", f"/agents/{agent_id}/status")
+
 
 # ---- retry policy (task 3.4) ----
 
@@ -259,6 +267,8 @@ class Sender:
 
 SYNC_INTERVAL_S = 60.0
 GUARDRAILS_NOT_ACTIVE_MSG = "agentwatch: guardrails NOT active (config fetch failed)"
+CONTROL_INTERVAL_S = 5.0  # status poll: a dashboard pause lands within about 5 s (Req 27.9)
+PAUSE_NOT_ACTIVE_MSG = "agentwatch: pause control NOT active (status fetch failed)"
 
 
 @dataclass(frozen=True)
@@ -295,6 +305,12 @@ def _parse_spend(body) -> float | None:
     return float(v)
 
 
+def _parse_status(body) -> bool | None:
+    """`paused` from a status response, or None if missing/not a real bool (a failed sync)."""
+    v = body.get("paused") if isinstance(body, dict) else None
+    return v if isinstance(v, bool) else None
+
+
 class Watcher:
     """One per agent. Holds credentials, the cached config, and the sender."""
 
@@ -313,6 +329,11 @@ class Watcher:
         self._spend_lock = threading.Lock()
         self._local_spend = 0.0
         self._last_spend_attempt: float | None = None
+        # Pause_State cache (Req 27.8-27.11). Starts unpaused: fail open, but loudly.
+        self._paused = False
+        self._last_status_ok: float | None = None
+        self._last_status_attempt: float | None = None
+        self._pause_reported = False  # one paused event per Pause_Episode
 
     def __repr__(self) -> str:
         return f"Watcher(agent_id={self.agent_id!r}, owner_id={self.owner_id!r})"
@@ -386,6 +407,55 @@ class Watcher:
             if last is not None and self._clock() - last < SYNC_INTERVAL_S:
                 return
             self._fetch_spend()
+
+    # ---- status poll (task 8.3) ----
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
+    def _fetch_status(self) -> None:
+        """Replace the cached Pause_State. Any failure keeps it and warns (Req 27.10, 27.11)."""
+        self._last_status_attempt = self._clock()
+        try:
+            resp = self._api.get_status(self.agent_id)  # 2 s timeout via ApiClient
+        except TransportError as e:
+            return self._status_failed(str(e))
+        except Exception as e:
+            return self._status_failed(type(e).__name__)
+        value = _parse_status(resp.body) if 200 <= resp.status < 300 else None
+        if value is None:
+            return self._status_failed(f"status {resp.status}")
+        self._paused = value
+        self._last_status_ok = self._last_status_attempt
+        if not value:
+            self._pause_reported = False  # resumed: the next pause is a new episode
+
+    def _status_failed(self, reason: str) -> None:
+        if self._last_status_ok is None:
+            _log.warning(PAUSE_NOT_ACTIVE_MSG)
+            _log.debug("agentwatch: status fetch failure reason: %s", reason)
+        else:
+            _log.warning("agentwatch: status fetch failed (%s); keeping last pause state", reason)
+
+    def _maybe_refresh_status(self) -> None:
+        """Refetch when CONTROL_INTERVAL_S has passed since the last attempt (Req 27.9)."""
+        with self._lock:
+            last = self._last_status_attempt
+            if last is not None and self._clock() - last < CONTROL_INTERVAL_S:
+                return
+            self._fetch_status()
+
+    def _check_paused(self, action: str, **detail) -> None:
+        """Raise AgentPaused while paused; report only the first block of each episode.
+        Wired into the LLM and tool wrappers by task 8.4."""
+        self._maybe_refresh_status()
+        if not self._paused:
+            return
+        if not self._pause_reported:
+            self._pause_reported = True
+            self._send_blocked_sync(violationType="paused", meta={"action": action, **detail})
+        raise AgentPaused(f"agent {self.agent_id} is paused (resume it in the dashboard)")
 
     # ---- events (task 3.11) ----
 
@@ -602,6 +672,7 @@ def init(agent_id: str, owner_id: str, api_key: str, endpoint: str | None = None
     w = Watcher(agent_id, owner_id, api, sender, clock or time.monotonic)
     w._maybe_refresh_config()
     w._maybe_sync_spend()  # Req 7.2; a failure starts Local_Spend_Total at 0.0 (Req 7.10)
+    w._maybe_refresh_status()  # Req 27.8; a failure starts unpaused and logs PAUSE_NOT_ACTIVE_MSG
     return w
 
 
