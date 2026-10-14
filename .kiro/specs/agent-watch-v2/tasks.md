@@ -53,7 +53,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 27.8, 27.9, 27.10, 27.11_
     - Commit: `feat(sdk): status poll and AgentPaused`
 
-  - [ ] 8.4 Enforce the pause before every LLM and tool call, once-per-episode reporting
+  - [x] 8.4 Enforce the pause before every LLM and tool call, once-per-episode reporting
     - Write the failing tests first. In `sdk/tests/test_pause_enforcement.py`: while paused, a wrapped Bedrock `converse`, a wrapped Anthropic `messages.create`, and a wrapped tool with no path arguments all raise `AgentPaused` and never invoke the inner call; exactly one `paused` blocked event is sent for the first blocked call, none for the next ones; after a status response with `paused: false`, calls run again and a later pause sends one new event; the pause check runs before the spend check (a paused agent over its cap raises `AgentPaused`, not `SpendCapExceeded`). Add Property 30 in `sdk/tests/test_properties_pause.py` (`deadline=None`).
     - Implement: `_check_paused("llm_call", model=...)` as the first line of `check_spend`; `_check_paused("tool_call", tool=...)` as the first line of the tool wrapper, before candidates are computed.
     - _Requirements: 27.12, 27.13, 27.14_

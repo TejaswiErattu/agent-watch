@@ -447,13 +447,14 @@ class Watcher:
             self._fetch_status()
 
     def _check_paused(self, action: str, **detail) -> None:
-        """Raise AgentPaused while paused; report only the first block of each episode.
-        Wired into the LLM and tool wrappers by task 8.4."""
+        """Raise AgentPaused while paused; report only the first block of each episode (Req 27.13)."""
         self._maybe_refresh_status()
-        if not self._paused:
-            return
-        if not self._pause_reported:
+        with self._lock:  # test-and-set, so two threads can't both report one episode
+            if not self._paused:
+                return
+            report = not self._pause_reported
             self._pause_reported = True
+        if report:  # send outside the lock: a slow POST must not stall other threads' status checks
             self._send_blocked_sync(violationType="paused", meta={"action": action, **detail})
         raise AgentPaused(f"agent {self.agent_id} is paused (resume it in the dashboard)")
 
@@ -513,7 +514,9 @@ class Watcher:
                         "(messages.create)")
 
     def check_spend(self, model: str, request: dict) -> None:
-        """Run before every LLM call (Req 7.1, 7.8). Raises SpendCapExceeded after reporting the block."""
+        """Run before every LLM call (Req 7.1, 7.8). Pause first (Req 27.12), then spend.
+        Raises AgentPaused or SpendCapExceeded after reporting the block."""
+        self._check_paused("llm_call", model=str(model)[:200])
         self._maybe_refresh_config()  # Req 21.2
         self._maybe_sync_spend()      # Req 7.4, 7.9
         cap = self._config.daily_spend_cap_usd
@@ -555,6 +558,7 @@ class Watcher:
 
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
+            self._check_paused("tool_call", tool=tool_name[:200])  # every tool, before paths (Req 27.12)
             bound = _bind(sig, args, kwargs)
             named = _named_paths(bound, path_arg)
             candidates = _candidate_paths(named, args, kwargs)

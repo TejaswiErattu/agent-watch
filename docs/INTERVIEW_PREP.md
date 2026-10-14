@@ -553,3 +553,15 @@ Format per task:
 **Q:** What happens if the status endpoint is down? **A:** It fails open. The agent keeps its last known state, and while no fetch has ever succeeded it logs "pause control NOT active", so the gap is never silent.
 
 **Q:** Why time the next poll from the last attempt? **A:** Timing from the last success would retry on every call during an outage, which hammers a struggling API. Timing from the last attempt bounds it to one request per interval.
+
+## 8.4 Pause enforcement before every call
+
+**Conceptual:** A kill switch only works if nothing slips past it. The pause check is the first thing every wrapped LLM call and every wrapped tool runs, ahead of the spend and path checks. So a paused agent can't do anything, even a tool with no path arguments. One alert per pause episode keeps the inbox readable while a runaway loop hammers the wrapper.
+
+**Technical:** `_check_paused` runs first in `check_spend` and first in the tool wrapper. A test-and-set on `_pause_reported` under the Watcher lock means concurrent threads report one episode exactly once. The blocked event is sent outside the lock. A status response with `paused: false` clears the flag, so the next pause starts a new episode. Tradeoff: the lock covers only the flag, not the network send, so a slow POST never stalls other threads.
+
+**Q:** Why check pause before the spend cap? **A:** Pause is the stronger, human-issued signal. If both fire, the alert should say "paused", not "over budget", so the owner sees their own action took effect.
+
+**Q:** How do you avoid an alert storm from a loop calling a paused agent 100 times a second? **A:** One event per Pause_Episode. The first blocked call reports synchronously and later ones just raise locally, with no network traffic.
+
+**Q:** Is there a race between two threads on the first blocked call? **A:** The check and the set of `_pause_reported` happen under one lock, so only one thread wins the report. The send happens after the lock is released.
