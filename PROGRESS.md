@@ -66,13 +66,19 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - Suites after 8.6: backend 468 passed, SDK 277 passed. Dashboard not touched this session.
 - v2 8.5 DONE: `StatusResponse` type, optional `InventoryItem.paused`, `getStatus`/`putStatus` in `lib/api.ts`, `components/PauseButton.tsx` (two-click pause with Cancel, one-click resume, error `Alert` keeps the old label), Status column in the inventory ("Paused" badge, "Active" otherwise), and an agent-page Status section that GETs status on load and again after each toggle. `npm run build` still exports `/` and `/agent`. Dashboard: 64 passed. Amplify rebuilds from `main` on push.
 - v2 8.7 DONE (verified manually by Tejaswi on the deployed stack, 2026-10-14). She ran `demo_agent.py --loop 20 --sleep 2` and pressed Pause agent, then Confirm pause, on demo-bot. The loop stopped with `AgentPaused`, and the alert email arrived. The inventory Paused badge, "Paused since" on the agent page, and the `paused` timeline row all showed. Resume worked. Pause-to-stop time: NOT RECORDED (the report left it blank; see Next step). Group 8 complete.
+- v2 9.1 DONE (645aee3): `blockedCommands` in Guardrail_Config. Optional on input (default `[]`), always in output; ≤100 entries, each 1–256 chars and must compile with `re.IGNORECASE`. The 400 names the entry index, never the `re.error` text. Properties 32 and 34 added. Four existing tests now expect the third key (Req 28.3); the commit message says why.
+- v2 9.2 DONE (93538fe): `blocked_command` Violation_Type (`attemptedCommand` required, ≤1024), `attemptedCommand` in TimelineItem, and alert lines `attemptedCommand`, `tool`, `pattern` (escaped). Properties 38 and 39 each gained a clause. `test_service_timeline.py` TIMELINE_FIELDS gained the key.
+- v2 9.3 DONE (b59f320): `guardrails.py` `COMMAND_ARG_NAMES`, `command_strings`, `compile_patterns` (skip + warn once), `first_blocked_command`. Property 33's pure half added.
+- v2 9.4 DONE (2024d3b): `ConfigResponse.blocked_commands` (default `()`), `parse_config_response` reads it (missing → `()`, wrong type → malformed), patterns compiled once per fetch, `_check_commands` after `_check_paths`, `CommandBlocked` exported, `@aw.tool(command_arg=...)`. Property 33's wrapped-tool half added.
+- Suites after 9.4: backend 536 passed, SDK 312 passed, dashboard 64 passed (not touched since 8.5).
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
 
 ## Next step (needs Tejaswi)
 - Pause-to-stop time for 8.7 is NOT recorded yet (Tejaswi's report had a blank `__ s`). Fill it in here when known. It's also the baseline for the 17.5 rehearsal.
-- Next build task: 9.5 (after 9.1–9.4).
+- Next build task: 9.5 (dashboard blocked commands editor and presets). Then 9.6 (bad_agent `run_shell` step and e2e step).
+- 9.1/9.2 backend changes are NOT deployed. Deploy before 9.7, with `UsePreviousValue` for `AlertEmail` and `DashboardOrigin`. Until then the live API rejects a PUT with `blockedCommands` (400, unknown field) and rejects `blocked_command` events (400). The SDK is unaffected: a missing `blockedCommands` reads as `()`.
 - v2 spec added 2026-10-12: `.kiro/specs/agent-watch-v2/` (requirements 27-37, Properties 30-42, task groups 8-17). (8.1, 8.3, 8.4, 8.6 are now done; see above.) Feature freeze 2026-10-19 (group 17). Do the 7.5 click-path rehearsal first (baseline timings), tick 7.5, then start v2 at 8.1. v2 task 17.5 is the final rehearsal before recording. Note: scripts/e2e.sh already ran on 2026-10-12 with the +0.002 margin: RESULT PASS, demo-bot blocked on run 3/5.
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
@@ -149,6 +155,10 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - 2026-10-14 (8.6) The loop message changed from "an alert email is on its way" to "an alert is on its way" to match the design (webhooks are coming in group 11). `e2e.sh` greps only for the exception name, so it's unaffected. `--sleep` also rejects NaN and inf, since inf would hang the demo.
 
 - 2026-10-14 (8.5) `InventoryItem.paused` is optional and anything but `true` shows "Active", so an older backend without the field still renders. The pause confirm step has a Cancel button (not in the spec) so a misclick on "Pause agent" can be backed out. After a toggle the page re-reads `GET /status` instead of trusting the PUT response alone.
+
+- 2026-10-14 (9.1) 9.1/9.2 went straight to `main` as tasks.md specifies (like 8.1), not through a PR. The change is additive (an optional key and a new Violation_Type), and stored v1 records parse unchanged. The deploy is still Tejaswi's step.
+- 2026-10-14 (9.4) `command_arg` has no matching effect of its own. Every string argument is already a candidate, so naming an arg only puts it first in candidate order and makes it the event `target` when the tool has no path arg (design).
+- 2026-10-14 (9.4) Found while testing: `blockedPaths: [".env"]` does NOT block `run_shell("cat .env")`. The path matcher sees one component, `"cat .env"`, not `.env`. A command pattern (the `.env` read preset in 9.5) is what covers shell reads. This is worth a line in the README Known limitations during group 17.
 
 ## Open bugs
 - (none known)
