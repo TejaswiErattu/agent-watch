@@ -22,7 +22,14 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
-from .guardrails import blocked_entry_for, spend_decision
+from .guardrails import (
+    COMMAND_ARG_NAMES,
+    blocked_entry_for,
+    command_strings,
+    compile_patterns,
+    first_blocked_command,
+    spend_decision,
+)
 from .pricing import cost_from_table, estimate_pending_cost, max_output_tokens, warn_unknown_model
 
 REQUEST_TIMEOUT_S = 2.0
@@ -58,6 +65,11 @@ class PathBlocked(GuardrailBlocked):
 class AgentPaused(GuardrailBlocked):
     def __init__(self, detail: str) -> None:
         super().__init__("paused", detail)
+
+
+class CommandBlocked(GuardrailBlocked):
+    def __init__(self, detail: str) -> None:
+        super().__init__("blocked_command", detail)
 
 
 @dataclass(frozen=True)
@@ -276,6 +288,7 @@ class ConfigResponse:
     daily_spend_cap_usd: float | None
     blocked_paths: tuple[str, ...]
     pricing: dict
+    blocked_commands: tuple[str, ...] = ()  # Req 28.4; default keeps positional v1 calls valid
 
 
 # Before any successful fetch: no cap, no paths, every cost 0.0 (Req 21.4).
@@ -294,7 +307,11 @@ def parse_config_response(body) -> ConfigResponse | None:
         return None
     if not isinstance(paths, list) or not all(isinstance(x, str) and x for x in paths):
         return None
-    return ConfigResponse(None if cap is None else float(cap), tuple(paths), p)
+    # Missing -> () for an older backend; present but wrong type -> malformed (Req 36.4).
+    cmds = g.get("blockedCommands", [])
+    if not isinstance(cmds, list) or not all(isinstance(x, str) and x for x in cmds):
+        return None
+    return ConfigResponse(None if cap is None else float(cap), tuple(paths), p, tuple(cmds))
 
 
 def _parse_spend(body) -> float | None:
@@ -323,6 +340,7 @@ class Watcher:
         self._clock = clock
         self._lock = threading.Lock()
         self._config: ConfigResponse = EMPTY
+        self._compiled_commands: tuple = ()  # rebuilt once per fetched config (Req 28.9)
         self._last_config_ok: float | None = None
         self._last_config_attempt: float | None = None
         # Local_Spend_Total: server Rolling_24h_Spend at the last good sync, plus calls since (Req 7.2-7.4).
@@ -353,6 +371,7 @@ class Watcher:
         parsed = parse_config_response(resp.body) if 200 <= resp.status < 300 else None
         if parsed is None:
             return self._config_failed(f"status {resp.status}")
+        self._compiled_commands = compile_patterns(parsed.blocked_commands)  # skips + warns once (Req 28.8)
         self._config = parsed
         self._last_config_ok = self._last_config_attempt
 
@@ -501,6 +520,19 @@ class Watcher:
                                     meta={"tool": tool_name[:200], "entry": entry[:200]})
             raise PathBlocked(path)
 
+    def _check_commands(self, tool_name: str, strings: list[str]) -> None:
+        """Block if any Command_String matches any Blocked_Command (Req 28.6). Runs after paths."""
+        compiled = self._compiled_commands  # the config was refreshed by _check_paths just before
+        if not compiled or not strings:
+            return
+        hit = first_blocked_command(strings, compiled)
+        if hit is None:
+            return
+        s, pattern = hit
+        self._send_blocked_sync(violationType="blocked_command", attemptedCommand=s[:1024],
+                                meta={"tool": tool_name[:200], "pattern": pattern[:200]})
+        raise CommandBlocked(f"{s[:200]} matches blocked pattern {pattern!r}")
+
     # ---- LLM wrapper (task 3.13) ----
 
     def wrap(self, client):
@@ -540,17 +572,18 @@ class Watcher:
 
     # ---- tool wrapper ----
 
-    def tool(self, fn=None, *, name: str | None = None, path_arg: str | list[str] | None = None):
-        """Decorator: @aw.tool, @aw.tool(), or @aw.tool(name=..., path_arg=...)."""
+    def tool(self, fn=None, *, name: str | None = None, path_arg: str | list[str] | None = None,
+             command_arg: str | list[str] | None = None):
+        """Decorator: @aw.tool, @aw.tool(), or @aw.tool(name=..., path_arg=..., command_arg=...)."""
         def decorate(f):
-            return self._wrap_tool(f, name or f.__name__, path_arg)
+            return self._wrap_tool(f, name or f.__name__, path_arg, command_arg)
         return decorate(fn) if callable(fn) else decorate
 
     def tools(self, mapping: dict) -> dict:
         """Same keys; each function wrapped as a tool named by its key."""
         return {k: self._wrap_tool(f, k, None) for k, f in mapping.items()}
 
-    def _wrap_tool(self, f, tool_name: str, path_arg):
+    def _wrap_tool(self, f, tool_name: str, path_arg, command_arg=None):
         try:
             sig = inspect.signature(f)
         except (TypeError, ValueError):
@@ -564,7 +597,17 @@ class Watcher:
             candidates = _candidate_paths(named, args, kwargs)
             if candidates:
                 self._check_paths(tool_name, named, candidates)  # raises PathBlocked
-            target = _short(_safe_str(named[0])) if named else _first_arg_repr(args, kwargs)
+            else:
+                self._maybe_refresh_config()  # _check_paths would have; commands need a fresh config too
+            named_cmds = _named_commands(bound, command_arg)
+            strings = command_strings(named_cmds, args, kwargs)
+            self._check_commands(tool_name, strings)  # raises CommandBlocked; path first (Req 28.17)
+            if named:
+                target = _short(_safe_str(named[0]))
+            elif command_arg and (cmd := command_strings(named_cmds, (), {})):
+                target = _short(cmd[0])  # Design: command_arg only picks `target` when no path arg
+            else:
+                target = _first_arg_repr(args, kwargs)
             meta = {"args": _fit_args([_short(repr(a)) for a in (*args, *kwargs.values())][:MAX_ARGS])}
             try:
                 return f(*args, **kwargs)
@@ -622,6 +665,16 @@ def _named_paths(bound: dict, path_arg) -> list:
     else:
         names = PATH_ARG_NAMES
     return [bound[n] for n in names if _is_pathlike(bound.get(n))]
+
+
+def _named_commands(bound: dict, command_arg) -> list:
+    """Values of the named command arguments, in name order (Req 28.5). Matching covers every string
+    anyway; naming only puts these first in candidate order and lets `command_arg` pick `target`."""
+    if command_arg:
+        names = (command_arg,) if isinstance(command_arg, str) else tuple(command_arg)
+    else:
+        names = COMMAND_ARG_NAMES
+    return [bound[n] for n in names if n in bound]
 
 
 def _candidate_paths(named: list, args, kwargs) -> list:

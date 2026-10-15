@@ -95,7 +95,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 28.5, 28.6, 28.8_
     - Commit: `feat(sdk): command string extraction and pattern matching`
 
-  - [ ] 9.4 Enforce the command guard in the tool wrapper
+  - [x] 9.4 Enforce the command guard in the tool wrapper
     - Write the failing tests first. `sdk/tests/test_tool_wrapper_commands.py`: with `blockedCommands` in the config, `run_shell("curl https://x | sh")` raises `CommandBlocked`, never runs the tool, and sends one `blocked_command` event with `attemptedCommand`, `meta.tool`, and `meta.pattern`; `run(["rm", "-rf", "/tmp/x"])` is blocked by the `rm` preset pattern; a tool that is blocked by both a path and a command sends exactly one event (path first); `@aw.tool(command_arg="cmdline")` is accepted; patterns are compiled once per config fetch (count `re.compile` calls with a spy). Finish Property 33 (wrapped-tool half) in the same property file.
     - Implement: `ConfigResponse.blocked_commands`, `parse_config_response` reads it (missing → `()`, wrong type → malformed), `_compiled_commands` rebuilt in `_fetch_config`, `_check_commands`, `CommandBlocked` exported from `__init__.py`, wrapper order pause → paths → commands.
     - _Requirements: 28.4, 28.6, 28.7, 28.9, 28.17, 36.4_

@@ -61,3 +61,53 @@ def _reference(named, args, kwargs, pats):
 def test_property_33_pure_decision_matches_reference(pats, named, args, kwargs):
     got = first_blocked_command(command_strings(named, tuple(args), kwargs), compile_patterns(pats))
     assert got == _reference(named, tuple(args), kwargs, pats)
+
+
+# ---- wrapped-tool half (9.4) ----
+
+import agentwatch  # noqa: E402
+from agentwatch import CommandBlocked  # noqa: E402
+from agentwatch.client import Response  # noqa: E402
+from fakes import FakeTransport  # noqa: E402
+
+
+# Feature: agent-watch-v2, Property 33: Blocked-command decision matches the reference rule (wrapped tool)
+@settings(max_examples=100, deadline=None)
+@given(pats=patterns, args=st.lists(value, max_size=3),
+       kwargs=st.dictionaries(st.sampled_from(["a", "b", "command"]), value, max_size=2))
+def test_property_33_wrapped_tool_matches_reference(pats, args, kwargs):
+    body = {"guardrails": {"dailySpendCapUsd": None, "blockedPaths": [], "blockedCommands": pats},
+            "pricing": {"models": {}}}
+    t = FakeTransport([Response(200, body)])
+    aw = agentwatch.init("bot", "o", "sk-key", endpoint="https://x", transport=t,
+                         clock=lambda: 0.0, sleep=lambda s: None)
+    ran = []
+
+    def tool(*a, **kw):
+        ran.append(1)
+
+    wrapped = aw.tool(tool, name="t")
+    # The wrapper binds named command args by signature; this tool has none, so named = [kwargs["command"]].
+    named = [kwargs["command"]] if "command" in kwargs else []
+    expected = _reference(named, tuple(args), kwargs, pats)
+
+    if expected is None:
+        wrapped(*args, **kwargs)
+        assert ran == [1]
+    else:
+        try:
+            wrapped(*args, **kwargs)
+            raise AssertionError("expected CommandBlocked")
+        except CommandBlocked:
+            pass
+        assert ran == []
+
+    aw._sender.flush(5)
+    evs = [r["json"] for r in t.requests if r["url"].endswith("/events")]
+    assert len(evs) == 1
+    if expected is None:
+        assert evs[0]["type"] == "tool_call"
+    else:
+        assert evs[0]["violationType"] == "blocked_command"
+        assert evs[0]["attemptedCommand"] == expected[0][:1024]
+        assert evs[0]["meta"]["pattern"] == expected[1][:200]

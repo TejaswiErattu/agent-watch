@@ -635,3 +635,15 @@ Format per task:
 **Q:** If one pattern is broken, why not fail the whole config? **A:** The server already rejects patterns that don't compile, so a bad one here means a version skew. Skipping that one and enforcing the rest is safer than dropping every command rule, and the warning makes the gap visible.
 
 **Q:** How do you test a regex guard well? **A:** With a property test against an independently written reference rule. Generated patterns (including hostile ones), messy whitespace, mixed-type lists, and named args all have to agree with the reference on every example.
+
+## 9.4 Command guard in the tool wrapper
+
+**Conceptual:** This is where a dangerous shell command actually gets stopped. Every wrapped tool call runs three checks before the tool executes: pause, then paths, then commands. The first rule that fires blocks the call, reports exactly one event, and raises, so `curl … | sh` never reaches a shell.
+
+**Technical:** `parse_config_response` reads `blockedCommands` (missing means `()`, wrong type means a malformed response that keeps the last good config). `_fetch_config` compiles the patterns once per fetch. The wrapper builds Command_Strings and calls `_check_commands` after `_check_paths`, which sends a `blocked_command` event synchronously and raises `CommandBlocked`. `command_arg=` only changes ordering and `target`. Tradeoff: every string argument is checked, so over-blocking is possible, but under-blocking isn't.
+
+**Q:** Why compile patterns per config fetch and not per call? **A:** A tool in a tight loop would recompile every pattern on every call. Fetches happen at most once per 60 s, so compile cost is amortized to nearly zero, and a spy test pins it.
+
+**Q:** A call matches both a blocked path and a blocked command. What happens? **A:** The path check runs first and raises, so only one `blocked_path` event is sent. One action gets one alert and one timeline row, never two.
+
+**Q:** Is regex blocking a real security boundary? **A:** No. It's a seatbelt for a careless agent, not a sandbox against a malicious one. Obfuscation like `$(echo cm0= | base64 -d)` gets past it. Real isolation would be a container or a syscall filter, and the README says so.
