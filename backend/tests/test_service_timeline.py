@@ -14,7 +14,8 @@ OTHER = Credentials(owner_id="tejaswi", key_hash="b" * 64)
 
 TIMELINE_FIELDS = {
     "ts", "eventId", "type", "model", "tool", "target", "inputTokens",
-    "outputTokens", "costUsd", "violationType", "attemptedCostUsd", "attemptedPath", "meta",
+    "outputTokens", "costUsd", "violationType", "attemptedCostUsd", "attemptedPath",
+    "attemptedCommand", "meta",
 }
 
 

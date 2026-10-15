@@ -20,7 +20,7 @@ EVENT_TYPES = ("llm_call", "tool_call", "blocked")
 REQUIRED = ("agentId", "ownerId", "ts", "eventId", "type")
 OPTIONAL = (
     "model", "tool", "target", "inputTokens", "outputTokens", "costUsd",
-    "violationType", "attemptedCostUsd", "attemptedPath", "meta",
+    "violationType", "attemptedCostUsd", "attemptedPath", "attemptedCommand", "meta",
 )
 KNOWN_FIELDS = frozenset(REQUIRED + OPTIONAL)
 META_MAX_BYTES = 4096
@@ -33,6 +33,7 @@ TYPE_FIELDS = {
     ("blocked", "spend_cap"): ("violationType", "attemptedCostUsd"),
     ("blocked", "blocked_path"): ("violationType", "attemptedPath"),
     ("blocked", "paused"): ("violationType",),  # meta-only: {action, model? | tool?}
+    ("blocked", "blocked_command"): ("violationType", "attemptedCommand"),  # meta {tool, pattern}
 }
 
 
@@ -143,7 +144,7 @@ def _validate_common(body: dict) -> ValidationError | None:
 
 
 STR_MAX = 1024
-VIOLATION_TYPES = ("spend_cap", "blocked_path", "paused")
+VIOLATION_TYPES = ("spend_cap", "blocked_path", "paused", "blocked_command")
 META_ONLY_VIOLATIONS = ("paused",)  # no required field beyond violationType and meta
 
 
@@ -199,6 +200,8 @@ def _validate_type_specific(body: dict) -> ValidationError | None:
         return None
     if vt in META_ONLY_VIOLATIONS:
         return None
+    if vt == "blocked_command":
+        return _req_str(body, "attemptedCommand")
     return _req_str(body, "attemptedPath")
 
 

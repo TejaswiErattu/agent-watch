@@ -45,6 +45,9 @@ def format_alert(event: Event) -> tuple[str, str]:
         lines.append(f"attemptedCostUsd: {item['attemptedCostUsd']!r}")
     elif violation == "paused":
         lines.extend(_meta_lines(meta, ("action", "model", "tool")))
+    elif violation == "blocked_command":
+        lines.append(f"attemptedCommand: {_clean(item['attemptedCommand'])}")
+        lines.extend(_meta_lines(meta, ("tool", "pattern")))
     else:
         lines.append(f"attemptedPath: {_clean(item['attemptedPath'])}")
     if violation in ("spend_cap", "blocked_path"):

@@ -83,7 +83,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 28.1, 28.2, 28.3, 36.1, 36.2, 36.5_
     - Commit: `feat(backend): blockedCommands in Guardrail_Config`
 
-  - [ ] 9.2 Accept `blocked_command` events and alert on them
+  - [x] 9.2 Accept `blocked_command` events and alert on them
     - Write the failing tests first. `test_validation.py`: `blocked_command` requires `attemptedCommand` (non-empty str, ≤1024), other fields dropped, cost 0.0; `attemptedCommand` appears in the timeline item and is null for other types. `test_alerts.py`: body lists `attemptedCommand`, `tool`, and `pattern`, control chars escaped. Extend Properties 38 and 39 with the `blocked_command` clause.
     - Implement: `OPTIONAL += ("attemptedCommand",)`, `VIOLATION_TYPES`, `TYPE_FIELDS`, `_validate_type_specific`, `TIMELINE_FIELDS`, `format_alert` branch.
     - _Requirements: 28.10, 28.11_

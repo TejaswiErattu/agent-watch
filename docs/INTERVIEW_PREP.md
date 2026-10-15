@@ -611,3 +611,15 @@ Format per task:
 **Q:** Why not echo the `re.error` message back in the 400? **A:** It can quote the input back, and error strings from a library aren't a stable API. "entry 3 is not a valid regular expression" tells the user which entry to fix without reflecting their input.
 
 **Q:** Isn't storing user regexes a ReDoS risk? **A:** The server only compiles them, which is fast and never runs them against input. Matching happens in the owner's own SDK process, on their own patterns, so a catastrophic pattern only slows down the person who wrote it.
+
+## 9.2 blocked_command events and alert text
+
+**Conceptual:** When the SDK refuses a shell command, the server has to accept the report, store it on the timeline, and email the owner what was attempted and which rule caught it. It's the fourth Violation_Type, added as one clause per type, so the validator, timeline, and alert each gained a small branch, not a rewrite.
+
+**Technical:** `blocked_command` requires `attemptedCommand`: a non-empty str of at most 1024 chars, checked by the shared `_req_str`. Fields belonging to other types are dropped, cost is 0.0, and the timeline projects `attemptedCommand` (null elsewhere). The alert prints the command through `_clean`, then `tool` and `pattern` from meta only when they're scalars. Tradeoff: `pattern` comes from the client, so the email could name a wrong pattern, but it can't inject lines.
+
+**Q:** The command string is attacker-influenced. How do you keep it from forging email content? **A:** Every non-printable character is escaped before it goes in the body, so a `\n` becomes the two characters `\n`. One field is always one line, and the subject never includes it.
+
+**Q:** Why cap `attemptedCommand` at 1024 chars? **A:** It bounds item size and email size. The SDK truncates to 1024 before sending, so a legitimate client never hits the 400, and a hostile one can't push large blobs into DynamoDB through this field.
+
+**Q:** How did you keep adding types from breaking old ones? **A:** Property tests per type, written as one clause per Violation_Type. The v1 properties stay untouched as a regression baseline, and each new type adds a clause to the v2 property rather than editing old tests.

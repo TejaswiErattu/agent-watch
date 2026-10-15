@@ -59,11 +59,21 @@ def _paused(draw):
     return {"meta": meta}, lines
 
 
+@st.composite
+def _blocked_command(draw):
+    cmd = draw(st.text(min_size=1, max_size=1024))
+    tool, pattern = draw(st.one_of(scalars, non_scalars)), draw(st.one_of(scalars, non_scalars))
+    lines = [f"attemptedCommand: {_clean(cmd)}"]
+    lines += [ln for ln in (_meta_line("tool", tool), _meta_line("pattern", pattern)) if ln is not None]
+    return {"attemptedCommand": cmd, "meta": {"tool": tool, "pattern": pattern}}, lines
+
+
 CLAUSES = {
     "blocked_path": _blocked_path,
     "spend_cap": _spend_cap,
     "paused": _paused,
-    # 9.2 blocked_command, 12.1 rate_limit, 14.2 secret_redacted, 15.1 blocked_domain
+    "blocked_command": _blocked_command,
+    # 12.1 rate_limit, 14.2 secret_redacted, 15.1 blocked_domain
 }
 
 

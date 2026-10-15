@@ -38,12 +38,36 @@ def _paused_valid(draw):
     return {"meta": meta, **extra}
 
 
+@st.composite
+def _command_valid(draw):
+    meta = {"tool": draw(meta_values), "pattern": draw(meta_values)}
+    extra = draw(st.fixed_dictionaries({}, optional={"attemptedPath": st.text(max_size=5),
+                                                     "attemptedCostUsd": st.integers(0, 5)}))
+    return {"attemptedCommand": draw(st.text(min_size=1, max_size=1024)), "meta": meta, **extra}
+
+
+@st.composite
+def _command_invalid(draw):
+    good = draw(_command_valid())
+    kind = draw(st.sampled_from(["missing", "empty", "not_str", "too_long"]))
+    if kind == "missing":
+        del good["attemptedCommand"]
+    else:
+        good["attemptedCommand"] = {
+            "empty": "",
+            "not_str": draw(st.one_of(st.integers(), st.none(), st.lists(st.text(max_size=3), max_size=2))),
+            "too_long": draw(st.text(min_size=1025, max_size=1100)),
+        }[kind]
+    return good
+
+
 CLAUSES = {
     "paused": (_paused_valid, None),
-    # 9.2 blocked_command, 12.1 rate_limit, 14.2 secret_redacted, 15.1 blocked_domain
+    "blocked_command": (_command_valid, _command_invalid),
+    # 12.1 rate_limit, 14.2 secret_redacted, 15.1 blocked_domain
 }
 
-TIMELINE_DETAIL_FIELDS = ()  # 9.2 adds "attemptedCommand", 15.1 adds "attemptedUrl"
+TIMELINE_DETAIL_FIELDS = ("attemptedCommand",)  # 15.1 adds "attemptedUrl"
 
 
 def _body(vt, eid, t, extra):

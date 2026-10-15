@@ -148,7 +148,8 @@ def list_inventory(store: Store, creds: Credentials) -> Result:
 
 TIMELINE_FIELDS = (
     "ts", "eventId", "type", "model", "tool", "target", "inputTokens",
-    "outputTokens", "costUsd", "violationType", "attemptedCostUsd", "attemptedPath", "meta",
+    "outputTokens", "costUsd", "violationType", "attemptedCostUsd", "attemptedPath",
+    "attemptedCommand", "meta",
 )
 EVENT_SK_RE = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z#[0-9a-f]{32}"
