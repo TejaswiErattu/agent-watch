@@ -30,6 +30,7 @@ export function InventoryTable({ agents }: InventoryTableProps) {
           <TableHead>Model</TableHead>
           <TableHead>Last activity</TableHead>
           <TableHead>Total spend</TableHead>
+          <TableHead>Status</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -54,6 +55,15 @@ export function InventoryTable({ agents }: InventoryTableProps) {
                 )}
               </TableCell>
               <TableCell>{formatSpend(a.totalSpendUsd)}</TableCell>
+              <TableCell>
+                {a.paused === true ? (
+                  <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                    Paused
+                  </span>
+                ) : (
+                  "Active"
+                )}
+              </TableCell>
             </TableRow>
           );
         })}

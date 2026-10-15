@@ -7,6 +7,7 @@ import type {
   ConfigResponse,
   GuardrailConfig,
   InventoryResponse,
+  StatusResponse,
   TimelineResponse,
 } from "./types";
 
@@ -100,5 +101,27 @@ export function putConfig(
     `/agents/${encodeURIComponent(agentId)}/config`,
     creds,
     { method: "PUT", body: JSON.stringify(config) }
+  );
+}
+
+export function getStatus(
+  creds: Credentials,
+  agentId: string
+): Promise<StatusResponse> {
+  return apiFetch<StatusResponse>(
+    `/agents/${encodeURIComponent(agentId)}/status`,
+    creds
+  );
+}
+
+export function putStatus(
+  creds: Credentials,
+  agentId: string,
+  paused: boolean
+): Promise<StatusResponse> {
+  return apiFetch<StatusResponse>(
+    `/agents/${encodeURIComponent(agentId)}/status`,
+    creds,
+    { method: "PUT", body: JSON.stringify({ paused }) }
   );
 }

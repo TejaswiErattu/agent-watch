@@ -59,7 +59,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 27.12, 27.13, 27.14_
     - Commit: `feat(sdk): enforce pause before every call, one event per episode`
 
-  - [ ] 8.5 Dashboard: pause button, status in the summary, Status column
+  - [x] 8.5 Dashboard: pause button, status in the summary, Status column
     - Write the failing tests first. `dashboard/lib/api.test.ts`: `getStatus` GETs and `putStatus` PUTs `{"paused": bool}` with the credential headers. `dashboard/components/PauseButton.test.tsx`: shows "Pause agent" when active, first click shows "Confirm pause", second click PUTs and shows "Resume agent"; resume is one click; a failing PUT shows the error and keeps the old label. `dashboard/components/InventoryTable.test.tsx`: Status column shows "Paused" for `paused: true` and "Active" otherwise. `dashboard/app/agent/page.test.tsx`: the page renders the pause state from `getStatus`.
     - Implement: `StatusResponse` type and `InventoryItem.paused`; `getStatus`/`putStatus`; `PauseButton.tsx`; Status column; the agent page fetches status and refreshes it after a pause/resume. `npm run build` still exports `/` and `/agent`.
     - _Requirements: 27.15, 27.16, 27.17, 29.10_

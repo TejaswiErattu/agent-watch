@@ -56,3 +56,17 @@ describe("InventoryTable", () => {
     expect(within(row).getByText(/not yet reported/i)).toBeInTheDocument();
   });
 });
+
+describe("InventoryTable Status column", () => {
+  it.each([
+    [true, "Paused"],
+    [false, "Active"],
+    [undefined, "Active"],
+  ])("paused=%s shows %s", (paused, expected) => {
+    render(<InventoryTable agents={[{ ...reported, paused }]} />);
+    expect(screen.getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
+    const row = screen.getByText("bot1").closest("tr")!;
+    const statusCell = within(row).getAllByRole("cell")[4];
+    expect(statusCell.textContent).toBe(expected);
+  });
+});

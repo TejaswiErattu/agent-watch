@@ -9,6 +9,14 @@ export interface InventoryItem {
   firstSeen: string | null;
   lastSeen: string | null;
   totalSpendUsd: number;
+  // Optional so an older backend without the field still renders ("Active").
+  paused?: boolean;
+}
+
+export interface StatusResponse {
+  agentId: string;
+  paused: boolean;
+  pausedAt: string | null;
 }
 
 export interface InventoryResponse {

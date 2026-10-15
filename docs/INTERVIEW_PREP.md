@@ -587,3 +587,15 @@ Format per task:
 **Q:** Why inject `sleep` instead of patching `time.sleep`? **A:** Dependency injection keeps the test explicit and local. Patching a global can leak into other tests or the SDK's own retry backoff.
 
 **Q:** Why validate `--sleep` for NaN and infinity? **A:** `float("inf")` parses fine and would hang the demo forever. Rejecting it at the argument boundary turns a confusing hang into a clear usage error.
+
+## 8.5 Dashboard pause button and Status column
+
+**Conceptual:** The kill switch needs a human-facing control. The agent page shows the stored Pause_State and a Pause/Resume button, and the inventory gets a Status column so a paused agent stands out at a glance. Pausing stops a running agent, so it takes a second click ("Confirm pause"). Resuming only restores normal operation, so it's one click.
+
+**Technical:** `PauseButton` holds a local `confirming` flag and PUTs `{"paused": bool}` through `putStatus`. On success it shows the returned state and calls `onChanged`, and the page then refetches `GET /status`. So the label reflects what the server stored, not just what the button sent. On failure it shows an `Alert` and keeps the old label. Tradeoff: one extra GET after every toggle, in exchange for never showing a state the server didn't accept.
+
+**Q:** Why confirm only the pause, not the resume? **A:** Friction should match risk. A mistaken pause stops a running agent mid-task. A mistaken resume just puts things back the way they were, and pause is one click away.
+
+**Q:** Why re-read status from the server after the PUT succeeds? **A:** The server is the source of truth, and the SDK reads the same record. Refetching confirms the stored value, including `pausedAt`, so the UI can't drift from what the agent will see on its next 5 s poll.
+
+**Q:** The dashboard runs in the browser. What stops someone from pausing another owner's agent? **A:** The UI doesn't enforce it, the server does. `PUT /status` goes through the same ownerId plus key-verifier check as config writes, so a wrong key gets a 403 and nothing is written.

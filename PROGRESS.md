@@ -64,12 +64,13 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - v2 8.4 DONE (e46d9b9): `_check_paused` is the first line of `check_spend` and of the tool wrapper (before paths). One `paused` blocked event per Pause_Episode (`meta {action, model|tool}`). Property 30 added.
 - v2 8.6 DONE (a2fa875): `demo_agent.py --sleep S` (finite, >= 0) sleeps between runs; the loop catches `GuardrailBlocked` and prints `run i/N: <Type>: <detail> (... an alert is on its way)`.
 - Suites after 8.6: backend 468 passed, SDK 277 passed. Dashboard not touched this session.
+- v2 8.5 DONE: `StatusResponse` type, optional `InventoryItem.paused`, `getStatus`/`putStatus` in `lib/api.ts`, `components/PauseButton.tsx` (two-click pause with Cancel, one-click resume, error `Alert` keeps the old label), Status column in the inventory ("Paused" badge, "Active" otherwise), and an agent-page Status section that GETs status on load and again after each toggle. `npm run build` still exports `/` and `/agent`. Dashboard: 64 passed. Amplify rebuilds from `main` on push.
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
 
 ## Next step (needs Tejaswi)
-- Next build task: 8.5 (dashboard pause button, Status column). Then 8.7, the kill-switch checkpoint on AWS: `python demo/demo_agent.py --loop 20 --sleep 2`, then press Pause.
+- Next: 8.7, the kill-switch checkpoint on AWS (needs Tejaswi). Confirm Amplify rebuilt with 8.5, run `python demo/demo_agent.py --loop 20 --sleep 2`, press Pause agent, then Confirm pause on demo-bot. Record the pause-to-stop time here.
 - v2 spec added 2026-10-12: `.kiro/specs/agent-watch-v2/` (requirements 27-37, Properties 30-42, task groups 8-17). (8.1, 8.3, 8.4, 8.6 are now done; see above.) Feature freeze 2026-10-19 (group 17). Do the 7.5 click-path rehearsal first (baseline timings), tick 7.5, then start v2 at 8.1. v2 task 17.5 is the final rehearsal before recording. Note: scripts/e2e.sh already ran on 2026-10-12 with the +0.002 margin: RESULT PASS, demo-bot blocked on run 3/5.
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
@@ -144,6 +145,8 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - 2026-10-14 (8.3) The status poll reuses the Watcher `_lock` and is timed from the last attempt, the same as config and spend. An outage costs at most one GET per 5 s. Only a JSON bool counts as `paused`. `1` or `"true"` is a failed sync and keeps the last state.
 - 2026-10-14 (8.4) The check-and-set of `_pause_reported` runs under `_lock`, so two threads can't both report one episode. The blocked POST runs outside the lock, so a slow send never stalls other threads' checks. The design sketch had no lock there; this adds one.
 - 2026-10-14 (8.6) The loop message changed from "an alert email is on its way" to "an alert is on its way" to match the design (webhooks are coming in group 11). `e2e.sh` greps only for the exception name, so it's unaffected. `--sleep` also rejects NaN and inf, since inf would hang the demo.
+
+- 2026-10-14 (8.5) `InventoryItem.paused` is optional and anything but `true` shows "Active", so an older backend without the field still renders. The pause confirm step has a Cancel button (not in the spec) so a misclick on "Pause agent" can be backed out. After a toggle the page re-reads `GET /status` instead of trusting the PUT response alone.
 
 ## Open bugs
 - (none known)

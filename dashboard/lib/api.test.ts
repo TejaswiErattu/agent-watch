@@ -7,6 +7,8 @@ import {
   getTimeline,
   getConfig,
   putConfig,
+  getStatus,
+  putStatus,
 } from "./api";
 import type { Credentials } from "./credentials";
 
@@ -102,5 +104,31 @@ describe("endpoint builders", () => {
       dailySpendCapUsd: 1,
       blockedPaths: [".env"],
     });
+  });
+});
+
+describe("status endpoints", () => {
+  it("getStatus GETs the status route with the credential headers", async () => {
+    const fn = mockFetch(200, { agentId: "bot1", paused: false, pausedAt: null });
+    const res = await getStatus(creds, "bot1");
+    const [url, init] = fn.mock.calls[0];
+    expect(url).toBe("https://api.example.com/agents/bot1/status");
+    expect(init.method ?? "GET").toBe("GET");
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-agentwatch-owner"]).toBe("alice");
+    expect(headers["x-agentwatch-key-hash"]).toBe("a".repeat(64));
+    expect(res.paused).toBe(false);
+  });
+
+  it.each([true, false])("putStatus PUTs exactly {paused: %s}", async (paused) => {
+    const fn = mockFetch(200, { agentId: "bot1", paused, pausedAt: null });
+    await putStatus(creds, "bot1", paused);
+    const [url, init] = fn.mock.calls[0];
+    expect(url).toBe("https://api.example.com/agents/bot1/status");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body)).toEqual({ paused });
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-agentwatch-owner"]).toBe("alice");
+    expect(headers["x-agentwatch-key-hash"]).toBe("a".repeat(64));
   });
 });
