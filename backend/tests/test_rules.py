@@ -37,7 +37,7 @@ def test_order_and_duplicates_kept():
 
 
 def test_empty_config():
-    assert to_json(EMPTY_CONFIG) == {"dailySpendCapUsd": None, "blockedPaths": []}
+    assert to_json(EMPTY_CONFIG) == {"dailySpendCapUsd": None, "blockedPaths": [], "blockedCommands": []}
     assert EMPTY_CONFIG == GuardrailConfig(None, ())
 
 
@@ -48,7 +48,7 @@ def test_config_is_frozen():
 
 def test_to_json_shape():
     cfg = GuardrailConfig(1.25, (".env",))
-    assert to_json(cfg) == {"dailySpendCapUsd": 1.25, "blockedPaths": [".env"]}
+    assert to_json(cfg) == {"dailySpendCapUsd": 1.25, "blockedPaths": [".env"], "blockedCommands": []}
 
 
 def test_not_an_object():
@@ -90,3 +90,75 @@ def test_missing_key(missing):
     obj = {"dailySpendCapUsd": None, "blockedPaths": []}
     del obj[missing]
     bad(obj, missing)
+
+
+# ---- v2 9.1: blockedCommands ----
+
+from agentwatch_api.rules import MAX_COMMAND_LEN, MAX_COMMANDS  # noqa: E402
+from agentwatch_api.store import item_to_record  # noqa: E402
+
+V1 = {"dailySpendCapUsd": 0.5, "blockedPaths": [".env"]}
+
+
+def test_v1_body_defaults_blocked_commands_to_empty():
+    assert ok(dict(V1)).blocked_commands == ()
+
+
+def test_blocked_commands_parse_and_keep_order():
+    cfg = ok({**V1, "blockedCommands": [r"\brm\s+-rf\b", "sudo", "sudo"]})
+    assert cfg.blocked_commands == (r"\brm\s+-rf\b", "sudo", "sudo")
+
+
+def test_to_json_always_emits_blocked_commands():
+    assert to_json(EMPTY_CONFIG)["blockedCommands"] == []
+    assert to_json(GuardrailConfig(None, (), ("sudo",)))["blockedCommands"] == ["sudo"]
+
+
+def test_positional_v1_constructor_still_works():
+    assert GuardrailConfig(1.0, (".env",)).blocked_commands == ()
+
+
+@pytest.mark.parametrize("cmds", ["sudo", None, {"a": 1}, 3])
+def test_blocked_commands_not_a_list(cmds):
+    bad({**V1, "blockedCommands": cmds}, "blockedCommands")
+
+
+@pytest.mark.parametrize("cmds", [[""], ["sudo", ""], [1], ["sudo", None]])
+def test_blocked_commands_bad_entries(cmds):
+    bad({**V1, "blockedCommands": cmds}, "blockedCommands")
+
+
+def test_blocked_commands_limits():
+    assert MAX_COMMANDS == 100 and MAX_COMMAND_LEN == 256
+    bad({**V1, "blockedCommands": ["x"] * 101}, "blockedCommands")
+    ok({**V1, "blockedCommands": ["x"] * 100})
+    bad({**V1, "blockedCommands": ["a" * 257]}, "blockedCommands")
+    ok({**V1, "blockedCommands": ["a" * 256]})
+
+
+@pytest.mark.parametrize("pattern", ["(", "[a-", "*x", "(?P<"])
+def test_blocked_commands_must_compile_and_error_is_not_echoed(pattern):
+    import re
+
+    e = parse_config({**V1, "blockedCommands": ["sudo", pattern]})
+    assert isinstance(e, ValidationError) and e.field == "blockedCommands"
+    assert "entry 1" in e.reason
+    try:
+        re.compile(pattern, re.IGNORECASE)
+    except re.error as err:
+        assert str(err) not in e.reason  # no re.error text echoed back
+        assert err.msg not in e.reason
+
+
+def test_blocked_commands_compiled_case_insensitive_accepts_flags_free_patterns():
+    ok({**V1, "blockedCommands": [r"curl[^|]*\|\s*(ba)?sh", r"(?:^|\s)sudo\b"]})
+
+
+def test_stored_v1_guardrails_round_trip_through_item_to_record():
+    item = {
+        "agentId": "bot", "sk": "META", "ownerId": "o", "gsiOwnerId": "o",
+        "keyVerifier": "v" * 64, "guardrails": dict(V1), "totalSpendUsd": 0,
+    }
+    rec = item_to_record(item)
+    assert rec.guardrails.blocked_commands == ()
+    assert rec.paused is False

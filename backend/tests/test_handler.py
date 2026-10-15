@@ -64,14 +64,15 @@ def test_post_events_base64_body(store):
 
 def test_put_then_get_config(store):
     status, body = call(http_event("PUT /agents/{agentId}/config", CFG, agent_id="bot"))
-    assert status == 200 and body == {"guardrails": CFG}
+    # A v1 body (no blockedCommands) is accepted; the response always carries the key (Req 28.3).
+    assert status == 200 and body == {"guardrails": {**CFG, "blockedCommands": []}}
     status, body = call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
-    assert status == 200 and body["guardrails"] == CFG and "models" in body["pricing"]
+    assert status == 200 and body["guardrails"] == {**CFG, "blockedCommands": []} and "models" in body["pricing"]
 
 
 def test_get_config_missing_agent(store):
     status, body = call(http_event("GET /agents/{agentId}/config", agent_id="ghost"))
-    assert status == 200 and body["guardrails"] == {"dailySpendCapUsd": None, "blockedPaths": []}
+    assert status == 200 and body["guardrails"] == {"dailySpendCapUsd": None, "blockedPaths": [], "blockedCommands": []}
     assert store.items == {}
 
 

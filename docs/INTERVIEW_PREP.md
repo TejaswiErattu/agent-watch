@@ -599,3 +599,15 @@ Format per task:
 **Q:** Why re-read status from the server after the PUT succeeds? **A:** The server is the source of truth, and the SDK reads the same record. Refetching confirms the stored value, including `pausedAt`, so the UI can't drift from what the agent will see on its next 5 s poll.
 
 **Q:** The dashboard runs in the browser. What stops someone from pausing another owner's agent? **A:** The UI doesn't enforce it, the server does. `PUT /status` goes through the same ownerId plus key-verifier check as config writes, so a wrong key gets a 403 and nothing is written.
+
+## 9.1 blockedCommands in Guardrail_Config
+
+**Conceptual:** The shell guard needs somewhere to store "never run these" patterns. It goes in the same Guardrail_Config as paths and the cap, as a new optional key. Old bodies, stored records, and the live SDK all keep working, and the server rejects a bad regex at save time instead of letting it fail inside a student's agent later.
+
+**Technical:** `GuardrailConfig.blocked_commands` defaults to `()`, so positional v1 constructors still compile. `parse_config` requires only the v1 keys, rejects unknown keys as before, and checks each pattern: a non-empty str of at most 256 chars that `re.compile(p, re.IGNORECASE)` accepts. `to_json` always emits all three keys. Tradeoff: three existing tests that pinned the exact two-key response were updated, because Req 28.3 requires the key in every response.
+
+**Q:** How do you add a field to a live schema without breaking deployed clients? **A:** Make it additive. It's optional on input with a default, always present on output, and old clients ignore unknown response keys. Stored v1 records parse with the default, so no data migration is needed.
+
+**Q:** Why not echo the `re.error` message back in the 400? **A:** It can quote the input back, and error strings from a library aren't a stable API. "entry 3 is not a valid regular expression" tells the user which entry to fix without reflecting their input.
+
+**Q:** Isn't storing user regexes a ReDoS risk? **A:** The server only compiles them, which is fast and never runs them against input. Matching happens in the owner's own SDK process, on their own patterns, so a catastrophic pattern only slows down the person who wrote it.
