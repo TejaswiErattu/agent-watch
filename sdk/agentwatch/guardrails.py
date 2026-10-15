@@ -10,7 +10,9 @@ which catches aliases no string form sees (macOS firmlinks, bind mounts). That t
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import unicodedata
 
 
@@ -118,3 +120,56 @@ def blocked_entry_for(path: str, blocked_paths) -> str | None:
 def spend_decision(local_total: float, est_cost: float, cap: float) -> str:
     """"block" iff local_total + est_cost > cap; exactly reaching the cap is allowed (Req 7.6, 7.7)."""
     return "block" if local_total + est_cost > cap else "allow"
+
+
+# ---- Blocked_Command matching (Req 28.5, 28.6, 28.8) ----
+
+COMMAND_ARG_NAMES = ("command", "cmd", "args", "argv", "cmdline", "script", "shell_command")
+
+_log = logging.getLogger("agentwatch")
+# Patterns already warned about. Module-level: "once per pattern per process" (Req 28.8).
+_warned_patterns: set[str] = set()
+
+
+def _command_string(v) -> str | None:
+    """A str, or an all-str list/tuple joined by spaces, with whitespace collapsed. Anything else: None."""
+    if isinstance(v, str):
+        s = v
+    elif isinstance(v, (list, tuple)) and all(isinstance(i, str) for i in v):
+        s = " ".join(v)
+    else:
+        return None
+    return " ".join(s.split())
+
+
+def command_strings(named, args, kwargs) -> list[str]:
+    """Command_Strings in candidate order: named command args first, then every positional and
+    keyword value. Empty strings and duplicates are dropped (Req 28.5)."""
+    out: list[str] = []
+    for v in (*named, *args, *kwargs.values()):
+        s = _command_string(v)
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def compile_patterns(patterns) -> tuple:
+    """((pattern, compiled), ...) in order. A pattern that doesn't compile is skipped and warned once."""
+    out = []
+    for p in patterns:
+        try:
+            out.append((p, re.compile(p, re.IGNORECASE)))
+        except (re.error, TypeError):
+            if p not in _warned_patterns:
+                _warned_patterns.add(p)
+                _log.warning("agentwatch: skipping blocked command pattern %r (does not compile)", p)
+    return tuple(out)
+
+
+def first_blocked_command(strings, compiled) -> tuple[str, str] | None:
+    """(string, pattern) for the first string (in order) that any pattern matches, else None."""
+    for s in strings:
+        for p, rx in compiled:
+            if rx.search(s):
+                return s, p
+    return None

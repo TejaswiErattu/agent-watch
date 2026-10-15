@@ -89,7 +89,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 28.10, 28.11_
     - Commit: `feat(backend): blocked_command events and alert text`
 
-  - [ ] 9.3 SDK command strings and pattern matching (pure functions)
+  - [x] 9.3 SDK command strings and pattern matching (pure functions)
     - Write the failing tests first. `sdk/tests/test_guardrails_commands.py`: `command_strings` collapses whitespace, joins all-str lists/tuples with one space, skips non-str values and mixed lists, drops empties and duplicates, keeps candidate order (named command args first); `first_blocked_command` returns `(string, pattern)` for the first match and `None` otherwise; matching is case-insensitive; a pattern that does not compile is skipped with one warning per pattern per process. Add Property 33's pure-function half in `sdk/tests/test_properties_commands.py`.
     - Implement in `guardrails.py`: `COMMAND_ARG_NAMES`, `command_strings(...)`, `compile_patterns(patterns) -> tuple[(str, Pattern)]` (skip + warn once), `first_blocked_command(strings, compiled)`.
     - _Requirements: 28.5, 28.6, 28.8_

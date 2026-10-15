@@ -623,3 +623,15 @@ Format per task:
 **Q:** Why cap `attemptedCommand` at 1024 chars? **A:** It bounds item size and email size. The SDK truncates to 1024 before sending, so a legitimate client never hits the 400, and a hostile one can't push large blobs into DynamoDB through this field.
 
 **Q:** How did you keep adding types from breaking old ones? **A:** Property tests per type, written as one clause per Violation_Type. The v1 properties stay untouched as a regression baseline, and each new type adds a clause to the v2 property rather than editing old tests.
+
+## 9.3 SDK command strings and pattern matching
+
+**Conceptual:** Before the SDK can block a shell command, it has to decide which tool arguments count as a command and whether any rule matches. Those decisions are pure functions with no Watcher and no network, so a property test can check them against a plain restatement of the rule thousands of times.
+
+**Technical:** `command_strings` turns each str, and each all-str list/tuple (an argv), into one Command_String with whitespace collapsed. Named command args come first, and empties and duplicates are dropped. `compile_patterns` compiles once with `IGNORECASE`; a bad pattern is skipped and warned once per process. `first_blocked_command` returns the first string, in candidate order, that any pattern matches. Tradeoff: every string argument is a candidate, so a tool that takes `"sudo"` as plain text gets blocked too.
+
+**Q:** Why collapse whitespace before matching? **A:** `rm  -rf` and `rm\t-rf` run the same command. Normalizing to single spaces means one simple pattern catches every spacing, and an agent can't dodge a rule with an extra tab.
+
+**Q:** If one pattern is broken, why not fail the whole config? **A:** The server already rejects patterns that don't compile, so a bad one here means a version skew. Skipping that one and enforcing the rest is safer than dropping every command rule, and the warning makes the gap visible.
+
+**Q:** How do you test a regex guard well? **A:** With a property test against an independently written reference rule. Generated patterns (including hostile ones), messy whitespace, mixed-type lists, and named args all have to agree with the reference on every example.
