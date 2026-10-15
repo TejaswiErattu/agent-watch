@@ -71,7 +71,8 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 27.18_
     - Commit: `feat(demo): --sleep and generic guardrail handling in the loop`
 
-  - [ ] 8.7 Checkpoint: kill switch on AWS
+  - [x] 8.7 Checkpoint: kill switch on AWS
+    - DONE 2026-10-14 (Tejaswi): loop stopped with AgentPaused, email arrived, badge + "Paused since" + timeline row shown, resume worked. Pause-to-stop time not yet recorded.
     - Run `pytest` in `backend/` and `sdk/` and `npx vitest --run` in `dashboard/`; all pass. Ask Tejaswi to: confirm the status routes are deployed (8.2) and Amplify rebuilt (8.5); run `python demo/demo_agent.py --loop 20 --sleep 2`, press **Pause agent** then **Confirm pause** on `demo-bot`, and see `run N/20: AgentPaused: ...` within about 5 s plus the alert email; press **Resume agent** and run `--loop 1` to confirm it runs again. Record the observed pause-to-stop time in `PROGRESS.md` and tick this task.
     - _Requirements: 27.12, 27.15, 27.16_
 
