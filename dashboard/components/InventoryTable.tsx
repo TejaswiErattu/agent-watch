@@ -9,13 +9,10 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { formatSpend } from "@/lib/format";
 
-// 4 decimals so sub-cent LLM spend (e.g. $0.0006) is visible instead of $0.00.
-// Nonzero amounts too small for 4 decimals show "<$0.0001" rather than "$0.0000".
-export function formatSpend(usd: number): string {
-  if (usd > 0 && usd < 0.0001) return "<$0.0001";
-  return `$${usd.toFixed(4)}`;
-}
+// Re-exported so existing imports from this module keep working.
+export { formatSpend };
 
 export interface InventoryTableProps {
   agents: InventoryItem[];

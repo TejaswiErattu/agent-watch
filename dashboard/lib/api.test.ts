@@ -9,6 +9,7 @@ import {
   putConfig,
   getStatus,
   putStatus,
+  getSpend,
 } from "./api";
 import type { Credentials } from "./credentials";
 
@@ -131,5 +132,20 @@ describe("status endpoints", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers["x-agentwatch-owner"]).toBe("alice");
     expect(headers["x-agentwatch-key-hash"]).toBe("a".repeat(64));
+  });
+});
+
+describe("spend endpoint", () => {
+  it("getSpend GETs the spend route", async () => {
+    const body = {
+      agentId: "bot1",
+      rollingSpendUsd: 0.0012,
+      windowStart: "2026-10-16T15:00:00.000Z",
+      windowEnd: "2026-10-17T15:00:00.000Z",
+    };
+    const fn = mockFetch(200, body);
+    const res = await getSpend(creds, "bot1");
+    expect(fn.mock.calls[0][0]).toBe("https://api.example.com/agents/bot1/spend");
+    expect(res.rollingSpendUsd).toBe(0.0012);
   });
 });

@@ -19,6 +19,21 @@ export interface StatusResponse {
   pausedAt: string | null;
 }
 
+export interface SpendResponse {
+  agentId: string;
+  rollingSpendUsd: number;
+  windowStart: string;
+  windowEnd: string;
+}
+
+// One hour of the 24h Spend_Series; `start` is the exclusive lower bound.
+export interface SpendBucket {
+  start: string;
+  costUsd: number;
+  llmCalls: number;
+  blocked: number;
+}
+
 export interface InventoryResponse {
   agents: InventoryItem[];
 }

@@ -7,6 +7,7 @@ import type {
   ConfigResponse,
   GuardrailConfig,
   InventoryResponse,
+  SpendResponse,
   StatusResponse,
   TimelineResponse,
 } from "./types";
@@ -123,5 +124,15 @@ export function putStatus(
     `/agents/${encodeURIComponent(agentId)}/status`,
     creds,
     { method: "PUT", body: JSON.stringify({ paused }) }
+  );
+}
+
+export function getSpend(
+  creds: Credentials,
+  agentId: string
+): Promise<SpendResponse> {
+  return apiFetch<SpendResponse>(
+    `/agents/${encodeURIComponent(agentId)}/spend`,
+    creds
   );
 }
