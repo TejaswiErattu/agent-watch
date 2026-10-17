@@ -62,3 +62,18 @@ def test_shell_step_adds_pipe_to_shell_and_expects_both_blocks():
 def test_exit_trap_removes_the_command():
     body = SCRIPT.read_text().split("on_exit() {", 1)[1].split("\n}", 1)[0]
     assert 'cfg_edit bad-bot remove-command "$PIPE_TO_SHELL"' in body
+
+
+# ---- 9.7: post-deploy verify script ----
+
+VERIFY = SCRIPT.parent / "verify_deploy.sh"
+
+
+def test_verify_script_reads_key_only_from_file_and_never_prints_it():
+    assert VERIFY.is_file() and VERIFY.stat().st_mode & 0o111
+    text = VERIFY.read_text()
+    assert re.findall(r"\$\(cat ([^)]+)\)", text) == ["~/.agentwatch_key"]
+    assert not re.search(r"\b[0-9a-f]{64}\b", text)
+    assert not re.search(r"^\s*set\s+-[a-z]*x", text, re.MULTILINE)
+    assert "print(key_hash" not in text and "print(os.environ" not in text
+    assert '"blockedCommands" in keys' in text
