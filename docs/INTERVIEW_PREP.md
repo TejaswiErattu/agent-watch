@@ -647,3 +647,15 @@ Format per task:
 **Q:** A call matches both a blocked path and a blocked command. What happens? **A:** The path check runs first and raises, so only one `blocked_path` event is sent. One action gets one alert and one timeline row, never two.
 
 **Q:** Is regex blocking a real security boundary? **A:** No. It's a seatbelt for a careless agent, not a sandbox against a malicious one. Obfuscation like `$(echo cm0= | base64 -d)` gets past it. Real isolation would be a container or a syscall filter, and the README says so.
+
+## 9.5 Dashboard blocked commands editor and presets
+
+**Conceptual:** Students shouldn't have to write regex to stay safe. The rules editor lists the agent's blocked command patterns, lets you add or remove one, and has an "Add presets" button that appends nine vetted patterns (recursive rm, `curl | sh`, `.ssh`, sudo, chmod 777, mkfs/dd, block-device writes, force push, `.env` reads). Saving sends the full config, same as before.
+
+**Technical:** `dashboard/lib/commandPresets.json` is the single source of truth. A vitest test checks every pattern with `new RegExp(p, "i")`, and `backend/tests/test_command_presets.py` loads the same file and checks it with Python `re.IGNORECASE` and the backend's `parse_config`, so a preset can't pass in one engine and fail in the other. "Add presets" appends only missing patterns, in order. Tradeoff: presets are copied into the config as patterns, not referenced by id, so a later preset fix doesn't update agents that already saved the old one.
+
+**Q:** Your dashboard writes regex in JavaScript but the SDK runs it in Python. How do you keep them consistent? **A:** One JSON file feeds both test suites. Each pattern must compile, match its example and miss its safe example in both `RegExp` and `re`. I also stick to the shared syntax and avoid named groups and possessive quantifiers.
+
+**Q:** Why does the `.env` preset exist if `blockedPaths` already has `.env`? **A:** The path matcher sees `run_shell("cat .env")` as one argument, `"cat .env"`, which isn't a `.env` path component. The command preset matches `.env` inside a shell string, so the two rules cover different shapes.
+
+**Q:** Could a user save a pattern that hangs the matcher (ReDoS)? **A:** The backend caps patterns at 256 chars and 100 entries and checks that they compile, but it doesn't reject catastrophic backtracking. The threat model is a careless agent, and the owner writes their own rules, so I accepted that. A real fix would be RE2 or a match timeout.

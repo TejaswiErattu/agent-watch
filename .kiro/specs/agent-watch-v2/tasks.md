@@ -101,7 +101,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 28.4, 28.6, 28.7, 28.9, 28.17, 36.4_
     - Commit: `feat(sdk): enforce blocked commands in the tool wrapper`
 
-  - [ ] 9.5 Dashboard: blocked commands editor and presets
+  - [x] 9.5 Dashboard: blocked commands editor and presets
     - Write the failing tests first. `dashboard/components/RulesEditor.test.tsx`: loads and shows `blockedCommands`; add and remove a pattern; "Add presets" appends every preset not already present and never duplicates; save sends the full config including `blockedCommands`; a GET without the key (older backend) renders an empty list. `dashboard/lib/commandPresets.test.ts`: every preset has the five fields, each `pattern` compiles with `new RegExp(pattern, "i")`, matches `example`, and does not match `safeExample`. `backend/tests/test_command_presets.py`: loads `dashboard/lib/commandPresets.json` by path, each pattern compiles with Python `re.compile(p, re.IGNORECASE)`, is ≤256 chars, matches `example`, does not match `safeExample`. `Timeline.test.tsx`: a `blocked_command` row reads "Blocked command" plus the command.
     - Implement: `dashboard/lib/commandPresets.json` with the nine presets from the design (write literal examples such as `rm -rf build/` and `rm notes.txt`); the RulesEditor section; `GuardrailConfig.blockedCommands` type; timeline description.
     - Note: a pattern must be valid in both JavaScript `RegExp` and Python `re`. Avoid Python-only syntax (`(?P<...>)`, possessive quantifiers) and JS-only syntax (`(?<name>)` is fine in both; lookbehind is fine in both).

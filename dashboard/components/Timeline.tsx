@@ -19,6 +19,9 @@ function describeEvent(e: TimelineItem): string {
     case "tool_call":
       return `Tool ${e.tool ?? ""} -> ${e.target ?? ""}`;
     case "blocked":
+      if (e.violationType === "blocked_command") {
+        return `Blocked command ${e.attemptedCommand ?? ""}`;
+      }
       return `Blocked ${e.violationType ?? ""} ${e.attemptedPath ?? ""}`;
     default:
       return e.type ?? "event";

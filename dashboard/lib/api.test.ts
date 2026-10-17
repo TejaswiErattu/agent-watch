@@ -96,13 +96,14 @@ describe("endpoint builders", () => {
 
   it("putConfig sends the config as the JSON body with PUT", async () => {
     const fn = mockFetch(200, { guardrails: { dailySpendCapUsd: 1, blockedPaths: [".env"] } });
-    await putConfig(creds, "bot1", { dailySpendCapUsd: 1, blockedPaths: [".env"] });
+    await putConfig(creds, "bot1", { dailySpendCapUsd: 1, blockedPaths: [".env"], blockedCommands: [] });
     const [url, init] = fn.mock.calls[0];
     expect(url).toBe("https://api.example.com/agents/bot1/config");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body)).toEqual({
       dailySpendCapUsd: 1,
       blockedPaths: [".env"],
+      blockedCommands: [],
     });
   });
 });

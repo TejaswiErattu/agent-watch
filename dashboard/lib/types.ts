@@ -36,6 +36,8 @@ export interface TimelineItem {
   violationType: string | null;
   attemptedCostUsd: number | null;
   attemptedPath: string | null;
+  // Optional so an older backend without the field still renders.
+  attemptedCommand?: string | null;
   meta: Record<string, unknown> | null;
 }
 
@@ -47,7 +49,14 @@ export interface TimelineResponse {
 export interface GuardrailConfig {
   dailySpendCapUsd: number | null;
   blockedPaths: string[];
+  // Always sent on save; a GET from an older backend may omit it (read as []).
+  blockedCommands: string[];
 }
+
+// What GET/PUT /config may return: an older backend omits blockedCommands.
+export type GuardrailConfigIn = Omit<GuardrailConfig, "blockedCommands"> & {
+  blockedCommands?: string[];
+};
 
 export interface ModelPrice {
   inputPerMtok: number;
@@ -59,6 +68,6 @@ export interface PricingTable {
 }
 
 export interface ConfigResponse {
-  guardrails: GuardrailConfig;
+  guardrails: GuardrailConfigIn;
   pricing?: PricingTable;
 }

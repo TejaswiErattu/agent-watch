@@ -71,12 +71,15 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - v2 9.3 DONE (b59f320): `guardrails.py` `COMMAND_ARG_NAMES`, `command_strings`, `compile_patterns` (skip + warn once), `first_blocked_command`. Property 33's pure half added.
 - v2 9.4 DONE (2024d3b): `ConfigResponse.blocked_commands` (default `()`), `parse_config_response` reads it (missing → `()`, wrong type → malformed), patterns compiled once per fetch, `_check_commands` after `_check_paths`, `CommandBlocked` exported, `@aw.tool(command_arg=...)`. Property 33's wrapped-tool half added.
 - Suites after 9.4: backend 536 passed, SDK 312 passed, dashboard 64 passed (not touched since 8.5).
+- v2 9.5 DONE (2026-10-17): `dashboard/lib/commandPresets.json` (nine presets, incl. `env_file` and `pipe_to_shell`) + `commandPresets.ts`; RulesEditor "Blocked commands" section (add/remove pattern, "Add presets" appends only missing ones); `GuardrailConfig.blockedCommands` (a GET without it reads as `[]`); Timeline "Blocked command <cmd>" rows. Every preset is checked in both JS `RegExp` (`commandPresets.test.ts`) and Python `re` + backend `parse_config` (`backend/tests/test_command_presets.py`). Suites: backend 548, SDK 312, dashboard 80. `npm run build` exports `/` and `/agent`.
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
 
 ## Next step (needs Tejaswi)
-- Pause-to-stop time for 8.7 is NOT recorded yet (Tejaswi's report had a blank `__ s`). Fill it in here when known. It's also the baseline for the 17.5 rehearsal.
+- 8.7 pause-to-stop time was not timed. Measure it in 17.5.
+- README note for 17.1 (Known limitations): "blockedPaths does not cover shell strings; use the .env command preset".
+- Scope (2026-10-17, Tejaswi): after 9.7, do group 10 (10.1–10.6), then stop. Groups 12 and 13 are cut for time. On 2026-10-19 move to group 17.
 - Next build task: 9.5 (dashboard blocked commands editor and presets). Then 9.6 (bad_agent `run_shell` step and e2e step).
 - 9.1/9.2 backend changes are NOT deployed. Deploy before 9.7, with `UsePreviousValue` for `AlertEmail` and `DashboardOrigin`. Until then the live API rejects a PUT with `blockedCommands` (400, unknown field) and rejects `blocked_command` events (400). The SDK is unaffected: a missing `blockedCommands` reads as `()`.
 - v2 spec added 2026-10-12: `.kiro/specs/agent-watch-v2/` (requirements 27-37, Properties 30-42, task groups 8-17). (8.1, 8.3, 8.4, 8.6 are now done; see above.) Feature freeze 2026-10-19 (group 17). Do the 7.5 click-path rehearsal first (baseline timings), tick 7.5, then start v2 at 8.1. v2 task 17.5 is the final rehearsal before recording. Note: scripts/e2e.sh already ran on 2026-10-12 with the +0.002 margin: RESULT PASS, demo-bot blocked on run 3/5.
@@ -84,7 +87,7 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
 
 ## Blocked
-- (none)
+- 2026-10-17 9.1/9.2 deploy: `sam build` succeeded, then `sam package --resolve-s3 --region us-west-2` failed with "Your session has expired or credentials have changed". Nothing was uploaded, no change set was created, and the stack is unchanged. Tejaswi said she had logged in from her own terminal, so either the token expired or the agent shell resolves different AWS credentials. Resume at step 3 (`sam package`) once `aws sts get-caller-identity --region us-west-2` works in the agent shell. Then create change set `blocked-commands`, check that it shows only "Modify ApiFunction False", execute it, and verify GET `/agents/demo-bot/config` returns 200 with a `blockedCommands` key.
 
 ## Decisions
 - 2026-10-08 firstSeen is the ts of the first event to arrive, not the earliest ts. It matches Property 12 and is a single `if_not_exists` in the transaction (no read-compare-write).

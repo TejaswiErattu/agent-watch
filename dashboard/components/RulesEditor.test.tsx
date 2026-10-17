@@ -14,6 +14,7 @@ vi.mock("@/lib/api", async () => {
 });
 
 import { RulesEditor } from "./RulesEditor";
+import { COMMAND_PRESETS } from "@/lib/commandPresets";
 import type { Credentials } from "@/lib/credentials";
 
 const creds: Credentials = { ownerId: "alice", keyHash: "a".repeat(64) };
@@ -49,6 +50,7 @@ describe("RulesEditor", () => {
       expect(putConfig).toHaveBeenCalledWith(creds, "bot1", {
         dailySpendCapUsd: 5,
         blockedPaths: [],
+        blockedCommands: [],
       })
     );
   });
@@ -70,6 +72,7 @@ describe("RulesEditor", () => {
       expect(putConfig).toHaveBeenCalledWith(creds, "bot1", {
         dailySpendCapUsd: null,
         blockedPaths: ["secrets/"],
+        blockedCommands: [],
       })
     );
   });
@@ -90,6 +93,7 @@ describe("RulesEditor", () => {
       expect(putConfig).toHaveBeenCalledWith(creds, "bot1", {
         dailySpendCapUsd: null,
         blockedPaths: ["secrets/"],
+        blockedCommands: [],
       })
     );
   });
@@ -110,8 +114,83 @@ describe("RulesEditor", () => {
       expect(putConfig).toHaveBeenCalledWith(creds, "bot1", {
         dailySpendCapUsd: null,
         blockedPaths: [],
+        blockedCommands: [],
       })
     );
+  });
+
+  it("loads and shows blockedCommands", async () => {
+    getConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [], blockedCommands: ["\\bsudo\\b"] },
+    });
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    expect(await screen.findByText("\\bsudo\\b")).toBeInTheDocument();
+  });
+
+  it("a GET without blockedCommands (older backend) renders an empty list and saves []", async () => {
+    getConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [] },
+    });
+    putConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [], blockedCommands: [] },
+    });
+    const user = userEvent.setup();
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    await screen.findByLabelText(/add pattern/i);
+    expect(screen.queryAllByRole("button", { name: /^remove pattern/i })).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(putConfig).toHaveBeenCalledWith(creds, "bot1", {
+        dailySpendCapUsd: null,
+        blockedPaths: [],
+        blockedCommands: [],
+      })
+    );
+  });
+
+  it("adds and removes a pattern and saves the full config", async () => {
+    getConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [".env"], blockedCommands: ["\\bsudo\\b"] },
+    });
+    putConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [".env"], blockedCommands: ["\\bmkfs\\b"] },
+    });
+    const user = userEvent.setup();
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    await screen.findByText("\\bsudo\\b");
+    await user.type(screen.getByLabelText(/add pattern/i), "\\bmkfs\\b");
+    await user.click(screen.getByRole("button", { name: /^add pattern$/i }));
+    expect(screen.getByText("\\bmkfs\\b")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove pattern \\bsudo\\b" }));
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(putConfig).toHaveBeenCalledWith(creds, "bot1", {
+        dailySpendCapUsd: null,
+        blockedPaths: [".env"],
+        blockedCommands: ["\\bmkfs\\b"],
+      })
+    );
+  });
+
+  it("Add presets appends every missing preset once and never duplicates", async () => {
+    const sudo = COMMAND_PRESETS.find((p) => p.id === "sudo")!.pattern;
+    getConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [], blockedCommands: ["custom", sudo] },
+    });
+    putConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [], blockedCommands: [] },
+    });
+    const user = userEvent.setup();
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    await screen.findByText("custom");
+    await user.click(screen.getByRole("button", { name: /add presets/i }));
+    await user.click(screen.getByRole("button", { name: /add presets/i }));
+    await user.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(putConfig).toHaveBeenCalled());
+    const sent = putConfig.mock.calls[0][2].blockedCommands as string[];
+    const expected = ["custom", sudo, ...COMMAND_PRESETS.map((p) => p.pattern).filter((p) => p !== sudo)];
+    expect(sent).toEqual(expected);
+    expect(new Set(sent).size).toBe(sent.length);
   });
 
   it("shows an error and keeps the draft on failure", async () => {
