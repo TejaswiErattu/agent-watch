@@ -171,7 +171,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - All suites pass. Tejaswi: run `python demo/bad_agent.py` with `.env` blocked; the channel shows the alert within seconds, and the email still arrives. Record the block-to-channel time in `PROGRESS.md`.
     - _Requirements: 30.2_
 
-- [ ] 12. Per-agent LLM rate limit
+- [ ] 12. Per-agent LLM rate limit (CUT 2026-10-17 by Tejaswi for time; not built)
   - [ ] 12.1 `maxLlmCallsPerMinute` in the config and `rate_limit` events
     - Write the failing tests first. `test_rules.py`: missing → `None`; `1`, `10000` accepted; `0`, `10001`, `1.5`, `true`, `"5"` rejected naming the field; `to_json` emits the key. `test_validation.py`/`test_alerts.py`: a `rate_limit` blocked event with `meta {callsInWindow, maxPerMinute, model}` validates with cost 0.0; the alert lists both numbers. Extend Properties 32, 38, 39 with the new clauses.
     - Implement in `rules.py`, `validation.py`, `alerts.py`.
@@ -196,7 +196,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 31.11, 37.4_
     - Commit: `test(demo): rate limit in e2e`
 
-- [ ] 13. Onboarding CLI and credential discovery
+- [ ] 13. Onboarding CLI and credential discovery (CUT 2026-10-17 by Tejaswi for time; not built)
   - [ ] 13.1 SDK credential discovery
     - Write the failing tests first. `sdk/tests/test_credentials.py` (extend): with `HOME` set to `tmp_path`, `agentwatch.init(agent_id=...)` with no `api_key` uses `AGENTWATCH_KEY` when set, else the Key_File content stripped, else raises `ValueError` whose message names `api_key`, `AGENTWATCH_KEY`, and `~/.agentwatch_key` and contains no key material; an empty Key_File raises; `owner_id=None` uses `AGENTWATCH_OWNER` or raises; the 3-line snippet test still passes unchanged.
     - Implement `_resolve_key`/`_resolve_owner` in `client.py`; keep `demo/common.py` passing the env values explicitly so `e2e.sh` is unchanged.

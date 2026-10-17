@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deployed)
+Last updated: 2026-10-17 by Kiro session (v2 9.5 and 9.6 done and pushed; 9.1/9.2 deploy blocked on expired AWS session)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -81,8 +81,8 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - 8.7 pause-to-stop time was not timed. Measure it in 17.5.
 - README note for 17.1 (Known limitations): "blockedPaths does not cover shell strings; use the .env command preset".
 - Scope (2026-10-17, Tejaswi): after 9.7, do group 10 (10.1–10.6), then stop. Groups 12 and 13 are cut for time. On 2026-10-19 move to group 17.
-- Next build task: 9.5 (dashboard blocked commands editor and presets). Then 9.6 (bad_agent `run_shell` step and e2e step).
-- 9.1/9.2 backend changes are NOT deployed. Deploy before 9.7, with `UsePreviousValue` for `AlertEmail` and `DashboardOrigin`. Until then the live API rejects a PUT with `blockedCommands` (400, unknown field) and rejects `blocked_command` events (400). The SDK is unaffected: a missing `blockedCommands` reads as `()`.
+- EXACT NEXT STEP: refresh AWS credentials, then resume the 9.1/9.2 deploy at `sam package` (see Blocked). Then do 9.7 (Tejaswi). Then group 10 (10.1–10.6), then stop.
+- 9.1/9.2 backend changes are NOT deployed. Until they are, the live API rejects a PUT with `blockedCommands` (400, unknown field) and rejects `blocked_command` events (400). The SDK is unaffected: a missing `blockedCommands` reads as `()`. The dashboard's "Save rules" will 400 on the live API until the deploy, because it now always sends `blockedCommands`.
 - v2 spec added 2026-10-12: `.kiro/specs/agent-watch-v2/` (requirements 27-37, Properties 30-42, task groups 8-17). (8.1, 8.3, 8.4, 8.6 are now done; see above.) Feature freeze 2026-10-19 (group 17). Do the 7.5 click-path rehearsal first (baseline timings), tick 7.5, then start v2 at 8.1. v2 task 17.5 is the final rehearsal before recording. Note: scripts/e2e.sh already ran on 2026-10-12 with the +0.002 margin: RESULT PASS, demo-bot blocked on run 3/5.
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
@@ -164,5 +164,8 @@ Last updated: 2026-10-14 by Kiro session (v2 8.1–8.4 and 8.6 done; 8.2 deploye
 - 2026-10-14 (9.4) `command_arg` has no matching effect of its own. Every string argument is already a candidate, so naming an arg only puts it first in candidate order and makes it the event `target` when the tool has no path arg (design).
 - 2026-10-14 (9.4) Found while testing: `blockedPaths: [".env"]` does NOT block `run_shell("cat .env")`. The path matcher sees one component, `"cat .env"`, not `.env`. A command pattern (the `.env` read preset in 9.5) is what covers shell reads. This is worth a line in the README Known limitations during group 17.
 
+- 2026-10-17 (9.6) `e2e.sh` reads the `pipe_to_shell` pattern from `dashboard/lib/commandPresets.json` instead of retyping it, so the smoke test always uses exactly what "Add presets" saves. `bad_agent.py` runs both steps even if the first isn't blocked, and exits 1 if either goes through.
+- 2026-10-17 Scope cut by Tejaswi: groups 12 (rate limit) and 13 (CLI) are dropped for time. After 9.7, do group 10, then stop. On 2026-10-19 go to group 17.
+
 ## Open bugs
-- (none known)
+- Deploy-order hazard (not a code bug): Amplify rebuilds from `main`, so the live dashboard already sends `blockedCommands` on save. The live backend rejects that key with a 400 until 9.1/9.2 is deployed, so "Save rules" on the live dashboard fails until then. The deploy fixes it; no code change is needed.
