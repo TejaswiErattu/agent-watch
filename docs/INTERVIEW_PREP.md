@@ -671,3 +671,10 @@ Format per task:
 **Q:** Why does the e2e cleanup run from an EXIT trap? **A:** A failure halfway through would otherwise leave `bad-bot` blocking commands and `demo-bot` capped, and the next live demo would start in a strange state. The trap runs on success, failure, and Ctrl-C.
 
 **Q:** Why the `sh -c` argv form instead of `shell=True`? **A:** It means the same thing, but it's explicit about which shell runs. The SDK guard sees the exact string that gets executed, and no extra quoting layer changes it.
+
+## 9.7 Checkpoint: shell guard on AWS
+**Conceptual:** Ship the 9.1/9.2 backend safely, then prove the whole chain works on the live stack: the config API accepts command patterns, the SDK blocks the shell call, and the event and alert land.
+**Technical:** It's a CloudFormation change set, not a blind `sam deploy`. Each row's Replacement column was checked first, and the gate was "execute only if nothing is replaced and the table and topic are untouched". After that, a small verify script and `e2e.sh` exercise the live API. Tradeoff: two extra steps compared with one deploy command, in exchange for never replacing the DynamoDB table by accident.
+**Q:** Why review a change set before executing it? **A:** Some property changes force a resource Replacement. For a DynamoDB table that means a new, empty table. The change set shows that before anything happens.
+**Q:** Why `UsePreviousValue` for parameters? **A:** It keeps the deployed values (the alert email, the CORS origin) without retyping them or committing them to `samconfig.toml`.
+**Q:** How do you smoke-test without leaking the API key? **A:** The key is read from a private file into an env var and hashed in-process by Python. It never shows up in argv, logs, or output, and a test enforces that statically.

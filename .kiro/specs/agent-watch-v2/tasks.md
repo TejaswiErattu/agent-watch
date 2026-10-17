@@ -76,7 +76,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Run `pytest` in `backend/` and `sdk/` and `npx vitest --run` in `dashboard/`; all pass. Ask Tejaswi to: confirm the status routes are deployed (8.2) and Amplify rebuilt (8.5); run `python demo/demo_agent.py --loop 20 --sleep 2`, press **Pause agent** then **Confirm pause** on `demo-bot`, and see `run N/20: AgentPaused: ...` within about 5 s plus the alert email; press **Resume agent** and run `--loop 1` to confirm it runs again. Record the observed pause-to-stop time in `PROGRESS.md` and tick this task.
     - _Requirements: 27.12, 27.15, 27.16_
 
-- [ ] 9. Shell-command guard
+- [x] 9. Shell-command guard
   - [x] 9.1 Add `blockedCommands` to the Guardrail_Config with validation
     - Write the failing tests first. Extend `backend/tests/test_rules.py`: a v1 body (two keys) parses with `blocked_commands == ()`; `to_json` always emits `blockedCommands`; invalid lists (not a list, 101 entries, empty entry, 257 chars, `"("`, `"[a-"`) return a `ValidationError` naming `blockedCommands` with no `re.error` text echoed; a v1-shaped stored `guardrails` map round-trips through `item_to_record`. Add Property 32 in `backend/tests/test_properties_config_v2.py` and Property 34 in `backend/tests/test_properties_commands.py`. Keep Property 3's and Property 5's existing tests untouched; add the new key to their generators only if they already generate from `KEYS`.
     - Implement in `rules.py`: the dataclass field with a default, `KEYS`/`REQUIRED_KEYS`, `MAX_COMMANDS`, `MAX_COMMAND_LEN`, compile check with `re.compile(p, re.IGNORECASE)`, `to_json`.
@@ -114,7 +114,8 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 28.16, 37.4_
     - Commit: `feat(demo): shell step in bad_agent and e2e coverage`
 
-  - [ ] 9.7 Checkpoint: shell guard on AWS
+  - [x] 9.7 Checkpoint: shell guard on AWS
+    - DONE 2026-10-17 (Kiro): change set `blocked-commands` executed, verify 200 with `blockedCommands`, `scripts/e2e.sh` RESULT PASS. Dashboard click steps skipped per Tejaswi.
     - All three suites pass. Tejaswi: confirm the deployed backend has 9.1/9.2 (a redeploy, `UsePreviousValue` for both parameters), open `bad-bot`, click **Add presets**, **Save rules**, run `python demo/bad_agent.py`, see `PathBlocked` then `CommandBlocked`, two emails, and both `blocked` rows in the timeline. Run `scripts/e2e.sh`; all steps PASS. Record in `PROGRESS.md`.
     - _Requirements: 28.6, 28.16_
 
