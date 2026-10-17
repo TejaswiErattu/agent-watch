@@ -3,9 +3,9 @@
 #
 #   scripts/e2e.sh
 #
-# Runs all three test suites, then both live guardrail demos (path block on bad-bot,
-# spend cap on demo-bot), checks the blocked events were stored, and resets both agents
-# so the live demo starts clean. Sends 2 alert emails; LLM cost is under a cent.
+# Runs all three test suites, then the live guardrail demos (path and command blocks on
+# bad-bot, spend cap on demo-bot), checks the blocked events were stored, and resets both
+# agents so the live demo starts clean. Sends 3 alert emails; LLM cost is under a cent.
 #
 # The API key is read only from ~/.agentwatch_key and is never printed, logged, or written.
 # HTTP calls go through Python (key hashed in-process), so neither the key nor its hash
@@ -42,7 +42,8 @@ print(r.text)
 PY
 }
 
-# cfg_edit AGENT add-path P | remove-path P | cap USD|null  (read-modify-write of the full config)
+# cfg_edit AGENT add-path P | remove-path P | add-command RE | remove-command RE | cap USD|null
+# (read-modify-write of the full config)
 cfg_edit() {
   local cur new
   cur=$(aw_api GET "/agents/$1/config") || return 1
@@ -53,6 +54,12 @@ if op == "add-path" and val not in g["blockedPaths"]:
     g["blockedPaths"].append(val)
 elif op == "remove-path":
     g["blockedPaths"] = [p for p in g["blockedPaths"] if p != val]
+elif op == "add-command":
+    cmds = g.setdefault("blockedCommands", [])
+    if val not in cmds:
+        cmds.append(val)
+elif op == "remove-command":
+    g["blockedCommands"] = [c for c in g.get("blockedCommands", []) if c != val]
 elif op == "cap":
     g["dailySpendCapUsd"] = None if val == "null" else float(val)
 print(json.dumps(g))' "$cur" "$2" "$3") || return 1
@@ -78,6 +85,16 @@ run_agent() {
   if grep -q "$expect" <<<"$out"; then record "$name" PASS; else fail_stop "$name (no $expect)"; fi
 }
 
+# expect_in OUTPUT NAME EXPECT: passes if EXPECT appears in OUTPUT.
+expect_in() {
+  if grep -q "$3" <<<"$1"; then record "$2" PASS; else fail_stop "$2 (no $3)"; fi
+}
+
+# The pipe_to_shell pattern comes from the dashboard presets, so it's never retyped here.
+PIPE_TO_SHELL=$("$PYBIN" -c '
+import json
+print(next(p["pattern"] for p in json.load(open("dashboard/lib/commandPresets.json")) if p["id"] == "pipe_to_shell"))')
+
 on_exit() {
   local rc=$?
   if [[ $CLEANUP == 1 ]]; then
@@ -85,6 +102,8 @@ on_exit() {
     else record "cleanup: demo-bot cap cleared" FAIL; rc=1; fi
     if cfg_edit bad-bot remove-path .env; then record "cleanup: .env removed from bad-bot" PASS
     else record "cleanup: .env removed from bad-bot" FAIL; rc=1; fi
+    if cfg_edit bad-bot remove-command "$PIPE_TO_SHELL"; then record "cleanup: pipe_to_shell removed from bad-bot" PASS
+    else record "cleanup: pipe_to_shell removed from bad-bot" FAIL; rc=1; fi
   fi
   echo
   echo "== e2e summary =="
@@ -111,11 +130,16 @@ now_ts() { "$PYBIN" -c 'from datetime import datetime, timezone; print(datetime.
 # From here on, always reset both agents on exit.
 CLEANUP=1
 
-# --- 2. path block on bad-bot -----------------------------------------------
+# --- 2. path block and command block on bad-bot -----------------------------
 cfg_edit bad-bot add-path .env && record "bad-bot: .env added to blockedPaths" PASS \
   || fail_stop "bad-bot: .env added to blockedPaths"
+cfg_edit bad-bot add-command "$PIPE_TO_SHELL" && record "bad-bot: pipe_to_shell added to blockedCommands" PASS \
+  || fail_stop "bad-bot: pipe_to_shell added to blockedCommands"
 SINCE_BAD=$(now_ts)
-run_agent "bad-bot: PathBlocked" "PathBlocked" "$PYBIN" demo/bad_agent.py
+BAD_OUT=$("$PYBIN" demo/bad_agent.py 2>&1)
+sed 's/^/    /' <<<"$BAD_OUT"
+expect_in "$BAD_OUT" "bad-bot: PathBlocked" "PathBlocked"
+expect_in "$BAD_OUT" "bad-bot: CommandBlocked" "CommandBlocked"
 
 # --- 3. spend cap on demo-bot -----------------------------------------------
 SPEND_JSON=$(aw_api GET /agents/demo-bot/spend) || fail_stop "demo-bot: read 24h spend"
@@ -129,6 +153,8 @@ run_agent "demo-bot: SpendCapExceeded" "SpendCapExceeded" "$PYBIN" demo/demo_age
 # --- 4. blocked events stored -----------------------------------------------
 new_blocked bad-bot blocked_path "$SINCE_BAD" && record "bad-bot: new blocked_path event stored" PASS \
   || fail_stop "bad-bot: new blocked_path event stored"
+new_blocked bad-bot blocked_command "$SINCE_BAD" && record "bad-bot: new blocked_command event stored" PASS \
+  || fail_stop "bad-bot: new blocked_command event stored"
 new_blocked demo-bot spend_cap "$SINCE_DEMO" && record "demo-bot: new spend_cap event stored" PASS \
   || fail_stop "demo-bot: new spend_cap event stored"
 

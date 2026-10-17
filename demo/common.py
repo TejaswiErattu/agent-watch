@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 import agentwatch
@@ -18,6 +19,11 @@ def init(agent_id: str, transport=None):
 
 def read_file(path: str) -> str:
     return Path(path).read_text()
+
+
+def run_shell(command: str) -> str:
+    """Run one shell command and return stdout. Only reached when Agent Watch did not block it."""
+    return subprocess.run(["sh", "-c", command], capture_output=True, text=True, timeout=10).stdout
 
 
 def ask(client, question: str, max_tokens: int = 200) -> str:

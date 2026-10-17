@@ -40,3 +40,25 @@ def test_key_is_never_echoed_logged_or_written():
     assert not re.search(r"^\s*set\s+-[a-z]*x", text, re.MULTILINE)  # no xtrace
     assert "~/.agentwatch_key" not in "".join(l for l in _code_lines() if re.search(r">\s*~/", l))
     assert "print(key_hash" not in text and "print(os.environ" not in text
+
+
+# ---- 9.6: shell-command step (Req 28.16, 37.4) ----
+
+def test_cfg_edit_supports_command_ops():
+    text = SCRIPT.read_text()
+    assert '"add-command"' in text and '"remove-command"' in text
+    assert 'g.setdefault("blockedCommands", [])' in text
+
+
+def test_shell_step_adds_pipe_to_shell_and_expects_both_blocks():
+    text = SCRIPT.read_text()
+    # The pattern comes from the presets file, never retyped in the script.
+    assert "commandPresets.json" in text and '"pipe_to_shell"' in text
+    assert re.search(r"cfg_edit bad-bot add-command \"\$PIPE_TO_SHELL\"", text)
+    assert '"bad-bot: CommandBlocked" "CommandBlocked"' in text
+    assert re.search(r"new_blocked bad-bot blocked_command", text)
+
+
+def test_exit_trap_removes_the_command():
+    body = SCRIPT.read_text().split("on_exit() {", 1)[1].split("\n}", 1)[0]
+    assert 'cfg_edit bad-bot remove-command "$PIPE_TO_SHELL"' in body
