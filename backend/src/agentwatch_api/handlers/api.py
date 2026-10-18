@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from .. import service
 from ..auth import parse_credentials
-from ..alerts import SnsPublisher
+from ..alerts import MultiPublisher, SnsPublisher, WebhookPublisher
 from ..service import Publisher, Result
 from ..store import DynamoStore, Store
 from ..validation import validate_agent_id
@@ -39,8 +39,11 @@ _deps: Deps | None = None
 def _get_deps() -> Deps:
     global _deps
     if _deps is None:
-        _deps = Deps(store=DynamoStore(os.environ["TABLE_NAME"]),
-                     publisher=SnsPublisher(os.environ["TOPIC_ARN"]))
+        publisher: Publisher = SnsPublisher(os.environ["TOPIC_ARN"])
+        webhook = os.environ.get("ALERT_WEBHOOK_URL", "").strip()
+        if webhook:  # Req 30.2: fan out to SNS and the webhook; otherwise SNS only
+            publisher = MultiPublisher([publisher, WebhookPublisher(webhook)])
+        _deps = Deps(store=DynamoStore(os.environ["TABLE_NAME"]), publisher=publisher)
     return _deps
 
 

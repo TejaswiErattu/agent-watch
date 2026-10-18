@@ -707,3 +707,9 @@ Format per task:
 **Q:** Why allowlist webhook hosts? **A:** Otherwise a mistyped or malicious parameter turns the Lambda into a generic HTTP poster, an SSRF-style primitive from inside your AWS account.
 **Q:** Why reject `user@discord.com` and `discord.com.evil.com`? **A:** Prefix or substring checks get fooled by userinfo and subdomain tricks. Parsing the URL and comparing the exact hostname doesn't.
 **Q:** Why treat the webhook URL as a secret? **A:** Anyone with it can post to the channel. It never goes in logs, `repr`, the repo, or `samconfig.toml`.
+
+## 11.2 Webhook wiring through the handler and template
+**Conceptual:** The webhook URL is a credential, so it has to reach the Lambda without ever touching the repo, a config file, or a log. One stack parameter does that with no new storage.
+**Technical:** `AlertWebhookUrl` is a `NoEcho` String parameter with an empty default, mapped to `ALERT_WEBHOOK_URL` in `Globals.Function`. `_get_deps` builds `MultiPublisher([Sns, Webhook])` when the var is non-blank, otherwise plain `SnsPublisher` (unchanged v1 behavior). The deploy reads it from the operator's shell env. Tradeoff: `NoEcho` masks the value in CloudFormation, but it's still plaintext in the Lambda's environment config; Secrets Manager would hide it there too, at a cost and an extra IAM policy.
+**Q:** What does `NoEcho` actually protect? **A:** It masks the value in `describe-stacks`, events, and the console. It does not encrypt it in the Lambda env or hide it from anyone with `lambda:GetFunctionConfiguration`.
+**Q:** Why must later deploys pass `UsePreviousValue`? **A:** Without it, a change set falls back to the parameter default (empty), which silently turns the webhook off.

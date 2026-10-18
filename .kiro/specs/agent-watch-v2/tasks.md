@@ -174,7 +174,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 30.3, 30.4, 30.5, 30.6, 30.7_
     - Commit: `feat(backend): webhook publisher and alert fan-out`
 
-  - [ ] 11.2 Wire the webhook through the handler and the template
+  - [x] 11.2 Wire the webhook through the handler and the template (code done on `feat/webhook-alerts`; merge and deploy are Tejaswi's)
     - Write the failing tests first. `test_handler.py`: with `ALERT_WEBHOOK_URL` set, `_get_deps` builds a `MultiPublisher` with an `SnsPublisher` and a `WebhookPublisher`; unset or empty gives only SNS (reset `_deps` between cases). `test_template.py`: parameter `AlertWebhookUrl` with `Default: ""` and `NoEcho: true`; `Globals.Function.Environment.Variables.ALERT_WEBHOOK_URL` is `!Ref AlertWebhookUrl`; still exactly two policies. `test_readme.py`: README has a "Webhook alerts" section mentioning Discord, Slack, and `AlertWebhookUrl`, and `samconfig.toml` contains no `AlertWebhookUrl`.
     - Implement the handler change, the template parameter and env var, and the README section (how to create a Discord or Slack incoming webhook; deploy with `--parameter-overrides AlertWebhookUrl=...`; later change sets pass `UsePreviousValue`).
     - Branch `feat/webhook-alerts`, PR via the GitHub MCP server, Tejaswi approves and deploys with the URL passed once on the command line (never typed into a file).

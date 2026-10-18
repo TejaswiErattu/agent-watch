@@ -10,6 +10,11 @@ Parameters:
     Type: String
     Default: http://localhost:3000
     Description: Deployed dashboard origin allowed by CORS (set to the Amplify URL once it exists).
+  AlertWebhookUrl:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Optional Discord or Slack incoming webhook URL for alerts. Secret; pass at deploy, never commit.
 
 Globals:
   Function:
@@ -21,6 +26,7 @@ Globals:
       Variables:
         TABLE_NAME: !Ref EventTable
         TOPIC_ARN: !Ref AlertTopic
+        ALERT_WEBHOOK_URL: !Ref AlertWebhookUrl
   HttpApi:
     # CORS on the implicit HTTP API. An explicit ServerlessHttpApi resource is
     # ignored by SAM here, so the config must live under Globals to take effect.

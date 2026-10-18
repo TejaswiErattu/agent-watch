@@ -86,3 +86,21 @@ def test_docs_contain_no_live_secrets():
         text = path.read_text().replace(KEY_FROM_FILE, "AGENTWATCH_KEY=<from-file>")
         assert not re.search(r"AGENTWATCH_KEY=(?!<)[^\s`]+", text), path.name
         assert not re.search(r"\b[0-9a-f]{64}\b", text), path.name
+
+
+# ---- v2 11.2: webhook alerts (Req 30.8, 30.9) ----
+
+WEBHOOK_URL_RE = re.compile(r"https://(discord(app)?\.com/api/webhooks|hooks\.slack\.com/services)/[^\s<`]*[0-9A-Za-z_-]{20,}")
+
+
+def test_readme_webhook_section():
+    body = _section(README.read_text(), "Webhook alerts")
+    for s in ("Discord", "Slack", "AlertWebhookUrl", "UsePreviousValue", "DISCORD_WEBHOOK_URL"):
+        assert s in body, s
+
+
+def test_webhook_url_never_in_repo_config_or_docs():
+    samconfig = (ROOT / "backend" / "samconfig.toml").read_text()
+    assert "AlertWebhookUrl" not in samconfig and "webhook" not in samconfig.lower()
+    for path in [README, *DOCS.glob("*.md"), ROOT / "PROGRESS.md"]:
+        assert not WEBHOOK_URL_RE.search(path.read_text()), path.name
