@@ -29,6 +29,15 @@ function hourLabel(start: string): string {
   return `${String(end.getHours()).padStart(2, "0")}:00`;
 }
 
+export type Anchor = "start" | "middle" | "end";
+
+// Edge labels anchor inward so they never run past the chart's left or right edge.
+export function labelAnchor(i: number, n: number): Anchor {
+  if (i === 0) return "start";
+  if (i === n - 1) return "end";
+  return "middle";
+}
+
 export function SpendChart({ buckets, capUsd }: SpendChartProps) {
   const max = yMax(buckets, capUsd);
   const plotH = H - PAD_T - PAD_B;
@@ -51,6 +60,10 @@ export function SpendChart({ buckets, capUsd }: SpendChartProps) {
           const h = (b.costUsd / max) * plotH;
           const x = PAD_L + i * slot + (slot - barW) / 2;
           const label = hourLabel(b.start);
+          const anchor = labelAnchor(i, buckets.length);
+          // Anchor point: slot's left edge, bar center, or slot's right edge.
+          const labelX =
+            anchor === "start" ? PAD_L + i * slot : anchor === "end" ? PAD_L + (i + 1) * slot : x + barW / 2;
           return (
             <g key={b.start}>
               <rect data-bar x={x} y={baseY - h} width={barW} height={h} fill="#2563eb">
@@ -70,7 +83,15 @@ export function SpendChart({ buckets, capUsd }: SpendChartProps) {
                 </text>
               ) : null}
               {i % 6 === 5 ? (
-                <text x={x + barW / 2} y={H - 4} textAnchor="middle" fontSize={9} fill="#6b7280">
+                <text
+                  data-hour-label
+                  data-anchor={anchor}
+                  x={labelX}
+                  y={H - 4}
+                  textAnchor={anchor}
+                  fontSize={9}
+                  fill="#6b7280"
+                >
                   {label}
                 </text>
               ) : null}

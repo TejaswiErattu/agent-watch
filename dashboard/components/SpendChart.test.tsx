@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { SpendChart, yMax } from "./SpendChart";
+import { SpendChart, yMax, labelAnchor } from "./SpendChart";
 import type { SpendBucket } from "@/lib/types";
 
 const START = Date.parse("2026-10-16T15:00:00.000Z");
@@ -46,6 +46,16 @@ describe("SpendChart", () => {
   it("does not show the empty message when a bucket has only blocks", () => {
     render(<SpendChart buckets={buckets({ 3: { blocked: 1 } })} capUsd={null} />);
     expect(screen.queryByText("No LLM calls in the last 24 hours")).toBeNull();
+  });
+
+  it("anchors edge labels inward so the last one is not clipped", () => {
+    expect(labelAnchor(0, 24)).toBe("start");
+    expect(labelAnchor(11, 24)).toBe("middle");
+    expect(labelAnchor(23, 24)).toBe("end");
+    const { container } = render(<SpendChart buckets={buckets()} capUsd={null} />);
+    const labels = Array.from(container.querySelectorAll("[data-hour-label]"));
+    expect(labels).toHaveLength(4);
+    expect(labels.map((l) => l.getAttribute("data-anchor"))).toEqual(["middle", "middle", "middle", "end"]);
   });
 
   it("uses at least cap/24 as the y-axis max", () => {
