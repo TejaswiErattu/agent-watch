@@ -9,41 +9,71 @@ import { CredentialsForm } from "@/components/CredentialsForm";
 import { Timeline } from "@/components/Timeline";
 import { RulesEditor } from "@/components/RulesEditor";
 import { PauseButton } from "@/components/PauseButton";
+import { AgentSummary } from "@/components/AgentSummary";
+import { SpendChart } from "@/components/SpendChart";
 import { Alert } from "@/components/ui/alert";
-import { getStatus } from "@/lib/api";
-import type { StatusResponse } from "@/lib/types";
+import { getConfig, getSpend, getStatus, getTimeline } from "@/lib/api";
+import { bucketSpend, fetchWindow, HOUR_MS } from "@/lib/spend";
+import type { SpendBucket, SpendResponse, StatusResponse } from "@/lib/types";
+
+// Not exported: Next.js page modules may only export the page and route config.
+const REFRESH_MS = 30_000;
+
+interface Overview {
+  status: StatusResponse;
+  spend: SpendResponse;
+  capUsd: number | null;
+  buckets: SpendBucket[];
+  lastSeen: string | null;
+}
 
 function AgentDetail() {
   const params = useSearchParams();
   const agentId = params.get("id");
   const [creds, setCreds] = React.useState<Credentials | null>(null);
   const [loaded, setLoaded] = React.useState(false);
-
-  const [status, setStatus] = React.useState<StatusResponse | null>(null);
-  const [statusError, setStatusError] = React.useState<string | null>(null);
+  const [overview, setOverview] = React.useState<Overview | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setCreds(loadCredentials());
     setLoaded(true);
   }, []);
 
-  // Re-read status from the server (on load and after a pause/resume) so the
-  // page shows the stored Pause_State, not just what the button last sent.
-  const refreshStatus = React.useCallback(() => {
+  // One refresh for everything above the rules: status, server spend, cap,
+  // the 24h chart, and last activity. Runs on load, every 30 s, and after a
+  // rules save or pause/resume.
+  const refresh = React.useCallback(async () => {
     if (!creds || !agentId) return;
-    getStatus(creds, agentId)
-      .then((res) => {
-        setStatus(res);
-        setStatusError(null);
-      })
-      .catch((e) => {
-        setStatusError(e instanceof Error ? e.message : "Failed to load status");
+    const end = Date.now();
+    const since = new Date(end - 24 * HOUR_MS).toISOString();
+    try {
+      const [status, spend, config, llm, blocked, latest] = await Promise.all([
+        getStatus(creds, agentId),
+        getSpend(creds, agentId),
+        getConfig(creds, agentId),
+        fetchWindow(creds, agentId, "llm_call", since),
+        fetchWindow(creds, agentId, "blocked", since),
+        getTimeline(creds, agentId, { order: "desc", limit: 1 }),
+      ]);
+      setOverview({
+        status,
+        spend,
+        capUsd: config.guardrails.dailySpendCapUsd,
+        buckets: bucketSpend(llm, blocked, end),
+        lastSeen: latest.events[0]?.ts ?? null,
       });
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load agent overview");
+    }
   }, [creds, agentId]);
 
   React.useEffect(() => {
-    refreshStatus();
-  }, [refreshStatus]);
+    void refresh();
+    const id = setInterval(() => void refresh(), REFRESH_MS);
+    return () => clearInterval(id);
+  }, [refresh]);
 
   if (!loaded) return null;
 
@@ -70,6 +100,8 @@ function AgentDetail() {
     );
   }
 
+  const status = overview?.status ?? null;
+
   return (
     <main className="mx-auto max-w-5xl space-y-8 p-8">
       <div className="flex items-center justify-between">
@@ -78,9 +110,19 @@ function AgentDetail() {
           Back to inventory
         </Link>
       </div>
+      {error ? <Alert variant="destructive">{error}</Alert> : null}
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">Overview</h2>
+        <AgentSummary
+          spend={overview?.spend ?? null}
+          capUsd={overview?.capUsd ?? null}
+          status={status}
+          lastSeen={overview?.lastSeen ?? null}
+        />
+        {overview ? <SpendChart buckets={overview.buckets} capUsd={overview.capUsd} /> : null}
+      </section>
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Status</h2>
-        {statusError ? <Alert variant="destructive">{statusError}</Alert> : null}
         {status ? (
           <>
             <p className="text-sm">
@@ -96,14 +138,14 @@ function AgentDetail() {
               creds={creds}
               agentId={agentId}
               status={status}
-              onChanged={refreshStatus}
+              onChanged={() => void refresh()}
             />
           </>
         ) : null}
       </section>
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Rules</h2>
-        <RulesEditor creds={creds} agentId={agentId} />
+        <RulesEditor creds={creds} agentId={agentId} onSaved={() => void refresh()} />
       </section>
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Timeline</h2>

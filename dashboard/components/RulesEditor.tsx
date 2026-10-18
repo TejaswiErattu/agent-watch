@@ -12,9 +12,11 @@ import { Alert } from "@/components/ui/alert";
 export interface RulesEditorProps {
   creds: Credentials;
   agentId: string;
+  // Called after a successful save so the page can refresh the cap in the summary.
+  onSaved?: () => void;
 }
 
-export function RulesEditor({ creds, agentId }: RulesEditorProps) {
+export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
   const [capInput, setCapInput] = React.useState("");
   const [paths, setPaths] = React.useState<string[]>([]);
   const [newPath, setNewPath] = React.useState("");
@@ -89,6 +91,7 @@ export function RulesEditor({ creds, agentId }: RulesEditorProps) {
       applyConfig(res.guardrails);
       setError(null);
       setSaved(true);
+      onSaved?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save config");
       setSaved(false);

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor, act } from "@testing-library/react";
 
 let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
@@ -7,70 +7,104 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-// Child components talk to the API; stub them to isolate the page.
+// Child components that fetch on their own are stubbed; RulesEditor exposes onSaved.
 vi.mock("@/components/Timeline", () => ({
   Timeline: ({ agentId }: { agentId: string }) => (
     <div data-testid="timeline">timeline {agentId}</div>
   ),
 }));
 vi.mock("@/components/RulesEditor", () => ({
-  RulesEditor: ({ agentId }: { agentId: string }) => (
-    <div data-testid="rules">rules {agentId}</div>
+  RulesEditor: ({ agentId, onSaved }: { agentId: string; onSaved?: () => void }) => (
+    <div data-testid="rules">
+      rules {agentId}
+      <button type="button" onClick={() => onSaved?.()}>
+        fake save
+      </button>
+    </div>
   ),
 }));
 
 const getStatus = vi.fn();
 const putStatus = vi.fn();
+const getSpend = vi.fn();
+const getConfig = vi.fn();
+const getTimeline = vi.fn();
 vi.mock("@/lib/api", () => ({
-  getStatus: (...args: unknown[]) => getStatus(...args),
-  putStatus: (...args: unknown[]) => putStatus(...args),
+  getStatus: (...a: unknown[]) => getStatus(...a),
+  putStatus: (...a: unknown[]) => putStatus(...a),
+  getSpend: (...a: unknown[]) => getSpend(...a),
+  getConfig: (...a: unknown[]) => getConfig(...a),
+  getTimeline: (...a: unknown[]) => getTimeline(...a),
 }));
 
 import userEvent from "@testing-library/user-event";
 import AgentPage from "./page";
 import { saveCredentials } from "@/lib/credentials";
 
+const CREDS = { ownerId: "alice", keyHash: "a".repeat(64) };
+
 beforeEach(() => {
   localStorage.clear();
   searchParams = new URLSearchParams();
-  getStatus.mockReset();
-  putStatus.mockReset();
+  for (const f of [getStatus, putStatus, getSpend, getConfig, getTimeline]) f.mockReset();
   getStatus.mockResolvedValue({ agentId: "bot1", paused: false, pausedAt: null });
+  getSpend.mockResolvedValue({
+    agentId: "bot1",
+    rollingSpendUsd: 0.0025,
+    windowStart: "x",
+    windowEnd: "y",
+  });
+  getConfig.mockResolvedValue({
+    guardrails: { dailySpendCapUsd: 0.01, blockedPaths: [], blockedCommands: [] },
+  });
+  getTimeline.mockResolvedValue({ events: [], nextCursor: null });
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+function open() {
+  saveCredentials(CREDS);
+  searchParams = new URLSearchParams("id=bot1");
+  return render(<AgentPage />);
+}
 
 describe("agent detail page", () => {
   it("renders Timeline and RulesEditor for the id", async () => {
-    saveCredentials({ ownerId: "alice", keyHash: "a".repeat(64) });
-    searchParams = new URLSearchParams("id=bot1");
-    render(<AgentPage />);
+    open();
     expect(await screen.findByTestId("timeline")).toHaveTextContent("bot1");
     expect(screen.getByTestId("rules")).toHaveTextContent("bot1");
   });
 
-  it("renders the pause state from getStatus", async () => {
-    saveCredentials({ ownerId: "alice", keyHash: "a".repeat(64) });
-    searchParams = new URLSearchParams("id=bot1");
-    getStatus.mockResolvedValue({
-      agentId: "bot1",
-      paused: true,
-      pausedAt: "2026-10-14T12:00:00.000Z",
-    });
-    render(<AgentPage />);
-    expect(await screen.findByRole("button", { name: "Resume agent" })).toBeInTheDocument();
-    expect(screen.getByTestId("pause-state")).toHaveTextContent("Paused");
-    expect(getStatus).toHaveBeenCalledWith(
-      { ownerId: "alice", keyHash: "a".repeat(64) },
-      "bot1"
-    );
+  it("loads status, spend, config, and window events and renders the tile and chart above the rules", async () => {
+    const { container } = open();
+    expect(await screen.findByRole("progressbar")).toHaveAttribute("aria-valuenow", "25");
+    expect(getStatus).toHaveBeenCalledWith(CREDS, "bot1");
+    expect(getSpend).toHaveBeenCalledWith(CREDS, "bot1");
+    expect(getConfig).toHaveBeenCalledWith(CREDS, "bot1");
+    const types = getTimeline.mock.calls.map((c) => c[2]?.type);
+    expect(types).toContain("llm_call");
+    expect(types).toContain("blocked");
+    expect(container.querySelectorAll("rect[data-bar]")).toHaveLength(24);
+    const summary = screen.getByTestId("agent-summary");
+    const rules = screen.getByTestId("rules");
+    expect(summary.compareDocumentPosition(rules) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows Active and refetches status after a pause", async () => {
+  it("renders the pause state from getStatus", async () => {
+    getStatus.mockResolvedValue({ agentId: "bot1", paused: true, pausedAt: "2026-10-14T12:00:00.000Z" });
+    open();
+    expect(await screen.findByRole("button", { name: "Resume agent" })).toBeInTheDocument();
+    expect(screen.getByTestId("pause-state")).toHaveTextContent("Paused");
+    expect(screen.getByTestId("summary-status")).toHaveTextContent("Paused");
+  });
+
+  it("refetches after a pause", async () => {
     const user = userEvent.setup();
-    saveCredentials({ ownerId: "alice", keyHash: "a".repeat(64) });
-    searchParams = new URLSearchParams("id=bot1");
     const pausedRes = { agentId: "bot1", paused: true, pausedAt: "2026-10-14T12:00:00.000Z" };
     putStatus.mockResolvedValue(pausedRes);
-    render(<AgentPage />);
+    open();
     expect(await screen.findByTestId("pause-state")).toHaveTextContent("Active");
 
     getStatus.mockResolvedValue(pausedRes);
@@ -78,12 +112,37 @@ describe("agent detail page", () => {
     await user.click(screen.getByRole("button", { name: "Confirm pause" }));
 
     expect(await screen.findByRole("button", { name: "Resume agent" })).toBeInTheDocument();
-    expect(screen.getByTestId("pause-state")).toHaveTextContent("Paused");
+    await waitFor(() => expect(screen.getByTestId("pause-state")).toHaveTextContent("Paused"));
     expect(getStatus).toHaveBeenCalledTimes(2);
   });
 
+  it("refetches after a rules save", async () => {
+    const user = userEvent.setup();
+    open();
+    await screen.findByRole("progressbar");
+    expect(getSpend).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "fake save" }));
+    await waitFor(() => expect(getSpend).toHaveBeenCalledTimes(2));
+    expect(getConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes every 30 s and stops after unmount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { unmount } = open();
+    await waitFor(() => expect(getSpend).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    await waitFor(() => expect(getSpend).toHaveBeenCalledTimes(2));
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(getSpend).toHaveBeenCalledTimes(2);
+  });
+
   it("shows a message and a link back when id is missing", async () => {
-    saveCredentials({ ownerId: "alice", keyHash: "a".repeat(64) });
+    saveCredentials(CREDS);
     render(<AgentPage />);
     expect(await screen.findByText(/no agent selected/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute("href", "/");

@@ -207,3 +207,25 @@ describe("RulesEditor", () => {
     expect((screen.getByLabelText(/daily spend cap/i) as HTMLInputElement).value).toBe("9");
   });
 });
+
+describe("RulesEditor onSaved", () => {
+  it("calls onSaved after a successful save only", async () => {
+    const user = userEvent.setup();
+    const onSaved = vi.fn();
+    getConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [], blockedCommands: [] },
+    });
+    putConfig.mockRejectedValueOnce(new Error("boom"));
+    render(<RulesEditor creds={creds} agentId="bot1" onSaved={onSaved} />);
+    const save = await screen.findByRole("button", { name: /save rules/i });
+    await user.click(save);
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+    expect(onSaved).not.toHaveBeenCalled();
+
+    putConfig.mockResolvedValueOnce({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [], blockedCommands: [] },
+    });
+    await user.click(save);
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  });
+});
