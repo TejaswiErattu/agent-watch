@@ -104,3 +104,187 @@ def test_webhook_url_never_in_repo_config_or_docs():
     assert "AlertWebhookUrl" not in samconfig and "webhook" not in samconfig.lower()
     for path in [README, *DOCS.glob("*.md"), ROOT / "PROGRESS.md"]:
         assert not WEBHOOK_URL_RE.search(path.read_text()), path.name
+
+
+# ---- v2 17.1: README, ARCHITECTURE, SUBMISSION (Req 37.1, 37.2, 37.5) ----
+# Groups 12 (rate limit) and 13 (CLI) were cut, so their features must appear only as
+# excluded, never as shipped. The exception list is the one the SDK actually exports.
+
+SHIPPED_EXCEPTIONS = ("PathBlocked", "SpendCapExceeded", "AgentPaused", "CommandBlocked", "GuardrailBlocked")
+CUT_FEATURES = ("maxLlmCallsPerMinute", "RateLimitExceeded", "agentwatch init", "agentwatch doctor")
+
+
+def test_readme_documents_shipped_v2_features():
+    text = README.read_text()
+    for s in ("blockedCommands", "Pause agent", "Confirm pause", "Resume agent", "Add presets",
+              "Webhook alerts", "Discord", "SNS"):
+        assert s in text, s
+    for name in SHIPPED_EXCEPTIONS:
+        assert f"`agentwatch.{name}`" in text or f"`{name}`" in text, name
+
+
+def test_readme_exports_match_the_sdk():
+    init = (ROOT / "sdk" / "agentwatch" / "__init__.py").read_text()
+    for name in SHIPPED_EXCEPTIONS:
+        assert f'"{name}"' in init, name           # the README never names an exception the SDK lacks
+    assert "RateLimitExceeded" not in init
+
+
+def test_readme_names_cut_features_only_as_excluded():
+    text = README.read_text()
+    excluded = _section(text, "Not in this release")
+    for s in ("maxLlmCallsPerMinute", "agentwatch init"):
+        assert s in excluded, s
+    assert "not implemented" in excluded.lower()
+    outside = text.replace(excluded, "")
+    for s in CUT_FEATURES:
+        assert s not in outside, f"{s} appears outside 'Not in this release'"
+
+
+def test_readme_known_limitations_v2():
+    body = _section(README.read_text(), "Known limitations").lower()
+    assert "over-block" in body and "blockedcommands" in body       # 37.1: regex over-blocking
+    assert "pause" in body and "5 s" in body                        # 37.1: pause propagation
+    assert "env_file" in body                                       # blockedPaths does not cover shell strings
+    assert "plaintext" in body and "lambda" in body                 # NoEcho does not hide the env value
+
+
+def test_readme_webhook_secret_never_on_the_command_line():
+    body = _section(README.read_text(), "Webhook alerts")
+    assert 'AlertWebhookUrl="$' not in body and "ParameterValue=\"$" not in body   # argv is visible to ps
+    assert "never into a file" not in body
+    assert "file://" in body and "0600" in body and "rm " in body   # restricted temp parameters file, deleted
+
+
+def test_readme_documents_verification_scripts():
+    body = _section(README.read_text(), "Verify a deployment")
+    assert "scripts/verify_deploy.sh" in body and "scripts/e2e.sh" in body
+    assert "alert" in body.lower()                                  # e2e sends real alerts
+
+
+def test_architecture_covers_v2():
+    text = (DOCS / "ARCHITECTURE.md").read_text()
+    assert "GET /agents/{agentId}/status" in text and "PUT /agents/{agentId}/status" in text
+    assert "control plane" in text.lower() and "rules plane" in text.lower()
+    assert "MultiPublisher" in text and "WebhookPublisher" in text
+
+
+def test_submission_v2_moments_and_next_steps():
+    text = (DOCS / "SUBMISSION.md").read_text()
+    what = _section(text, "What it does")
+    for s in ("Pause", "CommandBlocked", "spend chart", "Discord"):
+        assert s.lower() in what.lower(), s
+    nxt = _section(text, "Next steps").lower()
+    for shipped in ("kill switch", "shell-command guard", "webhook alerts", "discord"):
+        assert shipped not in nxt, shipped                          # Next steps drops what shipped
+    for cut in ("rate limit", "cli"):
+        assert cut in nxt, cut                                      # cut features stay future work
+
+
+def _bash_blocks(body: str) -> list[str]:
+    return re.findall(r"```bash\n(.*?)```", body, re.DOTALL)
+
+
+def test_readme_change_set_is_reviewed_approved_then_executed():
+    body = _section(README.read_text(), "Webhook alerts")
+    assert "only if nothing is replaced" not in body                 # Modify without replacement can still be unsafe
+    review = body.index("Review the complete change set")
+    approve = body.index("Get approval for this change set")
+    execute = body.index("execute-change-set")
+    assert review < approve < execute                               # prepare, review, approve, then execute
+    assert "approved for this deployment" in body                   # compared against an explicit list
+    for s in ("Action", "Replacement", "Scope", "Details"):
+        assert s in body, s                                         # the review query shows the full change rows
+    assert "--include-property-values" in body                      # warned against: it can print the URL
+    assert "one-time exception" in body and "not a standing authorization" in body
+    prepare = _bash_blocks(body[:review])
+    assert prepare and not any("execute-change-set" in b for b in prepare)   # preparing never executes
+
+
+def test_readme_webhook_temp_file_cleaned_on_failure():
+    body = _section(README.read_text(), "Webhook alerts")
+    prepare = next(b for b in _bash_blocks(body) if "mktemp" in b)
+    assert "trap 'rm -f \"$PARAMS\"' EXIT" in prepare               # removed if interrupted
+    assert "set -e" not in prepare                                  # zsh skips the EXIT trap when set -e ends a subshell
+    cleanup = prepare.index('rm -f "$PARAMS"                     #')
+    assert prepare.index("create-change-set") < cleanup              # removed right after the call, success or failure
+
+
+# ---- 17.1 review: run the README's "Prepare the change set" block offline ----
+# The exact block is extracted from README.md and run with stubbed sam, aws, and mktemp in a
+# temp directory. No AWS call, no real secret, nothing outside tmp_path is touched.
+
+import os
+import shutil
+import subprocess
+import sys
+
+import pytest
+
+DUMMY = "DUMMYWEBHOOKVALUEFORTESTONLY"
+
+HARNESS = r'''
+LOG="$TESTDIR/calls.log"; : > "$LOG"; : > "$TESTDIR/paramsfile"
+sam() {
+  printf 'sam %s\n' "$*" >> "$LOG"
+  case "$1" in
+    build) [ "$MODE" = build_fail ] && return 1 ;;
+    package) [ "$MODE" = package_fail ] && return 1
+             mkdir -p .aws-sam && echo FRESH > .aws-sam/packaged.yaml ;;
+  esac
+  return 0
+}
+mktemp() { p="$(command mktemp "$@")"; echo "$p" > "$TESTDIR/paramsfile"; echo "$p"; }
+aws() {
+  all="$*"; printf 'aws %s\n' "$all" >> "$LOG"
+  case "$all" in
+    *create-change-set*)
+      f="${all##*file://}"; f="${f%% *}"
+      python3 -c 'import os,sys; print("mode", oct(os.stat(sys.argv[1]).st_mode & 0o777))' "$f" >> "$LOG"
+      echo "template $(cat .aws-sam/packaged.yaml)" >> "$LOG"
+      [ "$MODE" = aws_fail ] && return 255
+      [ "$MODE" = signal ] && { sh -c 'kill -TERM $PPID'; sleep 1; } ;;
+  esac
+  return 0
+}
+. "$TESTDIR/block.sh"
+'''
+
+
+def _prepare_block() -> str:
+    body = _section(README.read_text(), "Webhook alerts")
+    block = next(b for b in _bash_blocks(body) if "mktemp" in b)
+    # The README indents the block under a list item; the rendered copy has no indent.
+    return "\n".join(line[3:] if line.startswith("   ") else line for line in block.splitlines()) + "\n"
+
+
+SHELLS = [s for s in ("bash", "zsh") if shutil.which(s)]
+
+
+@pytest.mark.parametrize("shell", SHELLS)
+@pytest.mark.parametrize("mode", ["ok", "build_fail", "package_fail", "aws_fail", "signal"])
+def test_readme_prepare_block_offline(tmp_path, shell, mode):
+    (tmp_path / "block.sh").write_text(_prepare_block())
+    (tmp_path / "harness.sh").write_text(HARNESS)
+    work = tmp_path / "backend"
+    (work / ".aws-sam").mkdir(parents=True)
+    (work / ".aws-sam" / "packaged.yaml").write_text("STALE")      # an older package must never be used
+    env = {**os.environ, "TESTDIR": str(tmp_path), "MODE": mode, "DISCORD_WEBHOOK_URL": f"https://discord.com/api/webhooks/1/{DUMMY}",
+           "PATH": os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")}
+    rc = subprocess.run([shell, str(tmp_path / "harness.sh")], cwd=work, env=env, capture_output=True, text=True, timeout=30).returncode
+    log = (tmp_path / "calls.log").read_text()
+    params = (tmp_path / "paramsfile").read_text().strip()
+
+    assert DUMMY not in log                                          # the value never reaches any command's arguments
+    assert "STALE" not in log                                        # never packaged from an older template
+    if mode in ("build_fail", "package_fail"):
+        assert rc != 0
+        assert "aws " not in log and params == ""                    # stopped before the secret file or any AWS call
+        assert not (work / ".aws-sam" / "packaged.yaml").exists()    # the stale package was removed, not reused
+        return
+    assert "template FRESH" in log and "mode 0o600" in log
+    assert params and not os.path.exists(params)                     # temp file gone: success, failure, or signal
+    if mode == "ok":
+        assert rc == 0 and "change-set-create-complete" in log
+    else:
+        assert rc != 0 and "change-set-create-complete" not in log   # no wait after a failed create

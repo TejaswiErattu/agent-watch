@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-17 by Claude Code session (11.2 merged and deployed; 11.3 verified except the block-to-channel timing)
+Last updated: 2026-10-17 by Claude Code session (17.1 README/ARCHITECTURE/SUBMISSION on `docs/group-17-readme`, in review; 11.3 timing still pending)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -100,6 +100,14 @@ Last updated: 2026-10-17 by Claude Code session (11.2 merged and deployed; 11.3 
   - Discord messages arrived in the channel, and SNS alert emails arrived.
   - CloudWatch `AWS/SNS` for the alert topic over the observed 2-hour window: 6 messages published, 6 notifications delivered, 0 failed. These metrics cover the SNS (email) path only; Discord posts go straight from the Lambda and do not appear in SNS metrics.
   - NOT yet verified: the block-to-channel time (the 11.3 acceptance step) and block-to-email time, and which blocked event produced which Discord message and email. 11.3 stays open until the timing is recorded (planned in 17.5).
+- v2 17.1 DONE on `docs/group-17-readme` (in review, not merged):
+  - README rewritten for v2: the problem, a request-flow sketch and stack table, how an agent connects and reports events, the four guardrails in one table (`PathBlocked`, `CommandBlocked`, `SpendCapExceeded`, `AgentPaused`), alerts, the dashboard (real UI labels), demos incl. `--loop 20 --sleep 2`, a "Verify a deployment" section for `verify_deploy.sh` and `e2e.sh`, the final demo, "Not in this release", and v2 Known limitations (command over-blocking, `blockedPaths` vs. shell strings and the `env_file` preset, pause propagation, sequential alert publishing, the webhook URL being plaintext in the Lambda env, the 20-page chart window).
+  - Webhook guidance corrected: the URL is read with `read -rs` and goes to CloudFormation through a `mktemp` (0600) parameters file that is deleted afterward, never as a command-line argument, which `ps` can see.
+  - Review fix (PR #7): the webhook steps are now prepare, review, approve, execute. "Execute only if nothing is replaced" is gone: the full change set (action, replacement, scope, changed properties) is compared with a resource list approved for that deployment, and executed only after approval; the 2026-10-17 `ApiFunction`/`ServerlessHttpApi` approval is described as a one-time exception, not a standing authorization. The temporary parameters file is removed right after the AWS call returns, success or failure, plus a trap for interrupts; `set -e` is not used because zsh skips the `EXIT` trap when it ends a subshell. Checked offline with a stubbed `aws` in bash and zsh (success, failure, and SIGTERM mid-call): file removed every time, exit code passed through, the value never in any argv.
+  - Second review fix (PR #7): `sam build` and `sam package` moved inside the same subshell, gated with `|| exit 1`, after deleting any older `.aws-sam/packaged.yaml`, and before the secret file is written; a missing or empty package also stops it. So a failed build or package can never create a change set from an older template. `test_readme.py` now runs the exact README block offline under bash and zsh with stubbed `sam`, `aws`, and `mktemp` (build fail, package fail with a stale package present, success, AWS failure, SIGTERM): 30 tests. Against the previous README, the 4 build/package-failure cases fail, as they should.
+  - ARCHITECTURE: status routes, control plane vs. rules plane, alert fan-out, the `paused`/`pausedAt` and `blockedCommands` fields, and five new decisions. SUBMISSION: the v2 moments, the cut features, and next steps (rate limit, CLI, Secrets Manager).
+  - Scope: groups 12 and 13 stay cut; their features are documented only as excluded. The tracker keeps 17.1's original criteria and records the exclusion in a scope note.
+  - `test_readme.py`: 20 new tests (30 in the file, 10 of them running the README block under bash and zsh). Backend 601 passed, SDK 314 passed with the 1 pre-existing Property 33 failure, dashboard 131 passed.
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
@@ -108,7 +116,8 @@ Last updated: 2026-10-17 by Claude Code session (11.2 merged and deployed; 11.3 
 - 8.7 pause-to-stop time was not timed. Measure it in 17.5.
 - README note for 17.1 (Known limitations): "blockedPaths does not cover shell strings; use the .env command preset".
 - Scope (2026-10-17, Tejaswi): group 10 done; group 11 (Discord) is back in. Groups 12 and 13 stay cut. On 2026-10-19 move to group 17.
-- EXACT NEXT STEP: 11.2 is deployed and 11.3 is verified except its timing. Record block-to-channel (and block-to-email) time for one blocked event, then tick 11.3; this can be folded into the 17.5 rehearsal. On 2026-10-19 move to group 17 (17.1 docs, 17.2 demo script, 17.3 e2e: note `e2e.sh` does not yet cover pause/resume).
+- EXACT NEXT STEP: Tejaswi reviews and merges the 17.1 PR; then 17.2 (DEMO_SCRIPT v2) on its own branch. Known inconsistencies left for their own tasks: `docs/DEMO_SCRIPT.md` still has only the v1 moments (17.2), `docs/CODEBASE_GUIDE.md` section 10 still lists the rate limit and the CLI as v2 features (17.4), and 17.3's rate-limit criterion is to be recorded as excluded in the 17.3 PR.
+- Earlier: 11.2 is deployed and 11.3 is verified except its timing. Record block-to-channel (and block-to-email) time for one blocked event, then tick 11.3; this can be folded into the 17.5 rehearsal. On 2026-10-19 move to group 17 (17.1 docs, 17.2 demo script, 17.3 e2e: note `e2e.sh` does not yet cover pause/resume).
 - 11.2 deploy plan (executed 2026-10-17; kept for the record and for later change sets):
   1. Preflight: `[ -n "${DISCORD_WEBHOOK_URL:-}" ] && echo set || echo MISSING` prints only set or MISSING, never the value. Also `aws sts get-caller-identity --query Account` and `git status` (clean, on main, includes PR #5).
   2. `sam build` and `sam package --resolve-s3 --output-template-file .aws-sam/packaged.yaml` in `backend/`.
@@ -211,4 +220,5 @@ Last updated: 2026-10-17 by Claude Code session (11.2 merged and deployed; 11.3 
 - 2026-10-17 (11.3) Delivery is recorded as observed, not inferred: SNS CloudWatch metrics confirm email delivery counts but not Discord, and no per-event latency was measured. Timings are taken by hand in 17.5, since channel delivery time is not automated by design (tasks.md Notes).
 
 ## Open bugs
-- (none open. The "Save rules" 400 deploy-order hazard was resolved by the 9.7 deploy.)
+- 2026-10-17 SDK Property 33 (`sdk/tests/test_properties_commands.py::test_property_33_wrapped_tool_matches_reference`) fails on `main` and on this branch: Hypothesis found `pats=['rm', 'rm']`, positional `'rm rm '`, keyword `command=['rm']`, and the blocked event reports `attemptedCommand` `rm rm` where the reference expects the named `command` argument (`rm`) first. The tool is still blocked (`CommandBlocked` raised, tool not run); only the reported candidate order differs. Hypothesis now replays the example, so the SDK suite reads 1 failed, 314 passed. Not demo-blocking. Fix as its own `fix(sdk)` task after deciding whether the implementation or the test's reference is wrong; not changed during the 17.1 docs task.
+- (The "Save rules" 400 deploy-order hazard was resolved by the 9.7 deploy.)
