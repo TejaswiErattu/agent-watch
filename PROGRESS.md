@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-17 by Kiro session (9.1/9.2 deployed, 9.7 PASS; 10.1–10.5 done and pushed; 10.6 is Tejaswi's)
+Last updated: 2026-10-17 by Kiro session (10.6–10.8 done, group 10 complete; 11.1 on main; 11.2 in PR #5, not deployed)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -81,6 +81,11 @@ Last updated: 2026-10-17 by Kiro session (9.1/9.2 deployed, 9.7 PASS; 10.1–10.
   - 10.4 (8e1f689): `describeEvent` moved to `lib/format.ts` with a branch for each of the seven Violation_Types. Timeline rows show the `llm_call` cost, relative time with `title` = ts, and a Details toggle with the formatted `meta`.
   - 10.5 (6c8e8b6): "stale" badge when last activity is > 24 h old. `npm run build` exports `/` and `/agent`.
   - Dashboard suite: 129 passed (was 80). Backend and SDK not touched (552 / 315).
+- v2 10.6 DONE (checked by Tejaswi on Amplify, 2026-10-17): the chart, summary tile, and Details toggle work. The 3 alert emails from the 9.7 e2e run arrived. She found two chart bugs, fixed as 10.7 and 10.8.
+- v2 10.7 DONE (a79477b): the last x-axis label was clipped ("17:0C"). `labelAnchor(i, n)` anchors bucket 0 at start, the last bucket at end, and the rest in the middle.
+- v2 10.8 DONE (b00ef8f): the SVG uses `preserveAspectRatio="none"`, so its text was stretched. Bars and the axis stay in the stretched SVG. Hour labels and red block counts are now HTML `<span>`s in an `aria-hidden` overlay, positioned in percent of the same viewBox coordinates. Dashboard: 131 passed, and `npm run build` exports `/` and `/agent`. Pushed; Amplify rebuilds from `main`. Group 10 complete.
+- v2 11.1 DONE (9e3c494, on main): `alerts.py` `WebhookPublisher` (stdlib `urllib`, 3 s timeout, https only, exact host allowlist `discord.com`/`discordapp.com`/`hooks.slack.com`, no userinfo or port, 1900-char cap, URL never logged or repr'd) and `MultiPublisher` (each publisher isolated; logs only class and exception type). Properties 36 and 37 added. Backend: 571 passed.
+- v2 11.2 CODE DONE on `feat/webhook-alerts`, PR #5 (https://github.com/TejaswiErattu/agent-watch/pull/5), NOT merged and NOT deployed. Parameter `AlertWebhookUrl` (`NoEcho`, default "") maps to `ALERT_WEBHOOK_URL`. `_get_deps` fans out to SNS + webhook when it's set. README has a "Webhook alerts" section. Backend 581, SDK 315, `sam validate --lint` clean.
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
@@ -88,8 +93,15 @@ Last updated: 2026-10-17 by Kiro session (9.1/9.2 deployed, 9.7 PASS; 10.1–10.
 ## Next step (needs Tejaswi)
 - 8.7 pause-to-stop time was not timed. Measure it in 17.5.
 - README note for 17.1 (Known limitations): "blockedPaths does not cover shell strings; use the .env command preset".
-- Scope (2026-10-17, Tejaswi): after 9.7, do group 10 (10.1–10.6), then stop. Groups 12 and 13 are cut for time. On 2026-10-19 move to group 17.
-- EXACT NEXT STEP: 10.6 checkpoint (Tejaswi). Once Amplify finishes building from `main`, open `demo-bot` and check the chart (today's runs, with the `spend_cap` and `paused` blocks marked), the summary tile (spend vs. cap), and one row's Details. Note anything off here; it gets fixed as `fix(dashboard)` tasks under group 10. On 2026-10-19 move to group 17.
+- Scope (2026-10-17, Tejaswi): group 10 done; group 11 (Discord) is back in. Groups 12 and 13 stay cut. On 2026-10-19 move to group 17.
+- EXACT NEXT STEP: Tejaswi reviews and merges PR #5. Then she creates the Discord webhook, runs `export DISCORD_WEBHOOK_URL=...` in her own terminal, runs `aws login`, and says "go". Kiro then runs the 11.2 deploy plan (below), and after that 11.3 (`bad_agent.py` → Discord message + email; record block-to-channel time). On 2026-10-19 move to group 17.
+- 11.2 deploy plan (Kiro-runnable once Tejaswi says "go", from `main` after the merge):
+  1. Preflight: `[ -n "${DISCORD_WEBHOOK_URL:-}" ] && echo set || echo MISSING` prints only set or MISSING, never the value. Also `aws sts get-caller-identity --query Account` and `git status` (clean, on main, includes PR #5).
+  2. `sam build` and `sam package --resolve-s3 --output-template-file .aws-sam/packaged.yaml` in `backend/`.
+  3. `aws cloudformation create-change-set --stack-name agent-watch --change-set-name webhook-alerts --template-body file://.aws-sam/packaged.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --parameters ParameterKey=AlertEmail,UsePreviousValue=true ParameterKey=DashboardOrigin,UsePreviousValue=true ParameterKey=AlertWebhookUrl,ParameterValue="$DISCORD_WEBHOOK_URL"`. The URL is passed by expansion, so it's never echoed, never set with `set -x`, and never in argv history (argv is only visible to local `ps` while it runs).
+  4. Wait for create to finish, then run `describe-change-set` with `--query 'Changes[].ResourceChange.[Action,LogicalResourceId,Replacement]'` so no parameter values get printed. Execute only if every row is Modify with Replacement False and nothing touches `EventTable`, `AlertTopic`, or `CostBudget`. Otherwise delete the change set and stop.
+  5. Execute the change set, then wait for `stack-update-complete`.
+  6. Verify: `aws lambda get-function-configuration --function-name <ApiFunction> --query 'length(Environment.Variables.ALERT_WEBHOOK_URL)'` (prints a length only), then `scripts/verify_deploy.sh` (200 with `blockedCommands`). Then 11.3: `scripts/e2e.sh` or `python demo/bad_agent.py` with `.env` blocked. Expect 2 Discord messages + 2 emails for bad-bot (path + command).
 - v2 spec added 2026-10-12: `.kiro/specs/agent-watch-v2/` (requirements 27-37, Properties 30-42, task groups 8-17). (8.1, 8.3, 8.4, 8.6 are now done; see above.) Feature freeze 2026-10-19 (group 17). Do the 7.5 click-path rehearsal first (baseline timings), tick 7.5, then start v2 at 8.1. v2 task 17.5 is the final rehearsal before recording. Note: scripts/e2e.sh already ran on 2026-10-12 with the +0.002 margin: RESULT PASS, demo-bot blocked on run 3/5.
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
@@ -176,6 +188,11 @@ Last updated: 2026-10-17 by Kiro session (9.1/9.2 deployed, 9.7 PASS; 10.1–10.
 - 2026-10-17 (10.3) The page reads "last activity" from a `limit=1` desc timeline call. A missing config/status/spend response fails the whole refresh and shows one error `Alert`, so the tile and chart never mix data from different moments. The separate status `Alert` from 8.5 is folded into it.
 - 2026-10-17 (10.4) The `blocked_path` wording changed from "Blocked blocked_path .env" to "Blocked path .env". Two existing Timeline tests now set `violationType: "blocked_path"` explicitly (they relied on the old generic fallback). The wordings for `rate_limit`, `secret_redacted`, and `blocked_domain` exist even though groups 12, 14, and 15 are cut, so an event from a future backend still reads cleanly.
 - 2026-10-17 Scope cut by Tejaswi: groups 12 (rate limit) and 13 (CLI) are dropped for time. After 9.7, do group 10, then stop. On 2026-10-19 go to group 17.
+- 2026-10-17 Group 11 is back in scope (Tejaswi), with Discord as the target. Groups 12 and 13 stay cut.
+- 2026-10-17 (10.8) Chart text moved to an HTML overlay instead of a uniform-scale viewBox. The bars should still fill any card width, and the overlay shares one `geom` array with the SVG so both layers agree on positions. The overlay is `aria-hidden` because each bar's `<title>` and the `svg` label already carry the same info.
+- 2026-10-17 (11.1) The webhook allowlist also rejects explicit ports and any `@` in the netloc, beyond the spec's "https + exact host". Both are cheap and close the userinfo and port tricks.
+- 2026-10-17 (11.2) With no webhook set, the publisher is still a bare `SnsPublisher`, not `MultiPublisher([Sns])`, so the v1 deps test and the no-webhook path stay byte-identical. `AlertWebhookUrl` is not a stack Output, since an output would print it in describe-stacks. `NoEcho` masks CloudFormation views only; the value is plaintext in the Lambda env config (Secrets Manager would fix that, and is a next step).
+- 2026-10-17 (11.2) Never paste the webhook URL into chat, files, commits, or logs (Tejaswi's rule). The deploy reads it only from `$DISCORD_WEBHOOK_URL` in her shell. `test_readme.py` scans README, docs, and PROGRESS for webhook-shaped URLs.
 
 ## Open bugs
 - (none open. The "Save rules" 400 deploy-order hazard was resolved by the 9.7 deploy.)
