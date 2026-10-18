@@ -102,10 +102,13 @@ Alerts can also go to a Discord or Slack channel, alongside the email. It's opti
    ```bash
    read -rs DISCORD_WEBHOOK_URL && export DISCORD_WEBHOOK_URL
    ```
-3. **Prepare the change set.** Don't pass the URL as a command-line argument (for example `--parameter-overrides AlertWebhookUrl=...`): while the command runs, its arguments are visible to anyone on the machine who can run `ps`. Instead, write the parameters to a temporary file that only you can read, and create the change set from it. The block runs in a subshell. It deletes the file right after the AWS call returns, whether the call succeeded or failed, and a trap deletes it if the block is interrupted first. It doesn't rely on `set -e`, because zsh (the macOS default shell) skips the `EXIT` trap when `set -e` ends a subshell. From `backend/`:
+3. **Prepare the change set.** Don't pass the URL as a command-line argument (for example `--parameter-overrides AlertWebhookUrl=...`): while the command runs, its arguments are visible to anyone on the machine who can run `ps`. Instead, write the parameters to a temporary file that only you can read, and create the change set from it. Run the whole block at once, from `backend/`. It runs in a subshell and stops before anything else if `sam build` or `sam package` fails; it deletes any previously packaged template first, so a failed package can never fall back to an older one. Only then does it write the parameters file. It deletes that file right after the AWS call returns, whether the call succeeded or failed, and a trap deletes it if the block is interrupted first. It doesn't rely on `set -e`, because zsh (the macOS default shell) skips the `EXIT` trap when `set -e` ends a subshell:
    ```bash
-   sam build && sam package --resolve-s3 --output-template-file .aws-sam/packaged.yaml
    (
+     rm -f .aws-sam/packaged.yaml        # never reuse an older package
+     sam build || exit 1
+     sam package --resolve-s3 --output-template-file .aws-sam/packaged.yaml || exit 1
+     [ -s .aws-sam/packaged.yaml ] || { echo "no packaged template; stopping" >&2; exit 1; }
      PARAMS="$(mktemp)" || exit 1        # created with mode 0600: readable only by you
      trap 'rm -f "$PARAMS"' EXIT         # removes it if the block is interrupted
      trap 'exit 1' HUP INT TERM          # turn a signal into an exit, so the EXIT trap runs
