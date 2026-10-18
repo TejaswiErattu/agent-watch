@@ -58,6 +58,28 @@ describe("SpendChart", () => {
     expect(labels.map((l) => l.getAttribute("data-anchor"))).toEqual(["middle", "middle", "middle", "end"]);
   });
 
+  it("keeps text out of the stretched SVG so it renders undistorted", () => {
+    const { container } = render(
+      <SpendChart buckets={buckets({ 5: { blocked: 3 }, 23: { blocked: 1, costUsd: 0.001 } })} capUsd={null} />
+    );
+    const svg = container.querySelector("svg")!;
+    expect(svg.getAttribute("preserveAspectRatio")).toBe("none");
+    expect(svg.querySelectorAll("text")).toHaveLength(0);
+    const overlay = container.querySelector("[data-chart-labels]")!;
+    expect(overlay.getAttribute("aria-hidden")).toBe("true");
+    const items = overlay.querySelectorAll("[data-hour-label], [data-blocked-marker]");
+    expect(items).toHaveLength(6);
+    for (const el of Array.from(items)) {
+      expect(el.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+      expect((el as HTMLElement).style.left).toMatch(/%$/);
+      expect((el as HTMLElement).style.top).toMatch(/%$/);
+    }
+    // The last label hugs the right edge without overflowing it.
+    const last = overlay.querySelectorAll<HTMLElement>("[data-hour-label]")[3];
+    expect(last.style.left).toBe("100%");
+    expect(last.style.transform).toContain("translateX(-100%)");
+  });
+
   it("uses at least cap/24 as the y-axis max", () => {
     expect(yMax(buckets({ 1: { costUsd: 0.001 } }), 2.4)).toBeCloseTo(0.1, 9);
     expect(yMax(buckets({ 1: { costUsd: 0.5 } }), 2.4)).toBeCloseTo(0.5, 9);

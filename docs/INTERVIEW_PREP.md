@@ -694,3 +694,9 @@ Format per task:
 **Conceptual:** Every block type should read as a plain sentence, and stale agents should stand out in the inventory, so a student can scan for problems without opening raw JSON.
 **Technical:** `describeEvent` has one branch per Violation_Type and reads `meta` fields defensively (`typeof` checks), since `meta` is free-form. Details shows `JSON.stringify(meta, null, 2)` in a `<pre>`, which React escapes. Stale means last activity is strictly older than 24 h.
 **Q:** Is rendering event `meta` from the API an XSS risk? **A:** Not here. React escapes text children, and there's no `dangerouslySetInnerHTML`, so a `<script>` in `meta` displays as text.
+
+## 10.7–10.8 Spend chart label fixes
+**Conceptual:** The chart had to stretch to any card width, but the text inside it stretched too, and the last hour label ran off the right edge. Bars can be distorted without anyone noticing; text can't.
+**Technical:** Bars and the axis stay in an SVG with `preserveAspectRatio="none"`. Labels and block counts moved to an `aria-hidden` HTML overlay, positioned in percent of the same viewBox coordinates, so they render at normal font scale. Edge labels anchor inward with `translateX(0 | -50% | -100%)`. Tradeoff: two layers have to agree on coordinates, so both are computed from one `geom` array.
+**Q:** Why does `preserveAspectRatio="none"` distort text? **A:** It scales x and y independently, and `<text>` glyphs are scaled with everything else, so a wide container squashes or stretches the font.
+**Q:** Why is the overlay `aria-hidden`? **A:** The same information is already on each bar's `<title>` and the `svg` label, so screen readers would hear it twice.

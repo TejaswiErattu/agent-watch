@@ -155,13 +155,13 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Dashboard suite passes; `npm run build` succeeds. Tejaswi: after the Amplify build, open `demo-bot`, see the chart with today's runs and the `spend_cap` and `paused` blocks marked, the tile with spend vs. cap, and a row's Details. Note anything off in `PROGRESS.md` and fix as `fix(dashboard)` tasks under this group.
     - _Requirements: 29.1, 29.5_
 
-  - [ ] 10.7 Fix: last x-axis label clipped at the right edge
+  - [x] 10.7 Fix: last x-axis label clipped at the right edge
     - Write the failing test first. `SpendChart.test.tsx`: the label for the last bucket is anchored at the end (it never extends past the right edge); other labels stay centered; `labelAnchor` returns start for bucket 0.
     - Implement: `labelAnchor(i, n)` (start / middle / end) by bucket position.
     - _Requirements: 29.1_
     - Commit: `fix(dashboard): keep the last spend chart label inside the chart`
 
-  - [ ] 10.8 Fix: chart text stretched by `preserveAspectRatio="none"`
+  - [x] 10.8 Fix: chart text stretched by `preserveAspectRatio="none"`
     - Write the failing test first. `SpendChart.test.tsx`: the stretchable SVG contains no `<text>`; hour labels and block counts are HTML elements positioned in percent over the SVG, so they render at a uniform scale.
     - Implement: bars and axis stay in the stretched SVG; labels and markers move to an `aria-hidden` HTML overlay.
     - _Requirements: 29.1, 29.4_

@@ -38,6 +38,17 @@ export function labelAnchor(i: number, n: number): Anchor {
   return "middle";
 }
 
+const SHIFT: Record<Anchor, string> = {
+  start: "translateX(0%)",
+  middle: "translateX(-50%)",
+  end: "translateX(-100%)",
+};
+
+// A viewBox coordinate as a CSS percent of the box (3 dp keeps the edges exact, e.g. "100%").
+function pct(v: number, total: number): string {
+  return `${Number(((v / total) * 100).toFixed(3))}%`;
+}
+
 export function SpendChart({ buckets, capUsd }: SpendChartProps) {
   const max = yMax(buckets, capUsd);
   const plotH = H - PAD_T - PAD_B;
@@ -46,59 +57,69 @@ export function SpendChart({ buckets, capUsd }: SpendChartProps) {
   const empty = buckets.every((b) => b.costUsd === 0 && b.blocked === 0);
   const baseY = PAD_T + plotH;
 
+  const geom = buckets.map((b, i) => {
+    const h = (b.costUsd / max) * plotH;
+    const x = PAD_L + i * slot + (slot - barW) / 2;
+    const anchor = labelAnchor(i, buckets.length);
+    // Anchor point: slot's left edge, bar center, or slot's right edge.
+    const labelX =
+      anchor === "start" ? PAD_L + i * slot : anchor === "end" ? PAD_L + (i + 1) * slot : x + barW / 2;
+    return { b, i, h, x, anchor, labelX, label: hourLabel(b.start) };
+  });
+
   return (
     <figure className="space-y-1">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="h-40 w-full"
-        role="img"
-        aria-label="LLM spend per hour, last 24 hours"
-      >
-        <line data-axis x1={PAD_L} y1={baseY} x2={W} y2={baseY} stroke="#9ca3af" strokeWidth={1} />
-        {buckets.map((b, i) => {
-          const h = (b.costUsd / max) * plotH;
-          const x = PAD_L + i * slot + (slot - barW) / 2;
-          const label = hourLabel(b.start);
-          const anchor = labelAnchor(i, buckets.length);
-          // Anchor point: slot's left edge, bar center, or slot's right edge.
-          const labelX =
-            anchor === "start" ? PAD_L + i * slot : anchor === "end" ? PAD_L + (i + 1) * slot : x + barW / 2;
-          return (
-            <g key={b.start}>
-              <rect data-bar x={x} y={baseY - h} width={barW} height={h} fill="#2563eb">
-                <title>{`${label}: ${formatSpend(b.costUsd)}, ${b.blocked} blocked`}</title>
-              </rect>
+      <div className="relative h-40 w-full">
+        {/* Bars and axis stretch to the box; no text lives here, so nothing is distorted. */}
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="h-full w-full"
+          role="img"
+          aria-label="LLM spend per hour, last 24 hours"
+        >
+          <line data-axis x1={PAD_L} y1={baseY} x2={W} y2={baseY} stroke="#9ca3af" strokeWidth={1} />
+          {geom.map(({ b, h, x, label }) => (
+            <rect key={b.start} data-bar x={x} y={baseY - h} width={barW} height={h} fill="#2563eb">
+              <title>{`${label}: ${formatSpend(b.costUsd)}, ${b.blocked} blocked`}</title>
+            </rect>
+          ))}
+        </svg>
+        {/* Text is HTML positioned in percent of the same coordinate box, so it scales uniformly. */}
+        <div data-chart-labels aria-hidden="true" className="pointer-events-none absolute inset-0">
+          {geom.map(({ b, i, h, x, anchor, labelX, label }) => (
+            <React.Fragment key={b.start}>
               {b.blocked > 0 ? (
-                <text
+                <span
                   data-blocked-marker
-                  x={x + barW / 2}
-                  y={baseY - h - 4}
-                  textAnchor="middle"
-                  fontSize={10}
-                  fill="#dc2626"
-                  fontWeight={600}
+                  className="absolute text-[10px] font-semibold leading-none text-red-600"
+                  style={{
+                    left: pct(x + barW / 2, W),
+                    top: pct(baseY - h - 2, H),
+                    transform: "translateX(-50%) translateY(-100%)",
+                  }}
                 >
                   {b.blocked}
-                </text>
+                </span>
               ) : null}
               {i % 6 === 5 ? (
-                <text
+                <span
                   data-hour-label
                   data-anchor={anchor}
-                  x={labelX}
-                  y={H - 4}
-                  textAnchor={anchor}
-                  fontSize={9}
-                  fill="#6b7280"
+                  className="absolute whitespace-nowrap text-[9px] leading-none text-gray-500"
+                  style={{
+                    left: pct(labelX, W),
+                    top: pct(H - 2, H),
+                    transform: `${SHIFT[anchor]} translateY(-100%)`,
+                  }}
                 >
                   {label}
-                </text>
+                </span>
               ) : null}
-            </g>
-          );
-        })}
-      </svg>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
       {empty ? (
         <figcaption className="text-sm text-gray-500">No LLM calls in the last 24 hours</figcaption>
       ) : (
