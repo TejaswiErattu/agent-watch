@@ -209,36 +209,3 @@ def test_patterns_compiled_once_per_config_fetch(monkeypatch):
     for _ in range(5):
         run_shell("ls")
     assert sorted(calls) == sorted([RM_RF, PIPE_TO_SHELL])  # once for the one new fetch
-
-
-# ---- **kwargs tools: keyword-passed names are still "named" (Property 33) ----
-
-def test_var_kwargs_tool_named_command_is_checked_first():
-    # The positional decoy also matches; only a named `command` puts "rm" first in candidate order.
-    aw, t = make(commands=[r"\brm\b"])
-
-    @aw.tool
-    def tool(*a, **kw):
-        raise AssertionError("must not run")
-
-    with pytest.raises(CommandBlocked):
-        tool("rm -i notes.txt", command=["rm"])
-    (ev,) = events(aw, t)
-    assert ev["attemptedCommand"] == "rm"
-
-
-def test_var_kwargs_tool_path_arg_is_named():
-    aw, t = make(paths=[".env"])
-
-    @aw.tool(path_arg="path")
-    def tool(*a, **kw):
-        return "ok"
-
-    assert tool("x", path="notes.txt") == "ok"
-    (ev,) = events(aw, t)
-    assert ev["target"] == "notes.txt"  # named path picks target, not the first positional
-
-    with pytest.raises(PathBlocked):
-        tool("secrets/.env", path=".env")
-    blocked = [e for e in events(aw, t) if e["type"] == "blocked"]
-    assert blocked[-1]["attemptedPath"] == ".env"  # named path checked before the positional

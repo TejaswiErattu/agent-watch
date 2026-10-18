@@ -1,11 +1,5 @@
 # Agent Watch: submission
 
-## Links
-
-- Repo: https://github.com/TejaswiErattu/agent-watch
-- Live dashboard: https://main.d65rs0iutjwy8.amplifyapp.com
-- Demo video: TODO (Tejaswi adds after upload)
-
 ## One line
 
 Agent Watch gives students one place to see, control, and cap what their AI agents do. It takes three lines of Python, runs serverless on AWS, and was built entirely in Kiro.
@@ -36,10 +30,9 @@ Students build agents for class projects and hackathons on personal API keys. No
 ## Built with Kiro
 
 - **Specs.** `.kiro/specs/agent-watch/` holds requirements (EARS acceptance criteria), the design (decisions, interfaces, 29 properties), and `tasks.md`. Each task was written test-first and committed on its own.
-- **v2 spec.** `.kiro/specs/agent-watch-v2/` extends it with requirements 27–37, Properties 30–42, and task groups 8–17. Properties 30–34 and 36–39 are tested. Properties 35 and 40–42 belong to groups that were cut or not built (rate limit, redaction, domain allowlist, CLI), so they have no tests.
 - **Steering.** `product.md`, `tech.md`, `structure.md`, and `workflow.md` kept every session on the same stack, naming, and handoff routine.
 - **Hooks.** `.kiro/hooks/` defines tests-on-save for `sdk/` and `backend/src/`, a secrets guard on save, and a session handoff on stop.
-- **MCP.** The GitHub server opened the infra PRs (#1 SAM template, #2 throttling and budget), and they were merged only after Tejaswi approved. Later, PR #12 (the v2 rehearsal timings) was also opened through the GitHub MCP server. The AWS docs server, along with the SAM translator source fetched through GitHub, was used to check SAM `Globals` behavior before the live template changed.
+- **MCP.** The GitHub server opened the infra PRs (#1 SAM template, #2 throttling and budget), and they were merged only after Tejaswi approved. The AWS docs server, along with the SAM translator source fetched through GitHub, was used to check SAM `Globals` behavior before the live template changed.
 - **Memory.** `PROGRESS.md` carried state, decisions, and blockers across sessions.
 
 ## Known limitations

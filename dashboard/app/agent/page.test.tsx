@@ -29,8 +29,7 @@ const putStatus = vi.fn();
 const getSpend = vi.fn();
 const getConfig = vi.fn();
 const getTimeline = vi.fn();
-vi.mock("@/lib/api", async () => ({
-  AuthError: (await vi.importActual<typeof import("@/lib/api")>("@/lib/api")).AuthError,
+vi.mock("@/lib/api", () => ({
   getStatus: (...a: unknown[]) => getStatus(...a),
   putStatus: (...a: unknown[]) => putStatus(...a),
   getSpend: (...a: unknown[]) => getSpend(...a),
@@ -153,38 +152,5 @@ describe("agent detail page", () => {
     searchParams = new URLSearchParams("id=bot1");
     render(<AgentPage />);
     expect(await screen.findByLabelText(/api key/i)).toBeInTheDocument();
-  });
-});
-
-
-describe("agent page audit fixes", () => {
-  it("on AuthError shows Clear credentials, which returns to the credentials form", async () => {
-    const { AuthError } = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
-    getStatus.mockRejectedValue(new AuthError());
-    const user = userEvent.setup();
-    open();
-    const clear = await screen.findByRole("button", { name: "Clear credentials" });
-    expect(screen.getByRole("alert")).toHaveTextContent("Credentials not accepted");
-    await user.click(clear);
-    expect(localStorage.getItem("agentwatch.credentials")).toBeNull();
-    expect(await screen.findByLabelText(/api key/i)).toBeInTheDocument();
-  });
-
-  it("does not show Clear credentials for a non-auth error", async () => {
-    getStatus.mockRejectedValue(new Error("network down"));
-    open();
-    expect(await screen.findByRole("alert")).toHaveTextContent("network down");
-    expect(screen.queryByRole("button", { name: "Clear credentials" })).not.toBeInTheDocument();
-  });
-
-  it("a long agent id wraps in the heading and the header row wraps", async () => {
-    const long = "a".repeat(128);
-    saveCredentials(CREDS);
-    searchParams = new URLSearchParams(`id=${long}`);
-    render(<AgentPage />);
-    const h1 = await screen.findByRole("heading", { level: 1, name: long });
-    expect(h1.className).toMatch(/\bbreak-all\b/);
-    expect(h1.className).toMatch(/\bmin-w-0\b/);
-    expect(h1.parentElement!.className).toMatch(/\bflex-wrap\b/);
   });
 });

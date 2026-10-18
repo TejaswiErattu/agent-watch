@@ -4,7 +4,7 @@ import * as React from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { clearCredentials, loadCredentials, type Credentials } from "@/lib/credentials";
+import { loadCredentials, type Credentials } from "@/lib/credentials";
 import { CredentialsForm } from "@/components/CredentialsForm";
 import { Timeline } from "@/components/Timeline";
 import { RulesEditor } from "@/components/RulesEditor";
@@ -12,8 +12,7 @@ import { PauseButton } from "@/components/PauseButton";
 import { AgentSummary } from "@/components/AgentSummary";
 import { SpendChart } from "@/components/SpendChart";
 import { Alert } from "@/components/ui/alert";
-import { AuthError, getConfig, getSpend, getStatus, getTimeline } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { getConfig, getSpend, getStatus, getTimeline } from "@/lib/api";
 import { bucketSpend, fetchWindow, HOUR_MS } from "@/lib/spend";
 import type { SpendBucket, SpendResponse, StatusResponse } from "@/lib/types";
 
@@ -35,20 +34,11 @@ function AgentDetail() {
   const [loaded, setLoaded] = React.useState(false);
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [authFailed, setAuthFailed] = React.useState(false);
 
   React.useEffect(() => {
     setCreds(loadCredentials());
     setLoaded(true);
   }, []);
-
-  function handleClear() {
-    clearCredentials();
-    setCreds(null);
-    setOverview(null);
-    setError(null);
-    setAuthFailed(false);
-  }
 
   // One refresh for everything above the rules: status, server spend, cap,
   // the 24h chart, and last activity. Runs on load, every 30 s, and after a
@@ -74,9 +64,7 @@ function AgentDetail() {
         lastSeen: latest.events[0]?.ts ?? null,
       });
       setError(null);
-      setAuthFailed(false);
     } catch (e) {
-      setAuthFailed(e instanceof AuthError);
       setError(e instanceof Error ? e.message : "Failed to load agent overview");
     }
   }, [creds, agentId]);
@@ -116,18 +104,13 @@ function AgentDetail() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-8 p-8">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="min-w-0 break-all text-2xl font-semibold">{agentId}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">{agentId}</h1>
         <Link href="/" className="text-sm text-blue-600 hover:underline">
           Back to inventory
         </Link>
       </div>
       {error ? <Alert variant="destructive">{error}</Alert> : null}
-      {authFailed ? (
-        <Button variant="outline" onClick={handleClear}>
-          Clear credentials
-        </Button>
-      ) : null}
       <section className="space-y-3">
         <h2 className="text-lg font-medium">Overview</h2>
         <AgentSummary

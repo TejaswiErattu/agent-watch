@@ -23,10 +23,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
   const [commands, setCommands] = React.useState<string[]>([]);
   const [newCommand, setNewCommand] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
-  const [capError, setCapError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
-  // Save stays disabled until the GET succeeds, so an empty form can't overwrite real rules.
-  const [loaded, setLoaded] = React.useState(false);
 
   // An older backend omits blockedCommands, so read it as [] (Req 36.4).
   function applyConfig(g: GuardrailConfigIn) {
@@ -40,10 +37,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
     let active = true;
     getConfig(creds, agentId)
       .then((res) => {
-        if (active) {
-          applyConfig(res.guardrails);
-          setLoaded(true);
-        }
+        if (active) applyConfig(res.guardrails);
       })
       .catch((e) => {
         if (active) setError(e instanceof Error ? e.message : "Failed to load config");
@@ -87,28 +81,10 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
 
   async function handleSave() {
     const trimmed = capInput.trim();
-    // Number("abc") is NaN, which JSON.stringify sends as null and would silently remove the cap.
-    const cap = trimmed === "" ? null : Number(trimmed);
-    if (cap !== null && (!Number.isFinite(cap) || cap < 0)) {
-      setCapError("Daily spend cap must be a number like 0.01, or empty for no cap.");
-      setSaved(false);
-      return;
-    }
-    setCapError(null);
-    // Typed-but-not-added entries are included, so pressing Save never silently drops them.
-    const pendingPath = newPath.trim();
-    const pendingCommand = newCommand.trim();
-    const nextPaths = pendingPath && !paths.includes(pendingPath) ? [...paths, pendingPath] : paths;
-    const nextCommands =
-      pendingCommand && !commands.includes(pendingCommand) ? [...commands, pendingCommand] : commands;
-    setPaths(nextPaths);
-    setCommands(nextCommands);
-    setNewPath("");
-    setNewCommand("");
     const config: GuardrailConfig = {
-      dailySpendCapUsd: cap,
-      blockedPaths: nextPaths,
-      blockedCommands: nextCommands,
+      dailySpendCapUsd: trimmed === "" ? null : Number(trimmed),
+      blockedPaths: paths,
+      blockedCommands: commands,
     };
     try {
       const res = await putConfig(creds, agentId, config);
@@ -134,14 +110,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
           onChange={(e) => setCapInput(e.target.value)}
           placeholder="no cap"
           inputMode="decimal"
-          aria-invalid={capError ? true : undefined}
-          aria-describedby={capError ? "cap-error" : undefined}
         />
-        {capError ? (
-          <p id="cap-error" role="alert" className="text-sm text-red-700">
-            {capError}
-          </p>
-        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -149,7 +118,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
         <ul className="space-y-1">
           {paths.map((p) => (
             <li key={p} className="flex items-center justify-between gap-2 text-sm">
-              <span className="min-w-0 break-all">{p}</span>
+              <span>{p}</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -224,7 +193,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
         <p className="text-sm text-green-700">Saved.</p>
       ) : null}
 
-      <Button type="button" onClick={handleSave} disabled={!loaded}>
+      <Button type="button" onClick={handleSave}>
         Save rules
       </Button>
     </div>

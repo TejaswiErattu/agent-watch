@@ -202,18 +202,3 @@ describe("describeEvent covers every Violation_Type", () => {
     expect(describeEvent(e)).toBe(text);
   });
 });
-
-
-describe("Timeline long text (audit fix)", () => {
-  it("event text wraps instead of overflowing at 375px", async () => {
-    const long = "/" + "x".repeat(300);
-    getTimeline.mockResolvedValue({
-      events: [ev({ type: "blocked", violationType: "blocked_path", attemptedPath: long })],
-      nextCursor: null,
-    });
-    render(<Timeline creds={creds} agentId="bot1" />);
-    const el = await screen.findByText(`Blocked path ${long}`);
-    expect(el.className).toMatch(/\bbreak-all\b/);
-    expect(el.className).toMatch(/\bmin-w-0\b/);
-  });
-});

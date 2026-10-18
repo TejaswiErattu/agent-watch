@@ -476,8 +476,7 @@ Commit after each leaf task using `feat(scope)`, `test(scope)`, or `fix(scope)`.
     - _Requirements: 4.1, 4.4, 4.8_
     - Commit: `test(backend): moto DynamoStore checks`
 
-  - [x] 7.5 Final checkpoint: end-to-end rehearsal
-    - Closed by v2 17.5 on 2026-10-18 (`PathBlocked` email at most 1.2 s after the block, well within 10 s; `spend_cap` block on run 3/5).
+  - [ ] 7.5 Final checkpoint: end-to-end rehearsal
     - Write the failing tests first. Run `pytest` in `backend/` and `sdk/` and `npx vitest --run` in `dashboard/`; ensure all tests pass, ask the user if questions arise.
     - Follow `docs/DEMO_SCRIPT.md` on the deployed stack: add `.env` in the dashboard, run `bad_agent.py`, see `PathBlocked` and the email within 10 s; set a tiny cap and run `demo_agent.py --loop 5`, see the `spend_cap` block; confirm inventory and timeline update. Note timings and any issue in `PROGRESS.md`.
     - _Requirements: 5.4, 6.2, 10.4, 16.3, 16.4, 24.3_

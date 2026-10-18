@@ -41,13 +41,6 @@ export function InventoryTable({ agents, now }: InventoryTableProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {agents.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={5} className="py-6 text-center text-gray-600">
-              No agents for these credentials. Check the key, or run an agent once.
-            </TableCell>
-          </TableRow>
-        ) : null}
         {agents.map((a) => {
           const unreported = a.lastSeen === null;
           return (

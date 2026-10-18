@@ -124,26 +124,3 @@ def test_common_run_shell_uses_sh_c_with_timeout(monkeypatch, bad_agent):
     assert common.run_shell("echo hi") == "out\n"
     assert seen["argv"] == ["sh", "-c", "echo hi"]
     assert seen["kw"] == {"capture_output": True, "text": True, "timeout": 10}
-
-
-def test_falls_back_to_anthropic_like_demo_agent(bad_agent, env, capsys, secret_dir):
-    """Audit fix: bad_agent reuses demo_agent.make_client, so a dead Bedrock session can't kill the demo."""
-    import demo_agent
-    from fakes import FakeAnthropic
-
-    assert bad_agent.make_client is demo_agent.make_client
-    anth, shell = FakeAnthropic(), FakeShell()
-
-    def no_bedrock():
-        raise RuntimeError("ExpiredToken")
-
-    t = FakeTransport([cfg([".env"], [PIPE_TO_SHELL])])
-    rc = bad_agent.main(transport=t, run_shell=shell,
-                        make_client=lambda aw: demo_agent.make_client(aw, bedrock_factory=no_bedrock,
-                                                                      anthropic_factory=lambda: anth))
-    out = capsys.readouterr().out
-    assert rc == 0
-    assert "falling back to Anthropic API" in out
-    assert anth.calls and anth.calls[0]["model"] == bad_agent.ANTHROPIC_MODEL_ID
-    assert out.index("PathBlocked") < out.index("CommandBlocked")
-    assert shell.calls == []

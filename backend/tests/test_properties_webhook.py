@@ -71,8 +71,7 @@ def test_webhook_payload_and_allowlist(url_kind, event):
     data, timeout = o.calls[0]
     assert timeout == 3.0
     payload = json.loads(data)
-    assert set(payload) == {key, "allowed_mentions"}
-    assert payload["allowed_mentions"] == {"parse": []}  # audit fix: alert text never pings anyone
+    assert set(payload) == {key}
     text = payload[key]
     assert len(text) <= 1900
     full = f"{subject}\n{body}"
