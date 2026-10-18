@@ -288,3 +288,75 @@ def test_readme_prepare_block_offline(tmp_path, shell, mode):
         assert rc == 0 and "change-set-create-complete" in log
     else:
         assert rc != 0 and "change-set-create-complete" not in log   # no wait after a failed create
+
+
+# ---- v2 17.2: DEMO_SCRIPT v2 (Req 37.3) ----
+# Labels must match the dashboard: PauseButton.tsx, RulesEditor.tsx, SpendChart.tsx.
+
+def _demo() -> str:
+    return (DOCS / "DEMO_SCRIPT.md").read_text()
+
+
+def test_demo_script_v2_moments():
+    on_camera = _section(_demo(), "On camera")
+    for s in ("--loop 20 --sleep 2", "**Pause agent**", "**Confirm pause**", "**Resume agent**",
+              "CommandBlocked", "AgentPaused", "**Add presets**", "pipe_to_shell", "chart", "Discord"):
+        assert s in on_camera, s
+
+
+def test_demo_script_v2_on_camera_order():
+    on_camera = _section(_demo(), "On camera")
+    marks = ["bad_agent.py", "PathBlocked", "CommandBlocked", "Confirm pause", "SpendCapExceeded", "How it's built"]
+    idx = [on_camera.index(m) for m in marks]
+    assert idx == sorted(idx), list(zip(marks, idx))   # path, shell, pause, cap, then architecture
+
+
+def test_demo_script_v2_prep_resets_state():
+    prep = _section(_demo(), "Before recording (about 5 min, off camera)")
+    assert "resume" in prep.lower() and "bad-bot" in prep and "demo-bot" in prep   # both agents resumed
+    assert "aws login" in prep                                                     # fresh credentials right before
+    assert "Discord" in prep                                                       # channel open on screen
+
+
+def test_demo_script_v2_troubleshooting():
+    body = _section(_demo(), "If something goes wrong").lower()
+    assert "paused" in body                         # a stale pause from a rehearsal
+    assert "over-block" in body                     # a pattern that blocks too much
+    assert "discord" in body or "channel" in body   # no channel message
+
+
+def test_demo_script_names_no_cut_features():
+    text = _demo()
+    for s in CUT_FEATURES:
+        assert s not in text, s
+
+
+def test_demo_script_ui_labels_exist_in_the_dashboard():
+    # Every **bold** label must be visible text in a dashboard component or page.
+    src = "\n".join(p.read_text() for p in (ROOT / "dashboard").glob("[ac]*/**/*.tsx")
+                    if ".test." not in p.name)
+    labels = set(re.findall(r"\*\*([^*]+)\*\*", _demo()))
+    scene_titles = {l for l in labels if l.endswith(".")}             # "**Path block (60 s).**"
+    for label in sorted(labels - scene_titles):
+        assert label in src, label
+
+
+EXPECTED_LINES = {
+    "demo/bad_agent.py": ("PathBlocked:", "Agent Watch stopped the read", "CommandBlocked:",
+                          "Agent Watch stopped the command"),
+    "demo/demo_agent.py": ("Agent Watch stopped the call before it ran",),
+}
+
+
+def test_demo_script_expected_lines_match_the_code():
+    text = _demo()
+    for rel, lines in EXPECTED_LINES.items():
+        code = (ROOT / rel).read_text()
+        for line in lines:
+            assert line in code, f"{rel}: {line}"                   # the code still prints it
+            assert line in text, line                               # and the script promises it
+    assert "Agent Watch: blocked_path blocked for bad-bot" in text   # format_alert subjects
+    assert "Agent Watch: blocked_command blocked for bad-bot" in text
+    assert "Agent Watch: paused blocked for demo-bot" in text
+    assert "Agent Watch: spend_cap blocked for demo-bot" in text
+
