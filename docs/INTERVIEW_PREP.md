@@ -720,3 +720,16 @@ Format per task:
 **Q:** Why save the command rule before running the bad agent, instead of showing it fail first? **A:** The unblocked path would actually execute `curl … | sh`. A demo should never run the dangerous action for real, even against a harmless URL.
 **Q:** How do you keep docs from drifting from the UI? **A:** Test the docs against the source: extract labels from the doc and assert each one appears in the components, so renaming a button turns a test red.
 **Q:** What would you check if the pause took longer than 5 s on camera? **A:** The SDK polls status every 5 s from the last attempt, so worst case is about 5 s plus one in-flight call. If it's longer, check the status GET succeeded (a failing poll keeps the last state and warns).
+
+## 17.3 e2e v2 (pause/resume)
+**Conceptual:** The kill switch is only useful if it stops an agent that's already running. The e2e step reproduces that exactly: it starts a long loop, flips the pause flag through the same API the dashboard uses, and checks that the agent stops on its own within a bound.
+**Technical:** The loop runs in the background with unbuffered output to a temp file, and `wait_for` polls that file once per second. The bound is 20 s: a 5 s status poll, a 2 s sleep, and one LLM call, plus margin. A test pins it against `CONTROL_INTERVAL_S` so the two can't drift. Tradeoff: wall-clock waits make the script slower and timing-dependent, but propagation latency can't be faked against a live stack.
+**Q:** Why does the exit trap kill the loop before resuming the agent? **A:** If it resumed first, a still-running loop would make real, billed LLM calls after the test had already finished.
+**Q:** Why poll for the pause instead of pushing it to the agent? **A:** The SDK runs inside a student's process with no inbound connection. A pull every 5 s needs no open ports and works behind NAT, at the cost of up to 5 s of latency.
+**Q:** What did the live run show that the unit tests couldn't? **A:** Real propagation. It measured about 3 s from `PUT /status` to `AgentPaused` against the deployed API, inside the 5 s poll plus 2 s sleep budget. It also showed the exit trap leaves both agents clean.
+
+## fix(sdk) `_bind` flattens `**kwargs` (Property 33)
+**Conceptual:** The SDK checks named arguments like `command` or `path` first and uses them as the event's `target`. On a `def tool(*a, **kw)` tool, keyword names were hidden one level down, so the block still happened but reported the wrong string. A property test against a reference rule caught it.
+**Technical:** `inspect.Signature.bind_partial().arguments` returns `**kwargs` as `{'kw': {...}}`. `_bind` now lifts that dict to the top level with `setdefault`, so a real parameter with the same name wins. Tradeoff: the fix lives in one helper instead of each caller, which keeps `_named_paths` and `_named_commands` unchanged.
+**Q:** When a property test fails, how do you decide whether the test or the code is wrong? **A:** Go back to the requirement. Req 28.5 says named command args come first, so the reference was right and the implementation drifted.
+**Q:** Why add example tests when a property test already covers it? **A:** The example pins the exact shrunk case with a readable name, and it fails fast before Hypothesis even starts.
