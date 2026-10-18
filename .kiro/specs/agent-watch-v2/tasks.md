@@ -120,31 +120,31 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 28.6, 28.16_
 
 - [ ] 10. Dashboard: spend chart, summary tile, and polish
-  - [ ] 10.1 Spend bucketing and window fetch
+  - [x] 10.1 Spend bucketing and window fetch
     - Write the failing tests first. `dashboard/lib/spend.test.ts`: `bucketSpend` returns 24 buckets ending at the current hour, every in-window `llm_call` lands in exactly one bucket, the bucket sum equals the event sum within 1e-6 (randomized arrays with a seeded generator, 200 iterations), events at the window start are excluded and at the window end included, `blocked` counts per bucket; `fetchWindow` with a mocked `fetch` follows `nextCursor`, tolerates an empty page that still has a cursor, stops when the oldest `ts` on a page is older than `since`, stops at 20 pages, and drops out-of-window events.
     - Implement `dashboard/lib/spend.ts` and `dashboard/lib/format.ts` (`formatSpend` moved here and re-exported from `InventoryTable.tsx`, `relativeTime`), plus `getSpend` in `lib/api.ts` and the `SpendResponse`/`SpendBucket` types.
     - _Requirements: 29.2, 29.3, 29.10_
     - Commit: `feat(dashboard): spend bucketing and timeline window fetch`
 
-  - [ ] 10.2 `SpendChart` component
+  - [x] 10.2 `SpendChart` component
     - Write the failing tests first. `dashboard/components/SpendChart.test.tsx`: renders 24 `<rect>` bars with `<title>` text "<hour>: $<cost>, <n> blocked"; buckets with blocks render a marker with the count; all-zero data renders the axis and "No LLM calls in the last 24 hours"; the y-axis max is at least `cap / 24` when a cap is given.
     - Implement `components/SpendChart.tsx` as inline SVG (viewBox, `preserveAspectRatio`, responsive width) with no new dependency.
     - _Requirements: 29.1, 29.4, 29.11_
     - Commit: `feat(dashboard): 24h spend chart`
 
-  - [ ] 10.3 `AgentSummary` tile and page wiring
+  - [x] 10.3 `AgentSummary` tile and page wiring
     - Write the failing tests first. `dashboard/components/AgentSummary.test.tsx`: shows rolling spend (4 decimals), "no cap" or the cap, a `role="progressbar"` with `aria-valuenow` = min(100, spend/cap·100), red styling at ≥100%, the pause state, and relative last activity. `dashboard/app/agent/page.test.tsx`: the page loads status, spend, config, and window events, renders the tile and chart above the rules, refreshes on a 30 s fake timer, and refetches after `onSaved`/`onChanged` callbacks.
     - Implement `components/AgentSummary.tsx`; wire `app/agent/page.tsx` (parallel fetches with `Promise.all`, a single refresh function, `setInterval` cleared on unmount); `RulesEditor` and `PauseButton` accept `onSaved`/`onChanged`.
     - _Requirements: 29.5, 29.6_
     - Commit: `feat(dashboard): agent summary tile and 30s refresh`
 
-  - [ ] 10.4 Timeline rows: cost, relative time, details, every violation type
+  - [x] 10.4 Timeline rows: cost, relative time, details, every violation type
     - Write the failing tests first. `Timeline.test.tsx`: `llm_call` rows show the cost; the time cell shows `relativeTime` with `title` = exact ts; a "Details" toggle shows and hides formatted `meta`; `describeEvent` covers all seven Violation_Types with the wording from Req 29.8.
     - Implement `describeEvent` in `lib/format.ts` and the row changes in `Timeline.tsx`; `TimelineItem` gains `attemptedCommand`/`attemptedUrl`.
     - _Requirements: 29.7, 29.8_
     - Commit: `feat(dashboard): richer timeline rows`
 
-  - [ ] 10.5 Inventory: stale marker and build check
+  - [x] 10.5 Inventory: stale marker and build check
     - Write the failing tests first. `InventoryTable.test.tsx`: "stale" appears next to a last activity older than 24 h and not for a recent one; "not yet reported" is unchanged. `dashboard/lib/build.test.ts` is unchanged; run `npm run build` and confirm `out/` has `/` and `/agent`.
     - Implement the stale marker.
     - _Requirements: 29.9_

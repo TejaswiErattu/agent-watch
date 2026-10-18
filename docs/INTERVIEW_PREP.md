@@ -678,3 +678,19 @@ Format per task:
 **Q:** Why review a change set before executing it? **A:** Some property changes force a resource Replacement. For a DynamoDB table that means a new, empty table. The change set shows that before anything happens.
 **Q:** Why `UsePreviousValue` for parameters? **A:** It keeps the deployed values (the alert email, the CORS origin) without retyping them or committing them to `samconfig.toml`.
 **Q:** How do you smoke-test without leaking the API key? **A:** The key is read from a private file into an env var and hashed in-process by Python. It never shows up in argv, logs, or output, and a test enforces that statically.
+
+## 10.1 Spend bucketing and window fetch
+**Conceptual:** The chart needs hourly spend without a new backend route. So the dashboard pages through the timeline it already has, then buckets the events client-side with the same window rule as the server's rolling 24 h.
+**Technical:** Buckets are half-open `(start, start+1h]`, so the window matches `now-24h < ts <= now` and each event lands in exactly one bucket. A seeded randomized test checks that the bucket total equals the event total. Paging stops on an old page, a null cursor, or 20 pages. Tradeoff: up to 40 requests per refresh for a very busy agent, accepted to avoid a new route and a deploy.
+**Q:** Why can a DynamoDB-backed page be empty but still carry a cursor? **A:** `Limit` caps the items read before the filter expression runs. A page can read 100 items, filter all of them out, and still return a `LastEvaluatedKey`.
+**Q:** Why cap the pages? **A:** It bounds the cost and latency of a refresh. A runaway agent can't make the dashboard hammer the API, which shares the stage-wide throttle with the SDK.
+
+## 10.2–10.3 Spend chart and summary tile
+**Conceptual:** A spike or a cap hit should be visible at a glance. The tile shows the server's authoritative 24 h spend against the cap. The chart shows when the spend happened and where the blocks landed.
+**Technical:** The chart is hand-written inline SVG, with no chart library. The y-axis max is at least cap/24, so a quiet day doesn't blow tiny bars up to full height. One `Promise.all` refresh runs on load, every 30 s, and after a save or pause, and the interval is cleared on unmount. Tradeoff: one failed call fails the whole refresh, but the tile never shows mixed-time data.
+**Q:** How do you make an SVG chart accessible? **A:** Give the `svg` a `role="img"` with a label, add a `<title>` to each bar, and use `role="progressbar"` with `aria-valuenow` on the cap bar. Real validation still needs a screen-reader pass.
+
+## 10.4–10.5 Timeline rows and stale marker
+**Conceptual:** Every block type should read as a plain sentence, and stale agents should stand out in the inventory, so a student can scan for problems without opening raw JSON.
+**Technical:** `describeEvent` has one branch per Violation_Type and reads `meta` fields defensively (`typeof` checks), since `meta` is free-form. Details shows `JSON.stringify(meta, null, 2)` in a `<pre>`, which React escapes. Stale means last activity is strictly older than 24 h.
+**Q:** Is rendering event `meta` from the API an XSS risk? **A:** Not here. React escapes text children, and there's no `dangerouslySetInnerHTML`, so a `<script>` in `meta` displays as text.
