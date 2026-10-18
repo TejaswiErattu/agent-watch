@@ -91,3 +91,18 @@ describe("InventoryTable stale marker", () => {
     expect(cell.textContent).toBe("not yet reported");
   });
 });
+
+
+describe("InventoryTable empty state (audit fix)", () => {
+  it("explains an empty list instead of showing a bare header", () => {
+    render(<InventoryTable agents={[]} />);
+    expect(
+      screen.getByText("No agents for these credentials. Check the key, or run an agent once.")
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the empty message when there are agents", () => {
+    render(<InventoryTable agents={[reported]} />);
+    expect(screen.queryByText(/no agents for these credentials/i)).not.toBeInTheDocument();
+  });
+});

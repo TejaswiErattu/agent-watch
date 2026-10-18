@@ -229,3 +229,70 @@ describe("RulesEditor onSaved", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
   });
 });
+
+
+describe("RulesEditor safety (audit fixes)", () => {
+  it.each(["abc", "0,01", "$0.01", "1e999", "-1"])(
+    "rejects cap %s inline and never PUTs",
+    async (value) => {
+      getConfig.mockResolvedValue({ guardrails: { dailySpendCapUsd: 3, blockedPaths: [] } });
+      const user = userEvent.setup();
+      render(<RulesEditor creds={creds} agentId="bot1" />);
+      const cap = (await screen.findByDisplayValue("3")) as HTMLInputElement;
+      await user.clear(cap);
+      await user.type(cap, value);
+      await user.click(screen.getByRole("button", { name: /save rules/i }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(/cap must be a number/i);
+      expect(cap).toHaveAttribute("aria-invalid", "true");
+      expect(putConfig).not.toHaveBeenCalled();
+    }
+  );
+
+  it("disables Save rules until the config GET succeeds", async () => {
+    let resolve!: (v: unknown) => void;
+    getConfig.mockReturnValue(new Promise((r) => (resolve = r)));
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    expect(screen.getByRole("button", { name: /save rules/i })).toBeDisabled();
+    resolve({ guardrails: { dailySpendCapUsd: null, blockedPaths: [".env"] } });
+    await screen.findByText(".env");
+    expect(screen.getByRole("button", { name: /save rules/i })).toBeEnabled();
+  });
+
+  it("keeps Save rules disabled when the config GET fails", async () => {
+    getConfig.mockRejectedValue(new Error("network down"));
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("network down");
+    expect(screen.getByRole("button", { name: /save rules/i })).toBeDisabled();
+  });
+
+  it("Save includes a typed-but-not-added path and pattern", async () => {
+    getConfig.mockResolvedValue({
+      guardrails: { dailySpendCapUsd: null, blockedPaths: [".env"], blockedCommands: [] },
+    });
+    putConfig.mockImplementation(async (_c, _a, cfg) => ({ guardrails: cfg }));
+    const user = userEvent.setup();
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    await screen.findByText(".env");
+    await user.type(screen.getByLabelText(/^add path$/i), " secrets/ ");
+    await user.type(screen.getByLabelText(/^add pattern$/i), "\\bsudo\\b");
+    await user.click(screen.getByRole("button", { name: /save rules/i }));
+    await waitFor(() =>
+      expect(putConfig).toHaveBeenCalledWith(creds, "bot1", {
+        dailySpendCapUsd: null,
+        blockedPaths: [".env", "secrets/"],
+        blockedCommands: ["\\bsudo\\b"],
+      })
+    );
+    expect((screen.getByLabelText(/^add path$/i) as HTMLInputElement).value).toBe("");
+    expect(screen.getByText("secrets/")).toBeInTheDocument();
+  });
+
+  it("a long path wraps instead of overflowing", async () => {
+    const long = "/" + "a".repeat(300);
+    getConfig.mockResolvedValue({ guardrails: { dailySpendCapUsd: null, blockedPaths: [long] } });
+    render(<RulesEditor creds={creds} agentId="bot1" />);
+    const el = await screen.findByText(long);
+    expect(el.className).toMatch(/\bbreak-all\b/);
+    expect(el.className).toMatch(/\bmin-w-0\b/);
+  });
+});

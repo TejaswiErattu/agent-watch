@@ -22,7 +22,7 @@ function EventRow({ e }: { e: TimelineItem }) {
         <span className="text-gray-500" title={e.ts ?? undefined} data-testid="event-time">
           {e.ts ? relativeTime(e.ts) : ""}
         </span>
-        <span>{describeEvent(e)}</span>
+        <span className="min-w-0 break-all">{describeEvent(e)}</span>
         {e.type === "llm_call" && e.costUsd !== null ? (
           <span className="text-gray-700" data-testid="event-cost">
             {formatSpend(e.costUsd)}
