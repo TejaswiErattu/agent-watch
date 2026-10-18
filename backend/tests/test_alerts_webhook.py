@@ -44,20 +44,20 @@ def test_discord_sends_content():
     assert len(o.calls) == 1
     url, data, headers, timeout, method = o.calls[0]
     assert url == DISCORD and method == "POST" and timeout == WEBHOOK_TIMEOUT_S == 3.0
-    assert json.loads(data) == {"content": "S\nline1\nline2\n"}
+    assert json.loads(data) == {"content": "S\nline1\nline2\n", "allowed_mentions": {"parse": []}}
     assert {k.lower(): v for k, v in headers.items()}["content-type"] == "application/json"
 
 
 def test_discordapp_host_is_discord():
     o = FakeOpener()
     WebhookPublisher(DISCORDAPP, opener=o).publish("S", "B")
-    assert set(json.loads(o.calls[0][1])) == {"content"}
+    assert set(json.loads(o.calls[0][1])) == {"content", "allowed_mentions"}
 
 
 def test_slack_sends_text():
     o = FakeOpener(status=200)
     WebhookPublisher(SLACK, opener=o).publish("S", "B")
-    assert json.loads(o.calls[0][1]) == {"text": "S\nB"}
+    assert json.loads(o.calls[0][1]) == {"text": "S\nB", "allowed_mentions": {"parse": []}}
 
 
 @pytest.mark.parametrize("url", [
@@ -128,3 +128,56 @@ def test_multi_calls_each_once_and_isolates_failures(caplog):
 
 def test_multi_empty_is_noop():
     MultiPublisher([]).publish("S", "B")
+
+
+# ---- audit fixes (PR A): no mentions, no redirects ----
+
+
+@pytest.mark.parametrize("url", [DISCORD, SLACK])
+def test_payload_disables_mentions(url):
+    o = FakeOpener()
+    WebhookPublisher(url, opener=o).publish("S", "@everyone <@&123> click")
+    payload = json.loads(o.calls[0][1])
+    assert payload["allowed_mentions"] == {"parse": []}
+
+
+def test_default_opener_does_not_follow_redirects():
+    import http.server
+    import threading
+    import urllib.error
+    import urllib.request
+
+    from agentwatch_api.alerts import open_no_redirect
+
+    hits = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            hits.append(self.path)
+            if self.path == "/start":
+                self.send_response(307)
+                self.send_header("Location", "/elsewhere")
+                self.end_headers()
+            else:
+                self.send_response(204)
+                self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}/start", data=b"{}", method="POST")
+        with pytest.raises(urllib.error.HTTPError) as ei:
+            open_no_redirect(req, timeout=3)
+        assert ei.value.code == 307
+        assert hits == ["/start"]  # the redirect target was never requested
+    finally:
+        srv.shutdown()
+
+
+def test_publisher_uses_no_redirect_opener_by_default():
+    from agentwatch_api.alerts import open_no_redirect
+    assert WebhookPublisher(DISCORD)._opener is open_no_redirect

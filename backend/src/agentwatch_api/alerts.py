@@ -104,6 +104,20 @@ def _classify(url: str) -> str | None:
     return WEBHOOK_HOSTS.get(parts.hostname or "")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect: the host allowlist only vets the first URL."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # urllib then raises HTTPError with the 3xx code
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def open_no_redirect(req, timeout=None):
+    return _NO_REDIRECT_OPENER.open(req, timeout=timeout)
+
+
 class WebhookPublisher:
     """POSTs alert text to a Discord or Slack incoming webhook. The URL is a secret: never logged or repr'd."""
 
@@ -112,7 +126,7 @@ class WebhookPublisher:
         if self._kind is None:
             log.warning(json.dumps({"msg": "webhook_url_rejected"}))
         self._url = url
-        self._opener = opener or urllib.request.urlopen
+        self._opener = opener or open_no_redirect
 
     def __repr__(self) -> str:
         return f"WebhookPublisher(kind={self._kind!r})"
@@ -122,6 +136,8 @@ class WebhookPublisher:
             return
         text = f"{subject}\n{body}"[:WEBHOOK_TEXT_MAX]
         payload = {"content": text} if self._kind == "discord" else {"text": text}
+        # Alert text quotes attacker-chosen strings; never let it ping @everyone, roles, or users.
+        payload["allowed_mentions"] = {"parse": []}
         req = urllib.request.Request(
             self._url, data=json.dumps(payload).encode(), method="POST",
             headers={"content-type": "application/json", "user-agent": "agentwatch"})

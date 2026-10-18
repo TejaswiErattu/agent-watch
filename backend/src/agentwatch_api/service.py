@@ -90,8 +90,14 @@ def event_cost(event: Event) -> float:
     return round_cost(estimate_cost(event.item["model"], event.item["inputTokens"], event.item["outputTokens"]))
 
 
-def ingest_event(store: Store, creds: Credentials, body, now: datetime, publisher: Publisher | None = None) -> Result:
-    """POST /events. Steps follow the design's ingest_event list."""
+def ingest_event(store: Store, creds: Credentials, body, now: datetime, publisher: Publisher | None = None,
+                 alert_agents: frozenset[str] | None = None) -> Result:
+    """POST /events. Steps follow the design's ingest_event list.
+
+    `alert_agents`: "owner/agent" pairs. If non-empty, only those agents' blocked events are alerted
+    (all are still stored). Pairs, not owners: an owner id isn't bound to a key, so anyone can claim a
+    new agent under a known owner id; a claimed agent id is bound to its key.
+    """
     # 1. validate
     event = validate_event(body, now)
     if isinstance(event, ValidationError):
@@ -120,7 +126,8 @@ def ingest_event(store: Store, creds: Credentials, body, now: datetime, publishe
     store.bump_last_seen(event.agent_id, event.ts)
 
     # 7. alert only for a newly stored blocked event; a publish failure never fails the request
-    if event.type == "blocked" and outcome == "stored" and publisher is not None:
+    allowed = not alert_agents or f"{event.owner_id}/{event.agent_id}" in alert_agents
+    if event.type == "blocked" and outcome == "stored" and publisher is not None and allowed:
         publish_alert(publisher, event)
 
     # 8. respond

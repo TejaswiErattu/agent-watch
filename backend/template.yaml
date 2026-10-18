@@ -15,6 +15,10 @@ Parameters:
     Default: ""
     NoEcho: true
     Description: Optional Discord or Slack incoming webhook URL for alerts. Secret; pass at deploy, never commit.
+  AlertAgents:
+    Type: String
+    Default: ""
+    Description: Comma-separated owner/agent pairs (e.g. tejaswi/bad-bot) whose blocked events send alerts. Empty sends alerts for every agent.
 
 Globals:
   Function:
@@ -27,6 +31,7 @@ Globals:
         TABLE_NAME: !Ref EventTable
         TOPIC_ARN: !Ref AlertTopic
         ALERT_WEBHOOK_URL: !Ref AlertWebhookUrl
+        ALERT_AGENTS: !Ref AlertAgents
   HttpApi:
     # CORS on the implicit HTTP API. An explicit ServerlessHttpApi resource is
     # ignored by SAM here, so the config must live under Globals to take effect.
