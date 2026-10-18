@@ -9,7 +9,7 @@ Target length is about 4 minutes. Four guardrails fire live: a path block, a she
 3. Open the dashboard (https://main.d65rs0iutjwy8.amplifyapp.com). Enter Owner ID and API key, then click **Save credentials**.
 4. Resume both agents. Open `bad-bot` and then `demo-bot` (inventory link, or type the id under **Agent ID** and click **Open**). If the Status section shows Paused, click **Resume agent**.
 5. Clear `bad-bot`'s rules so you can add them live. If `.env` is under **Blocked paths**, or any pattern is under **Blocked commands**, click **Remove** next to it, then **Save rules**.
-6. On `demo-bot`, leave **Daily spend cap (USD)** empty for now. Note its current 24h spend from the Overview tile, then pick a cap about $0.002 above it.
+6. On `demo-bot`, leave **Daily spend cap (USD)** empty for now. The cap is set during the spend-cap scene, because the pause scene spends money first.
 7. Have the alert inbox open in a second window and the Discord channel open in a third.
 8. Optional: do one full dry run, then repeat steps 4 to 6.
 
@@ -31,7 +31,7 @@ Target length is about 4 minutes. Four guardrails fire live: a path block, a she
    - Expected within about 5 s: `run N/20: AgentPaused: ... (Agent Watch stopped the call before it ran; an alert is on its way)`. The Status section shows Paused with its time.
    - Show `Agent Watch: paused blocked for demo-bot` in Discord, then click **Resume agent**.
 7. **Spend cap with the chart (45 s).**
-   - On `demo-bot`, enter the cap from prep step 6 under **Daily spend cap (USD)** and click **Save rules**.
+   - On `demo-bot`, read the Overview tile's spend now (after the pause scene), add 0.002, enter that under **Daily spend cap (USD)**, and click **Save rules**.
    - Run `python demo/demo_agent.py --loop 5`.
    - Expected: `run 1/5 agent: ...`, maybe `run 2/5 ...`, then `run N/5: SpendCapExceeded: ...`. The blocked call was never sent to the model.
    - Show the email `Agent Watch: spend_cap blocked for demo-bot`. On `demo-bot`, the Overview tile's progress bar is red at the cap, and the 24h spend chart shows this hour's bar with its red block count. Use **Filter** to show only `blocked`.
@@ -50,5 +50,5 @@ Reset the demo state: on `bad-bot` remove `.env` and every pattern and click **S
 - `run 1/5: SpendCapExceeded` immediately: the cap is below the current 24h spend plus about $0.001. Raise it and rerun. No block after 5 runs: lower it.
 - No Discord message: email still arrives through SNS, so show that. The webhook is posted directly from the Lambda; if it's missing, the channel webhook may have been deleted (redeploy with a new one after the recording, never on camera).
 - No email: check spam, and check that the SNS subscription was confirmed. The block itself still happened, so show it in the timeline.
-- `Bedrock unavailable (...); falling back to Anthropic API`: fine, the demo still works if `ANTHROPIC_API_KEY` is set.
+- `Bedrock unavailable (...); falling back to Anthropic API` from `bad_agent.py` or `demo_agent.py`: fine, both fall back the same way and the demo still works if `ANTHROPIC_API_KEY` is set. With neither working, the agent stops at its first LLM call.
 - `agentwatch: authorization failed`: wrong `AGENTWATCH_OWNER` or `AGENTWATCH_KEY` for that agent id.

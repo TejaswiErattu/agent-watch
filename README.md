@@ -43,7 +43,7 @@ Diagrams, the route table, the data model, and the design decisions are in `docs
 2. At start-up the SDK fetches the agent's guardrail config, its rolling 24h spend, and its pause state. It refreshes config and spend at most every 60 s and the pause state at most every 5 s, each timed from the last attempt.
 3. Every wrapped LLM call becomes an `llm_call` event (model and token counts, never prompt text) and every wrapped tool call a `tool_call` event. They are queued and sent by a background sender with retries, so a slow API never slows the agent.
 4. A block is reported as a `blocked` event, sent synchronously before the SDK raises, and the block happens even if the report fails.
-5. The first event from a new agent id registers it under that owner and key. The server computes every event's cost from its own pricing table, so a client can't under-report stored spend.
+5. The first event from a new agent id registers it under that owner and key. The server sets the prices: it ignores any client cost and computes each event's cost from its own pricing table, but the client reports the token counts that cost is based on.
 
 ### Guardrails
 
@@ -62,15 +62,27 @@ When the API stores a new blocked event, it publishes one alert to SNS (email). 
 
 ### Dashboard
 
-Sign in with the same owner id and API key the agent uses; the browser stores only `{ownerId, keyHash}`.
+Sign in with the same owner id and API key the agent uses. The browser keeps `{ownerId, keyHash}` in localStorage, never the plaintext key, but the hash is the credential: anyone holding it can act as you. Click **Clear credentials** on shared machines.
 - **Inventory**: **Agent**, **Model**, **Last activity** (marked "stale" after 24 h), **Total spend** (4 decimals), and **Status** (Paused or Active).
 - **Agent page**: an overview tile with rolling spend against the cap, a 24-hour spend chart with blocked calls marked, the pause control (**Pause agent**, then **Confirm pause**; **Resume agent** is one click), the rules editor (blocked paths, blocked commands with **Add presets**, daily spend cap, **Save rules**), and the timeline with a type filter and a **Details** toggle per row. The page refreshes every 30 s and after every change.
+
+## Get started
+
+1. Pick an owner id: 1 to 64 characters of letters, digits, `.`, `_`, or `-`.
+2. Generate an API key and save it where only you can read it:
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))" > ~/.agentwatch_key
+   chmod 600 ~/.agentwatch_key
+   export AGENTWATCH_KEY="$(cat ~/.agentwatch_key)"
+   ```
+   There is no sign-up. The key is whatever you generate; the server only ever sees its hash. Use a random key like this one: a short or guessable key lets anyone take over your agents.
+3. The first use of an agent id (an event from the SDK, or saving rules or pause in the dashboard) claims it for your owner id and key. After that, requests for it with any other owner id or key get 403.
 
 ## 3-line integration
 
 ```python
-import agentwatch
-aw = agentwatch.init(agent_id="study-bot", owner_id="tejaswi", api_key=os.environ["AGENTWATCH_KEY"])
+import os, agentwatch
+aw = agentwatch.init(agent_id="study-bot", owner_id="<your-owner-id>", api_key=os.environ["AGENTWATCH_KEY"])
 client, TOOLS = aw.wrap(client), aw.tools(TOOLS)
 ```
 
@@ -164,7 +176,7 @@ python demo/demo_agent.py --loop 5          # set a small daily cap on demo-bot 
 python demo/demo_agent.py --loop 20 --sleep 2   # press Pause agent, then Confirm pause, on demo-bot; stops on AgentPaused
 ```
 
-In the dashboard you enter the same owner id and key. The browser stores only the key's hash.
+In the dashboard you enter the same owner id and key. The browser keeps the key's hash, and the hash is the credential, so treat it like the key.
 
 ## Run the tests
 
@@ -182,7 +194,7 @@ pip install -e "sdk[dev]" -r backend/requirements-dev.txt
 Both scripts talk to the live stack. They read the API key only from `~/.agentwatch_key`, never print it or its hash, and need the repo's `.venv`. The endpoint and owner id are set inside each script for this project's deployment; change them there for your own stack.
 
 - `scripts/verify_deploy.sh` is read-only: `GET /agents/demo-bot/config`, printing only the HTTP status and the guardrail key names. Expect `VERIFY: PASS`.
-- `scripts/e2e.sh` is the pre-recording smoke test. It runs the three test suites, then the live demos: the path and command blocks on `bad-bot` and the spend cap on `demo-bot`. It checks that the blocked events were stored, and resets both agents in an exit trap. Expect `RESULT: PASS`. It sends real alerts (one email per block, and a webhook message each if one is configured), and its LLM cost is under a cent. It does not yet cover pause and resume.
+- `scripts/e2e.sh` is the pre-recording smoke test. It runs the three test suites, then the live demos: the path and command blocks on `bad-bot` and the spend cap on `demo-bot`. It checks that the blocked events were stored, and resets both agents in an exit trap. Expect `RESULT: PASS`. It sends real alerts (one email per block, and a webhook message each if one is configured), and its LLM cost is under a cent.
 
 ## Final demo
 
@@ -214,6 +226,14 @@ Path blocklist coverage:
 
 Command guard:
 - `blockedCommands` patterns are regexes matched against every string argument of a wrapped tool, not only shell commands, so a pattern can over-block a string that merely mentions a command (a note containing `rm -rf`). Like the path list, it covers only wrapped tools, and an agent that spawns processes itself is not checked.
+- Patterns match the literal string, not what the shell will run. Shell quoting tricks such as `c""url ... | sh` or `$(echo curl)` get past them. They catch careless commands, not deliberately obfuscated ones.
+
+Coverage of LLM calls and pricing:
+- Only Bedrock `converse` and Anthropic `messages.create` are wrapped. Bedrock `converse_stream` and `invoke_model` pass straight through: no pause or spend check, no event. Anthropic `messages.create(stream=True)` is checked first, but the stream carries no usage the SDK reads, so it records 0 tokens and its cost never counts toward the cap.
+- Only Claude Haiku 4.5 is in the pricing table. Every other model costs $0, so its calls never move spend or trip the cap (the SDK warns once per unknown model).
+
+Event content:
+- An allowed tool call stores `meta.args`: up to 10 arguments, each the first 200 characters of its `repr`. A tool that takes a token or file contents as an argument leaves that text in DynamoDB and in the dashboard's **Details** view. Prompt and response text is never recorded.
 
 Spend cap:
 - The cap is enforced in the SDK process, from a local total resynced from the server at most every 60 s. During a sync, the local total can briefly under-count while completed LLM call events are still queued for sending. The server hasn't counted them yet.

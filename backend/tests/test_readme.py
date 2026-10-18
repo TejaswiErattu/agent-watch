@@ -360,3 +360,60 @@ def test_demo_script_expected_lines_match_the_code():
     assert "Agent Watch: paused blocked for demo-bot" in text
     assert "Agent Watch: spend_cap blocked for demo-bot" in text
 
+
+
+# ---- audit fixes (PR B): onboarding, honest claims, limitations, demo cap timing ----
+
+
+def test_readme_get_started_key_setup():
+    body = _section(README.read_text(), "Get started")
+    assert 'python -c "import secrets; print(secrets.token_urlsafe(32))"' in body
+    assert "~/.agentwatch_key" in body and "chmod 600 ~/.agentwatch_key" in body
+    assert "owner id" in body.lower()
+    assert "first" in body.lower() and "claims" in body.lower()   # first use claims the agent id
+
+
+def test_readme_snippet_is_runnable_and_generic():
+    text = README.read_text()
+    snippet = _section(text, "3-line integration")
+    assert "import os" in snippet
+    assert 'owner_id="<your-owner-id>"' in snippet
+    assert 'owner_id="tejaswi"' not in snippet
+
+
+def test_readme_drops_stale_and_overstated_claims():
+    text = README.read_text()
+    assert "does not yet cover pause" not in text            # e2e.sh covers pause and resume now
+    assert "can't under-report" not in text
+    assert "client reports the token counts" in text         # server sets prices, client reports tokens
+    assert "stores only the key's hash" not in text
+    assert "the hash is the credential" in text.lower()
+
+
+def test_readme_known_limitations_audit():
+    body = _section(README.read_text(), "Known limitations")
+    for s in ("converse_stream", "invoke_model", "stream=True", "Haiku 4.5", "$0",
+              "meta.args", "10", "200", 'c""url'):
+        assert s in body, s
+
+
+def test_demo_script_cap_is_computed_in_the_cap_scene():
+    text = _demo()
+    prep = _section(text, "Before recording (about 5 min, off camera)")
+    assert "0.002" not in prep                    # the pause scene spends money after prep
+    on_camera = _section(text, "On camera")
+    scene = on_camera[on_camera.index("**Spend cap"):on_camera.index("How it's built")]
+    assert "Overview" in scene and "0.002" in scene
+    assert scene.index("0.002") < scene.index("demo_agent.py --loop 5")
+
+
+def test_demo_script_fallback_line_covers_both_agents():
+    body = _section(_demo(), "If something goes wrong")
+    line = next(l for l in body.splitlines() if "falling back to Anthropic API" in l)
+    assert "bad_agent.py" in line and "demo_agent.py" in line
+
+
+def test_gitignores_cover_every_env_file():
+    for p in (ROOT / ".gitignore", ROOT / "dashboard" / ".gitignore"):
+        lines = p.read_text().splitlines()
+        assert ".env*" in lines, p
