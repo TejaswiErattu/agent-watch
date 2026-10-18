@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-17 by Claude Code session (17.1 README/ARCHITECTURE/SUBMISSION on `docs/group-17-readme`, in review; 11.3 timing still pending)
+Last updated: 2026-10-18 by Claude Code session (rollback PR #19: #8, #9, #11, #12, #13 reverted; #10, #14, #15, #16 kept; 11.3 still open)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -108,6 +108,16 @@ Last updated: 2026-10-17 by Claude Code session (17.1 README/ARCHITECTURE/SUBMIS
   - ARCHITECTURE: status routes, control plane vs. rules plane, alert fan-out, the `paused`/`pausedAt` and `blockedCommands` fields, and five new decisions. SUBMISSION: the v2 moments, the cut features, and next steps (rate limit, CLI, Secrets Manager).
   - Scope: groups 12 and 13 stay cut; their features are documented only as excluded. The tracker keeps 17.1's original criteria and records the exclusion in a scope note.
   - `test_readme.py`: 20 new tests (30 in the file, 10 of them running the README block under bash and zsh). Backend 601 passed, SDK 314 passed with the 1 pre-existing Property 33 failure, dashboard 131 passed.
+- PR #7 (17.1) merged as 614648e. After it, PRs #8 to #16 were merged on 2026-10-18.
+- Rollback 2026-10-18 (PR #19, `revert/kiro-group17-docs-v3`): at Tejaswi's request, the documentation and task records of #8, #9, #11, #12, and #13 are reverted. What remains implemented and what was only documented:
+  - Kept, implemented and tested on `main`: #10 (`fix(sdk)`: `_bind` flattens `**kwargs`, fixing Property 33), #14 (alert abuse: alerts only for `owner/agent` pairs in `AlertAgents`/`ALERT_AGENTS`, Discord mentions disabled, webhook redirects refused), #16 (dashboard: the rules editor rejects a non-finite or negative cap, **Save rules** waits for the config to load, empty inventory state, re-auth on the agent page, long ids wrap), and #15 (README Get started and security disclosures, `.env*` ignored at the root and in `dashboard/`, `bad_agent.py` Anthropic fallback and its test). #15's parts that depended on #8 or #9 were removed with them (approved): its edits to the v2 demo script and two demo tests.
+  - Reverted (documentation, tests of reverted docs, and one script step): #8 (v2 `DEMO_SCRIPT.md`; the pre-#8 script is back, with a safety fix: `bad_agent.py` runs only after a fresh config read confirms `.env` and `pipe_to_shell` are saved), #9 (the pause/resume step in `scripts/e2e.sh` and its tests), #11 (interview prep and codebase guide v2; `CODEBASE_GUIDE.md` was then corrected to what remains), #12 (the 17.5 rehearsal record), #13 (submission v2).
+  - Historical work recorded by Kiro in the reverted PRs (the records were reverted, not the events; not re-verified in this rollback):
+    - 17.3 (PR #9): a live `scripts/e2e.sh` run, including the pause/resume step, passed on 2026-10-18; pause-to-stop about 3 s. That step is no longer in `e2e.sh`.
+    - 17.5 (PR #12): a rehearsal on the deployed stack on 2026-10-18, with `.env` and `pipe_to_shell` saved before any run. Block-to-email: `blocked_path` 0.2 to 1.2 s, `blocked_command` 0 to 0.6 s, `paused` 0 to 0.7 s, `spend_cap` 0 to 0.6 s (email times are whole seconds). Pause-to-stop 4.6 s. All four Discord messages arrived, "observed within a few seconds, not timed to the second".
+    - The #14 deploy (change set `alert-agents`, `AlertAgents=tejaswi/bad-bot,tejaswi/demo-bot`) is recorded in open PR #17, not merged. The parameter is in `backend/template.yaml`.
+  - Tracker: 17.2 to 17.5 are unticked again, each with a note. 11.3 stays open: block-to-Discord was never timed. v1 7.5 stays open with 17.5.
+  - Suites on the rollback branch: backend 633, SDK 318, dashboard 146, 0 failed; `npm run build` exports `/` and `/agent`.
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
@@ -116,7 +126,8 @@ Last updated: 2026-10-17 by Claude Code session (17.1 README/ARCHITECTURE/SUBMIS
 - 8.7 pause-to-stop time was not timed. Measure it in 17.5.
 - README note for 17.1 (Known limitations): "blockedPaths does not cover shell strings; use the .env command preset".
 - Scope (2026-10-17, Tejaswi): group 10 done; group 11 (Discord) is back in. Groups 12 and 13 stay cut. On 2026-10-19 move to group 17.
-- EXACT NEXT STEP: Tejaswi reviews and merges the 17.1 PR; then 17.2 (DEMO_SCRIPT v2) on its own branch. Known inconsistencies left for their own tasks: `docs/DEMO_SCRIPT.md` still has only the v1 moments (17.2), `docs/CODEBASE_GUIDE.md` section 10 still lists the rate limit and the CLI as v2 features (17.4), and 17.3's rate-limit criterion is to be recorded as excluded in the 17.3 PR.
+- EXACT NEXT STEP (2026-10-18): Tejaswi reviews rollback PR #19. After it merges, PR #17 (open) needs to be cut down to the #14/#16/deploy record, because it conflicts with #19 and describes #8, #9, #11, #12, #13 as merged. README deploy guidance should add `AlertAgents` to the `UsePreviousValue` list.
+- (superseded) EXACT NEXT STEP: Tejaswi reviews and merges the 17.1 PR; then 17.2 (DEMO_SCRIPT v2) on its own branch. Known inconsistencies left for their own tasks: `docs/DEMO_SCRIPT.md` still has only the v1 moments (17.2), `docs/CODEBASE_GUIDE.md` section 10 still lists the rate limit and the CLI as v2 features (17.4), and 17.3's rate-limit criterion is to be recorded as excluded in the 17.3 PR.
 - Earlier: 11.2 is deployed and 11.3 is verified except its timing. Record block-to-channel (and block-to-email) time for one blocked event, then tick 11.3; this can be folded into the 17.5 rehearsal. On 2026-10-19 move to group 17 (17.1 docs, 17.2 demo script, 17.3 e2e: note `e2e.sh` does not yet cover pause/resume).
 - 11.2 deploy plan (executed 2026-10-17; kept for the record and for later change sets):
   1. Preflight: `[ -n "${DISCORD_WEBHOOK_URL:-}" ] && echo set || echo MISSING` prints only set or MISSING, never the value. Also `aws sts get-caller-identity --query Account` and `git status` (clean, on main, includes PR #5).

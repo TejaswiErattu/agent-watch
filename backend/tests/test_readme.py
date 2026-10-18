@@ -214,6 +214,8 @@ def test_readme_webhook_temp_file_cleaned_on_failure():
 # The exact block is extracted from README.md and run with stubbed sam, aws, and mktemp in a
 # temp directory. No AWS call, no real secret, nothing outside tmp_path is touched.
 
+import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -333,9 +335,15 @@ def test_gitignores_cover_every_env_file():
 # ---- rollback of #8/#9: the restored pre-#8 demo script must stay safe ----
 # bad_agent.py really runs `curl ... | sh` unless the pipe_to_shell pattern blocks it.
 
+def _bad_agent_run_block() -> str:
+    on_camera = _section((DOCS / "DEMO_SCRIPT.md").read_text(), "On camera")
+    block = next(b for b in _bash_blocks(on_camera) if "python demo/bad_agent.py" in b)
+    return "\n".join(l[5:] if l.startswith("     ") else l for l in block.splitlines()) + "\n"
+
+
 def test_demo_script_saves_command_rule_before_bad_agent():
     on_camera = _section((DOCS / "DEMO_SCRIPT.md").read_text(), "On camera")
-    run = on_camera.index("`python demo/bad_agent.py`")
+    run = on_camera.index("python demo/bad_agent.py")
     before = on_camera[:run]
     assert "**Add presets**" in before and "pipe_to_shell" in before and "**Save rules**" in before
     assert "really runs" in before                                   # the safety warning precedes the run
@@ -345,3 +353,50 @@ def test_demo_script_saves_command_rule_before_bad_agent():
                  "Agent Watch stopped the command; an alert is on its way"):
         assert line in code and line in on_camera, line             # expected lines match the code
 
+
+def test_demo_script_bad_agent_runs_only_after_a_fresh_config_check():
+    block = _bad_agent_run_block()
+    first = block.splitlines()[0]
+    assert first == "python - <<'PY' && python demo/bad_agent.py"        # the agent is chained behind the check
+    assert block.count("python demo/bad_agent.py") == 1
+
+
+FAKE_REQUESTS = r'''
+import json, os
+class _R:
+    def __init__(self):
+        self.status_code = int(os.environ["FAKE_STATUS"])
+    def json(self):
+        return json.loads(os.environ["FAKE_BODY"])
+def get(url, timeout=None, allow_redirects=True, headers=None):
+    assert url.endswith("/agents/bad-bot/config") and allow_redirects is False
+    assert set(headers) == {"X-Agentwatch-Owner", "X-Agentwatch-Key-Hash"}
+    return _R()
+'''
+
+
+@pytest.mark.parametrize("status,paths,with_pattern,expect_ok", [
+    (200, [".env"], True, True),
+    (200, [], True, False),
+    (200, [".env"], False, False),
+    (403, [".env"], True, False),
+    (500, [".env"], True, False),
+])
+def test_demo_script_config_check_offline(tmp_path, status, paths, with_pattern, expect_ok):
+    # Runs only the check (the heredoc body), never bad_agent.py, against a fake `requests`.
+    body = _bad_agent_run_block().split("\n", 1)[1].rsplit("PY\n", 1)[0]
+    (tmp_path / "check.py").write_text(body)
+    (tmp_path / "fake").mkdir()
+    (tmp_path / "fake" / "requests.py").write_text(FAKE_REQUESTS)
+    presets = json.loads((ROOT / "dashboard" / "lib" / "commandPresets.json").read_text())
+    pattern = next(p["pattern"] for p in presets if p["id"] == "pipe_to_shell")
+    guardrails = {"dailySpendCapUsd": None, "blockedPaths": paths, "blockedCommands": [pattern] if with_pattern else []}
+    key = "DUMMYKEYFORTESTONLY"
+    env = {**os.environ, "PYTHONPATH": str(tmp_path / "fake"), "AGENTWATCH_ENDPOINT": "https://api.example.test",
+           "AGENTWATCH_OWNER": "owner", "AGENTWATCH_KEY": key,
+           "FAKE_STATUS": str(status), "FAKE_BODY": json.dumps({"guardrails": guardrails, "pricing": {}})}
+    r = subprocess.run([sys.executable, str(tmp_path / "check.py")], cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
+    out = r.stdout + r.stderr
+    assert (r.returncode == 0) is expect_ok, out
+    assert out.startswith("OK:") if expect_ok else out.startswith("STOP:")
+    assert key not in out and hashlib.sha256(key.encode()).hexdigest() not in out   # nothing secret printed

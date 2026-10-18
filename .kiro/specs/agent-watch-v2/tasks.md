@@ -184,6 +184,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `feat(infra): AlertWebhookUrl parameter; feat(backend): webhook fan-out in the handler`
 
   - [ ] 11.3 Checkpoint: Discord or Slack message on a live block
+    - Note (2026-10-18, rollback PR #19): the 17.5 rehearsal (record in reverted PR #12) measured block-to-email for all four blocks, but block-to-Discord was only "observed within a few seconds, not timed". The block-to-channel time this checkpoint requires is still not recorded, so it stays open.
     - PARTIAL 2026-10-17 (Tejaswi): `scripts/e2e.sh` RESULT: PASS (its first steps are the backend, SDK, and dashboard suites); `PathBlocked`, `CommandBlocked`, and `SpendCapExceeded` raised and all three blocked events stored; Discord messages and SNS emails both received; demo guardrails reset. PENDING: the block-to-channel time is not recorded, and no event has been matched to its own Discord message or email. Tick this task when that timing is in `PROGRESS.md` (17.5 records it).
     - All suites pass. Tejaswi: run `python demo/bad_agent.py` with `.env` blocked; the channel shows the alert within seconds, and the email still arrives. Record the block-to-channel time in `PROGRESS.md`.
     - _Requirements: 30.2_
@@ -299,22 +300,26 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `feat(docs): v2 README, architecture, submission`
 
   - [ ] 17.2 DEMO_SCRIPT v2
+    - REVERTED 2026-10-18 (PR #19 undoes PR #8). `docs/DEMO_SCRIPT.md` is the pre-#8 script with a safety fix (`bad_agent.py` runs only after a fresh config read confirms `.env` and `pipe_to_shell`). Open.
     - Write the failing tests first. `test_readme.py`: DEMO_SCRIPT mentions `--loop 20 --sleep 2`, "Pause agent", "Confirm pause", `CommandBlocked`, the chart, and the webhook channel; prep steps mention resuming both agents.
     - Rewrite `docs/DEMO_SCRIPT.md`: prep (clear rules, resume agents, `aws login` right before recording), the on-camera order (problem, 3 lines + `agentwatch init`, inventory, path block + email + channel, shell block, pause moment with the loop, spend cap with the chart, how it's built), expected lines, troubleshooting (a stale pause, a pattern that over-blocks, no channel message).
     - _Requirements: 37.3_
     - Commit: `feat(docs): demo script v2`
 
   - [ ] 17.3 e2e v2 full pass
+    - REVERTED 2026-10-18 (PR #19 undoes PR #9). PR #9 added a pause/resume step and recorded a live `e2e.sh` PASS with pause-to-stop about 3 s; that step and its tests are removed, so `e2e.sh` again covers path, command, and spend cap only. Rate limit stays excluded (group 12 cut). Open.
     - Confirm `scripts/e2e.sh` covers path block, shell block, spend cap, pause/resume, and rate limit, resets everything on exit, and `test_e2e_script.py` pins it. Tejaswi runs it on the deployed stack; all steps PASS; email and channel counts match the blocks.
     - _Requirements: 37.4_
     - Commit: `test(demo): e2e v2`
 
   - [ ] 17.4 Interview prep and codebase guide refresh
+    - REVERTED 2026-10-18 (PR #19 undoes PR #11). `docs/CODEBASE_GUIDE.md` was then corrected minimally to the code that remains (8 routes, the shipped v2 features, current test counts; rate limit and CLI marked cut). The interview-question additions are not restored. Open.
     - Add 2 to 3 questions per completed v2 task to `docs/INTERVIEW_PREP.md` (any that the session handoff hook missed), and update `docs/CODEBASE_GUIDE.md`: the v2 features section, the route table, the data model, the tech stack rows, the numbers table, and 8 to 10 new interview questions (control plane vs. rules plane, once-per-episode reporting, regex guard tradeoffs, sliding window, fan-out isolation, host allowlist, 0600 key file, idempotent redaction).
     - _Requirements: 37.6_
     - Commit: `docs: interview prep and codebase guide for v2`
 
   - [ ] 17.5 Final checkpoint: rehearsal v2 (closes v1 task 7.5 too)
+    - REVERTED 2026-10-18 (PR #19 undoes PR #12). A rehearsal was run on 2026-10-18 and its timings are kept as history in `PROGRESS.md`, but its demo script (PR #8) is reverted and block-to-Discord was not timed. Open.
     - All three suites pass. Tejaswi follows `docs/DEMO_SCRIPT.md` end to end on the deployed stack, records pause-to-stop, block-to-email, and block-to-channel timings in `PROGRESS.md`, and ticks 7.5 in the v1 `tasks.md`. Stop adding features. Record the video from `docs/DEMO_SCRIPT.md` and submit using `docs/SUBMISSION.md` by 2026-10-23.
     - _Requirements: 37.7_
 

