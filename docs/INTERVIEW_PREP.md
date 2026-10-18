@@ -720,3 +720,9 @@ Format per task:
 **Q:** Why save the command rule before running the bad agent, instead of showing it fail first? **A:** The unblocked path would actually execute `curl … | sh`. A demo should never run the dangerous action for real, even against a harmless URL.
 **Q:** How do you keep docs from drifting from the UI? **A:** Test the docs against the source: extract labels from the doc and assert each one appears in the components, so renaming a button turns a test red.
 **Q:** What would you check if the pause took longer than 5 s on camera? **A:** The SDK polls status every 5 s from the last attempt, so worst case is about 5 s plus one in-flight call. If it's longer, check the status GET succeeded (a failing poll keeps the last state and warns).
+
+## 17.3 e2e v2 (pause/resume)
+**Conceptual:** The kill switch is only useful if it stops an agent that's already running. The e2e step reproduces that exactly: it starts a long loop, flips the pause flag through the same API the dashboard uses, and checks that the agent stops on its own within a bound.
+**Technical:** The loop runs in the background with unbuffered output to a temp file, and `wait_for` polls that file once per second. The bound is 20 s: a 5 s status poll, a 2 s sleep, and one LLM call, plus margin. A test pins it against `CONTROL_INTERVAL_S` so the two can't drift. Tradeoff: wall-clock waits make the script slower and timing-dependent, but propagation latency can't be faked against a live stack.
+**Q:** Why does the exit trap kill the loop before resuming the agent? **A:** If it resumed first, a still-running loop would make real, billed LLM calls after the test had already finished.
+**Q:** Why poll for the pause instead of pushing it to the agent? **A:** The SDK runs inside a student's process with no inbound connection. A pull every 5 s needs no open ports and works behind NAT, at the cost of up to 5 s of latency.

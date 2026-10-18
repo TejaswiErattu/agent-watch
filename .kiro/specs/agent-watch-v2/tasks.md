@@ -306,6 +306,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `feat(docs): demo script v2`
 
   - [ ] 17.3 e2e v2 full pass
+    - CODE DONE (branch `docs/group-17-e2e`), live run pending. Pause/resume runs on `demo-bot` during `--loop 20 --sleep 2` (bad_agent.py has no loop to interrupt): wait for run 2, PUT pause, expect `AgentPaused` within 20 s, check the `paused` event, resume, expect `--loop 1` to run. The exit trap kills the loop and resumes `demo-bot`. Rate limit is recorded as excluded (group 12 cut, never built). Open: the SDK Property 33 failure (pre-existing, see PROGRESS Open bugs) blocks "all suites pass".
     - Confirm `scripts/e2e.sh` covers path block, shell block, spend cap, pause/resume, and rate limit, resets everything on exit, and `test_e2e_script.py` pins it. Tejaswi runs it on the deployed stack; all steps PASS; email and channel counts match the blocks.
     - _Requirements: 37.4_
     - Commit: `test(demo): e2e v2`
