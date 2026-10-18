@@ -1,8 +1,8 @@
 # Agent Watch: Codebase Guide
 
-For a technical reader (a hiring manager, an interviewer, a teammate) who wants to understand what this system is, how it is built, and why it is built that way. Numbers are as of 2026-10-18: 156 commits between 2026-10-07 and 2026-10-18, 1064 tests (backend 616, SDK 317, dashboard 131), 38 property-based properties (29 from v1, 9 from v2), eight HTTP routes, one Lambda, one table. Per-task interview questions written while building live in `docs/INTERVIEW_PREP.md`; this guide is the top-down view.
+For a technical reader (a hiring manager, an interviewer, a teammate) who wants to understand what this system is, how it is built, and why it is built that way. Numbers are as of 2026-10-12: 104 commits between 2026-10-07 and 2026-10-10, 726 tests (backend 446, SDK 229, dashboard 51), 29 property-based tests, six HTTP routes, one Lambda, one table. Per-task interview questions written while building live in `docs/INTERVIEW_PREP.md`; this guide is the top-down view.
 
-Sections 1 to 9 describe the v1 core. v2 (spec in `.kiro/specs/agent-watch-v2/`) shipped a kill switch, a shell-command guard, a spend chart and summary tile, and Discord/Slack webhook alerts. Section 10 covers what shipped, the full route table, and the data model. The rate limit and the CLI (groups 12 and 13) and the optional groups 14 to 16 were cut for time and are not built.
+The v2 plan (kill switch, shell-command guard, spend chart, webhook alerts, rate limit, CLI) lives in `.kiro/specs/agent-watch-v2/`. Section 10 summarizes it.
 
 ---
 
@@ -18,7 +18,7 @@ aw = agentwatch.init(agent_id="study-bot", owner_id="tejaswi", api_key=os.enviro
 client, TOOLS = aw.wrap(client), aw.tools(TOOLS)
 ```
 
-After that, every LLM call and tool call becomes an event with its cost. The guardrails (a daily spend cap and a blocked-path list in v1; a dashboard pause button and blocked shell-command patterns in v2) are enforced **inside the SDK, before the action runs**. When one fires, the action never happens, the dashboard shows a blocked event, and an email arrives in seconds. The backend is serverless on AWS (API Gateway, Lambda, DynamoDB, SNS, Amplify), defined in one SAM template, and the whole thing was built in Kiro from a spec.
+After that, every LLM call and tool call becomes an event with its cost. Two guardrails (a daily spend cap and a blocked-path list) are enforced **inside the SDK, before the action runs**. When one fires, the action never happens, the dashboard shows a blocked event, and an email arrives in seconds. The backend is serverless on AWS (API Gateway, Lambda, DynamoDB, SNS, Amplify), defined in one SAM template, and the whole thing was built in Kiro from a spec.
 
 ## 2. The five-minute talk track
 
@@ -29,8 +29,8 @@ After that, every LLM call and tool call becomes an event with its cost. The gua
    - The event write is one DynamoDB transaction (conditional put of the event, atomic `ADD` to the agent's total) conditioned on the key verifier. Retries cannot double count, and a wrong key writes nothing.
    - Path matching checks the absolute and the symlink-resolved form, NFC-normalized and case-folded, name entries against every component, directory entries by prefix and by inode. Every extra form can only add blocks.
    - Secrets never leave the process. The SDK sends `sha256(key)`, the server stores `sha256(sha256(key))` and compares in constant time. A database dump yields nothing usable.
-5. **Verification.** 38 correctness properties from the two designs, each a Hypothesis test. A smoke script that runs all three suites, then the path block, command block, pause/resume, and spend cap against the deployed stack, and resets the demo agents in an exit trap.
-6. **What v2 added.** A kill switch on a 5-second control-plane poll (about 3 s pause-to-stop live), a regex shell-command guard, a 24 h spend chart, and Discord/Slack webhook alerts fanned out next to email. Next would be a per-minute rate limit, an onboarding CLI, and real accounts.
+5. **Verification.** 29 correctness properties from the design, each a Hypothesis test. A smoke script that runs all three suites and both live guardrails against the deployed stack and resets the demo agents.
+6. **What is next.** The v2 spec: a kill switch with a 5-second control-plane poll, a regex shell-command guard, a spend chart, webhook alerts, a per-minute rate limit, and an onboarding CLI.
 
 ---
 
@@ -75,7 +75,7 @@ agent-watch/
     client.py                 Watcher, ApiClient, RequestsTransport, Sender, retries, config/spend cache, LLM proxies, tool wrapper
     guardrails.py             pure path matching (forms, fold, components, inode) and spend_decision
     pricing.py                cost math over the server's pricing table; no prices here
-  sdk/tests/                  317 tests; fakes.py (FakeTransport, FakeBedrock, FakeAnthropic)
+  sdk/tests/                  229 tests; fakes.py (FakeTransport, FakeBedrock, FakeAnthropic)
   backend/
     template.yaml             the whole AWS stack (SAM)
     src/agentwatch_api/
@@ -86,19 +86,18 @@ agent-watch/
       validation.py           event schema validation, size and depth caps, NaN rejection
       rules.py                Guardrail_Config parse and serialize
       pricing.py              the single source of model prices
-      alerts.py               email formatting, SnsPublisher, WebhookPublisher (v2), MultiPublisher fan-out (v2)
-    tests/                    616 tests; test_properties_*.py hold Properties 1-17, 28, and v2's 31, 32, 34, 36-39
+      alerts.py               email formatting and a publish call that never raises
+    tests/                    446 tests; test_properties_*.py hold Properties 1-17 and 28
   dashboard/                  Next.js 14 App Router, static export
     app/page.tsx              inventory page (credentials form, polling, add-agent)
     app/agent/page.tsx        agent detail page (?id=, Suspense, rules editor, timeline)
-    components/               CredentialsForm, InventoryTable, AddAgentForm, Timeline, RulesEditor, PauseButton, AgentSummary, SpendChart, ui/*
-    lib/                      credentials.ts (SHA-256, localStorage), api.ts (typed client), types.ts, spend.ts, format.ts, commandPresets.json
+    components/               CredentialsForm, InventoryTable, AddAgentForm, Timeline, RulesEditor, ui/*
+    lib/                      credentials.ts (SHA-256, localStorage), api.ts (typed client), types.ts
   demo/
-    demo_agent.py             well-behaved agent; Bedrock with Anthropic fallback; --loop N --sleep S for the cap and pause demos
-    bad_agent.py              asks a question, tries read_file(".env"), then tries run_shell("curl … | sh")
+    demo_agent.py             well-behaved agent; Bedrock with Anthropic fallback; --loop N for the cap demo
+    bad_agent.py              asks a question, then tries read_file(".env")
     common.py, models.py      shared init/tools; the only model IDs (tested against the pricing table)
   scripts/e2e.sh              pre-recording smoke test against the deployed stack; resets both demo agents
-  scripts/verify_deploy.sh    post-deploy check: GET config returns 200 with blockedCommands
   docs/                       ARCHITECTURE.md, DEMO_SCRIPT.md, SUBMISSION.md, INTERVIEW_PREP.md, this guide
   PROGRESS.md                 living state: done, next, blocked, decisions (read by every Kiro session)
   amplify.yml                 monorepo build spec (appRoot: dashboard)
@@ -123,9 +122,6 @@ agent-watch/
 | **DynamoDB transactions and conditions** | Idempotent writes, registration races, auth-conditioned updates | `TransactWriteItems` with `attribute_not_exists(sk)` and `keyVerifier = :kv`; `CancellationReasons` tells duplicate from forbidden |
 | **DynamoDB sparse GSI (`ownerIndex`)** | Inventory per owner | Only agent records carry `gsiOwnerId`, so the index holds one item per agent and the inventory never scans events |
 | **Amazon SNS (email)** | Alert delivery | One topic, one email subscription confirmed once, publish from Lambda. At-most-once by design (documented) |
-| **Discord/Slack webhooks via `urllib.request`** (v2) | Second alert channel next to email | Standard library, because the Lambda runtime has no `requests`. 3 s timeout, exact-host allowlist (`discord.com`, `discordapp.com`, `hooks.slack.com`). `MultiPublisher` isolates each channel |
-| **CloudFormation `NoEcho` parameter** (v2) | Carries the webhook URL into the Lambda env | Keeps the URL out of the repo, `samconfig.toml`, and `describe-stacks`. Plaintext in the Lambda env config; Secrets Manager is the next step |
-| **Python `re` with `IGNORECASE`** (v2) | Blocked shell-command patterns | Compiled on the server only to validate, compiled once per config fetch in the SDK, matched only on the owner's machine. No new dependency |
 | **AWS Budgets** | $10 monthly cost alarm | Budgets is global; CloudWatch billing metrics exist only in us-east-1, and the stack is in us-west-2 |
 | **AWS Amplify Hosting** | Serves the static dashboard, auto-builds from `main` | No server runtime to host or secure; monorepo spec with `appRoot: dashboard`; platform `WEB` (not `WEB_COMPUTE`) because the app is a static export |
 | **Next.js 14 (App Router, `output: "export"`)** | Dashboard framework | Static export avoids SSR and dynamic-route build issues; all data is fetched client-side with headers from localStorage. Detail page is `/agent?id=` so no `generateStaticParams` |
@@ -136,8 +132,7 @@ agent-watch/
 | **Amazon Bedrock (Converse API) and the Anthropic SDK** | The LLMs the demo agents call | The SDK duck-types both: `converse` and `messages.create`. The demo probes Bedrock with a 1-token call and falls back to Anthropic at startup, not mid-demo |
 | **boto3** | Demo only (Bedrock client) and Lambda only (DynamoDB, SNS) | Never an SDK dependency: the SDK talks only HTTPS to the API, so students' machines need no AWS credentials |
 | **Kiro (specs, steering, hooks, MCP)** | The build process | Requirements-first spec with EARS acceptance criteria, a design with properties, tasks under an hour; steering keeps every session on the same stack and routine; hooks run tests on save and scan for secrets; the GitHub MCP server opened the infra PRs |
-| **bash + inline Python (`scripts/e2e.sh`)** | Pre-recording smoke test | Runs the three suites, then path block, command block, pause/resume, and spend cap live; checks stored events; kills the background loop and resets agents in an `EXIT` trap. API calls go through Python so the key is hashed in-process and never on a command line |
-| **Inline SVG + HTML overlay** (v2) | 24 h spend chart | No chart library. Bars stretch with `preserveAspectRatio="none"`; text lives in an `aria-hidden` HTML overlay so glyphs never distort |
+| **bash + inline Python (`scripts/e2e.sh`)** | Pre-recording smoke test | Runs the three suites and both live guardrails, checks stored events, resets agents in an `EXIT` trap; API calls go through Python so the key is hashed in-process and never on a command line |
 
 ---
 
@@ -271,20 +266,13 @@ Deploy facts worth knowing: stack `agent-watch` in us-west-2; `samconfig.toml` s
 | Item | Value |
 | --- | --- |
 | Integration | 3 lines |
-| HTTP routes | 8 (v1's 6 plus `GET`/`PUT /status`) |
+| HTTP routes | 6 (v2 adds 2) |
 | Lambda functions | 1 |
 | DynamoDB tables | 1 (plus 1 sparse GSI) |
-| Tests | 1064 (backend 616, SDK 317, dashboard 131), 0 failed on 2026-10-18 |
-| Property-based properties | 38 (v1: 1 to 29; v2: 30 to 34 and 36 to 39) |
+| Tests | 726 (backend 446, SDK 229, dashboard 51) |
+| Property-based tests | 29 (v2 adds 13) |
 | SDK dependencies | 1 (`requests`) |
-| Config and spend sync interval | 60 s |
-| Pause poll (Control_Interval) | 5 s |
-| Pause-to-stop, observed live | about 3 s (e2e 2026-10-18); 4.6 s in the 17.5 rehearsal (PUT to stored `paused` event; script limit 20 s) |
-| Block-to-email, observed live | at most 1.2 s, all 4 blocks (17.5 rehearsal 2026-10-18; Gmail receive time, whole seconds) |
-| Block-to-Discord, observed live | all four Discord messages arrived; observed within a few seconds, not timed to the second (17.5 rehearsal 2026-10-18) |
-| Blocked-command patterns | up to 100, each 1 to 256 chars; 9 dashboard presets |
-| Webhook timeout / text cap | 3 s / 1900 chars |
-| Alerts per e2e run | 4 (path, command, paused, spend cap) |
+| Config and spend sync interval | 60 s (v2 adds a 5 s pause poll) |
 | Request timeout / retries / backoff | 2 s / 3 retries / 0.5, 1, 2 s |
 | Event meta cap | 4096 bytes, depth 32 |
 | Timeline page | 1 to 100, default 50 |
@@ -292,7 +280,7 @@ Deploy facts worth knowing: stack `agent-watch` in us-west-2; `samconfig.toml` s
 | Budget | $10 per month |
 | Lambda | Python 3.11, arm64, 256 MB, 10 s |
 | Prices (Haiku 4.5) | $1 in / $5 out per million tokens |
-| Commits | 156 across 2026-10-07 to 2026-10-18 |
+| Commits | 104 across 2026-10-07 to 2026-10-10 |
 
 ---
 
@@ -301,51 +289,24 @@ Deploy facts worth knowing: stack `agent-watch` in us-west-2; `samconfig.toml` s
 - **Client-side enforcement** covers only wrapped calls. A proxy or sandbox would cover more and cost a hop or a lot of infra. For the user (a student guarding against their own mistakes) client-side is the right first step.
 - **Over-blocking by design.** Every string argument is checked against the blocklist, and matching is case-insensitive even on case-sensitive volumes. False positives are visible and cheap; false negatives are the expensive kind.
 - **Worst-case cost estimate.** Using the full `max_tokens` output budget means the cap trips one call early. Predictable and safe beats precise and surprising.
-- **At-most-once alerts.** Simple and never duplicates. DynamoDB Streams would make it at-least-once with dedupe; that was an optional v2 group and was not built.
-- **Sequential alert fan-out (v2).** Email then webhook, each isolated, inside the ingest request. A hung webhook adds up to 3 s to that one request; async fan-out would need a queue or Streams.
-- **Polling kill switch (v2).** A 5 s pull costs one small GET per interval while the agent is active and up to about 5 s of lag. It needs no inbound connection on a student laptop.
-- **Regex command guard (v2).** A seatbelt, not a sandbox: obfuscated commands get past it. Patterns are not checked for catastrophic backtracking; they run only on the owner's machine against the owner's own rules.
+- **At-most-once alerts.** Simple and never duplicates. DynamoDB Streams would make it at-least-once with dedupe; that is in the v2 optional group.
 - **No user accounts.** Two headers and a hash kept the MVP honest and testable. Real auth (Cognito) and key rotation are next steps, and agent ids being first-come is a consequence that is documented.
 - **Rolling spend is a query, not a counter.** Exact and simple; at thousands of events a day per agent you would bucket by hour.
 - **One pricing table in code.** Prices change in one file with a test guarding the demo IDs. A pricing API lookup would be more current and more fragile.
 
 ---
 
-## 10. What v2 shipped (spec in `.kiro/specs/agent-watch-v2/`)
-
-### 10.1 Features
+## 10. What v2 adds (spec in `.kiro/specs/agent-watch-v2/`)
 
 | Feature | Mechanism | New concept to explain |
 | --- | --- | --- |
-| Kill switch | `paused`/`pausedAt` on the agent record, `GET`/`PUT /agents/{id}/status`, SDK polls every 5 s and checks pause first in every wrapped LLM and tool call, raises `AgentPaused`, one `paused` event per pause episode. Dashboard **Pause agent** → **Confirm pause**, one-click resume, Status column | Control plane (5 s, one small attribute, its own route) vs. rules plane (60 s, whole-config replace) |
-| Shell-command guard | `blockedCommands` regexes in the config (≤100, each ≤256 chars, must compile), compiled once per fetch in the SDK, matched case-insensitively against every string and all-str argv list after whitespace collapse, checked after paths, raises `CommandBlocked`. Nine dashboard presets in `commandPresets.json`, tested in both JS and Python regex engines | Same over-blocking stance as paths; patterns compile on the server, run only on the owner's machine |
-| Spend chart and tile | Client-side hourly buckets from the timeline (`llm_call` and `blocked`), inline SVG with an HTML text overlay, spend vs. cap tile with a progress bar, richer timeline rows, stale marker | No backend change; cursor following with a 20-page cap |
-| Webhook alerts | `AlertWebhookUrl` (`NoEcho`) → `ALERT_WEBHOOK_URL` → `WebhookPublisher` (stdlib `urllib`, 3 s, exact-host allowlist) inside a `MultiPublisher` next to `SnsPublisher` | Fan-out isolation: a failing webhook never stops the email or fails the request |
-| `**kwargs` bind fix | `_bind` lifts the VAR_KEYWORD dict to the top level (`setdefault`, real params win), so keyword-passed `command`/`path` on a `def tool(*a, **kw)` count as named | Property 33 found it; the block always happened, only the reported string and `target` were wrong |
-
-Not built (cut 2026-10-17): the per-minute rate limit (group 12), the `agentwatch` CLI and its 0600 Key_File (group 13), and optional groups 14 to 16 (secret redaction, domain allowlist, alarms and Streams). They appear in the README only under "Not in this release".
-
-### 10.2 Route table (all on one Lambda, all behind the credential gate)
-
-| Route | Service function | Notes |
-| --- | --- | --- |
-| `POST /events` | `ingest_event` | Registers on first event; one transaction for the event and the total; publishes alerts for new `blocked` events |
-| `GET /agents` | `list_inventory` | Sparse owner GSI; includes `paused` (v2) |
-| `GET /agents/{agentId}/events` | `get_timeline` | asc/desc, `type` filter, `limit` 1 to 100, base64url cursor |
-| `GET /agents/{agentId}/config` | `get_config` | Guardrails plus pricing table; never creates a record |
-| `PUT /agents/{agentId}/config` | `put_config` | Whole-config replace; `blockedCommands` optional on input, always on output (v2) |
-| `GET /agents/{agentId}/spend` | `get_spend` | Rolling 24 h sum, `now - 24h < ts <= now` |
-| `GET /agents/{agentId}/status` | `get_status` (v2) | `{paused, pausedAt}`; a missing agent reads as not paused and nothing is created |
-| `PUT /agents/{agentId}/status` | `put_status` (v2) | Body exactly `{"paused": bool}`; `pausedAt` is server time; never touches `guardrails` |
-
-### 10.3 Data model (one table, PK `agentId`, SK `sk`)
-
-| Item | SK | Attributes |
-| --- | --- | --- |
-| Agent_Record | `META` | `ownerId`, `gsiOwnerId` (sparse GSI key), `keyVerifier`, `guardrails` (`dailySpendCapUsd`, `blockedPaths`, `blockedCommands` (v2)), `totalSpendUsd`, `firstSeen`, `lastSeen`, `model`, `paused` and `pausedAt` (v2, written only when set; absent means not paused, so v1 items need no migration) |
-| Event | `ts#eventId` | `type`, `ts`, `eventId`, `costUsd` (server-computed), plus per type: `model`/tokens (`llm_call`); `tool`/`target` (`tool_call`); `violationType` and `attemptedCostUsd`, `attemptedPath`, or `attemptedCommand` (v2) (`blocked`); `meta` (≤4 KB) |
-
-Violation_Types accepted by the validator: `spend_cap`, `blocked_path`, `paused` (v2, meta only), `blocked_command` (v2, requires `attemptedCommand` ≤1024).
+| Kill switch | `paused` on the agent record, `GET`/`PUT /agents/{id}/status`, SDK polls every 5 s before every LLM and tool call, raises `AgentPaused`, one event per pause episode | Control plane (fast, small, separate route and attribute) vs. rules plane (60 s, whole-config replace) |
+| Shell-command guard | `blockedCommands` regexes in the config, compiled once per fetch, matched against every string and argv-list argument, raises `CommandBlocked` | Same over-blocking philosophy as paths; patterns compile on the server, run only on the owner's machine |
+| Spend chart and tile | Client-side hourly buckets from the timeline (`llm_call` and `blocked`), inline SVG, spend vs. cap tile, richer rows | No backend change; cursor following with a page cap |
+| Webhook alerts | Stack parameter → Lambda env → `WebhookPublisher` (stdlib `urllib`, 3 s, host allowlist) inside a `MultiPublisher` | Fan-out isolation: one failing channel never hides another or fails the request |
+| Rate limit | `maxLlmCallsPerMinute`, a per-Watcher deque of allowed-call times, raises `RateLimitExceeded`, one event per window | Sliding window; blocked calls do not count, so a loop cannot extend its own lockout |
+| CLI | `agentwatch init` (0600 key file via `os.open`, prints the snippet) and `agentwatch doctor` | Key discovery order: argument, env var, key file |
+| Optional | Secret redaction before the model call, domain allowlist for tool URLs, CloudWatch alarms, Streams-based alerts | Idempotent redaction; at-least-once with a conditional `alerted` flag |
 
 ---
 
@@ -365,7 +326,7 @@ A: The action happens in the agent's process; that is the only place you can sto
 A: One cold start, one IAM role, one deployment unit, and far fewer template lines. The handler is a thin adapter; routes are a dict lookup on `routeKey`. All logic is in plain modules that take a store, a publisher, and a clock, so the Lambda boundary is irrelevant to testing.
 
 **Q: How do rule changes reach a running agent?**
-A: The SDK caches the config and refreshes it at most once per 60 s, timed from the last attempt so an outage costs one request a minute. Failures keep the last good config and warn. Before the first success, no rules are active and the SDK says so loudly. The v2 kill switch has its own 5-second poll because a stop has a different latency budget than a rule edit.
+A: The SDK caches the config and refreshes it at most once per 60 s, timed from the last attempt so an outage costs one request a minute. Failures keep the last good config and warn. Before the first success, no rules are active and the SDK says so loudly. The v2 kill switch adds a separate 5-second poll because a stop has a different latency budget than a rule edit.
 
 **Q: How does the spend cap work across restarts and multiple processes?**
 A: The server owns the truth: `GET /spend` sums the agent's events over the last 24 hours. The SDK seeds its local total from that at init, adds each completed call, and replaces the total with a fresh server value at most once a minute. Between syncs another process's spend is invisible, so the cap can overshoot by up to a minute of the other process's calls. That is documented.
@@ -425,7 +386,7 @@ A: `allow_redirects=False` in the transport, so a 3xx is just a non-2xx to retry
 A: Two forms per path: the lexical absolute path (keeps symlinks, catches a link named `.env`) and `realpath` (resolves them, catches a link that points into a blocked directory). Both NFC-normalized and case-folded. Directory entries also match by inode, which catches macOS firmlinks and bind mounts. Every added form can only add matches. Not covered: a hardlink under a different name and a symlink swapped between check and use.
 
 **Q: What are the known gaps and why did you leave them?**
-A: Direct `open()` and shell commands outside wrapped tools, hardlinks and TOCTOU, first-come agent ids, at-most-once alerts, stage-wide throttling, brief under-counting during a spend sync. Each is either outside the threat model or a deliberate simplicity trade, and each is written down in the README so nobody assumes protection they do not have. v2 narrowed the shell-command gap with a regex guard on wrapped tools; unwrapped `subprocess` calls are still uncovered.
+A: Direct `open()` and shell commands outside wrapped tools, hardlinks and TOCTOU, first-come agent ids, at-most-once alerts, stage-wide throttling, brief under-counting during a spend sync. Each is either outside the threat model or a deliberate simplicity trade, and each is written down in the README so nobody assumes protection they do not have. The v2 spec closes the shell-command gap.
 
 **Q: How do you keep secrets out of logs and errors?**
 A: The handler logs route, agent id, status, request id, and exception *type* only, because messages can echo inputs. Dataclasses that hold hashes exclude them from `repr`. The SDK logger never receives the key or hash. A property test runs sequences of operations and asserts neither value appears in any item, response, or captured log record.
@@ -483,44 +444,6 @@ A: Steering files pinned the stack, naming, and rules like "no prices outside pr
 **Q: What went wrong and what did you do?**
 A: The original demo key lived only in a closed terminal tab and was lost; I deleted the demo data, generated a new key, and moved it to a 0600 file outside the repo that every script reads. A placeholder email in a deploy command rolled back a stack. CORS silently did nothing until it moved under SAM Globals. Each one became a note in `PROGRESS.md` and a guard in a script or test.
 
-### v2: what shipped
-
-**Q: Why is the pause a separate route and attribute instead of a field in the guardrail config?**
-A: They are two planes with different needs. The rules plane is a whole-config replace synced every 60 s; the control plane is one boolean polled every 5 s. If `paused` lived in the config, a rules save from a stale dashboard tab could silently un-pause an agent. Separate attribute, separate route, separate poll: a rules save can never touch the pause and a pause never touches the rules.
-
-**Q: How fast does the kill switch actually stop a running agent?**
-A: About 3 s in the live e2e run on 2026-10-18, from `PUT /status` to `AgentPaused` in a `--loop 20 --sleep 2` agent. The bound is the 5 s poll plus the loop's sleep plus one in-flight call; the script fails if it takes more than 20 s.
-
-**Q: A runaway loop calls a paused agent 100 times a second. How many alerts does the owner get?**
-A: One. The first blocked call in a Pause_Episode sends a synchronous `paused` event; later calls raise locally with no network traffic. A test-and-set on a flag under the Watcher lock means two threads can't both report, and the send happens outside the lock so a slow POST never stalls other threads. A status read with `paused: false` ends the episode.
-
-**Q: Is a regex shell-command guard real security?**
-A: No, and the README says so. It's a seatbelt for a careless agent: `curl … | sh` or `rm -rf` passed straight to a wrapped tool gets blocked before a subprocess starts. Obfuscation (`$(echo cm0= | base64 -d)`) and unwrapped `subprocess` calls get past it. Real isolation would be a container or a syscall filter. Within its scope it over-blocks on purpose: every string argument is a candidate, matching is case-insensitive, and whitespace is collapsed so an extra tab can't dodge a rule.
-
-**Q: What about ReDoS from user-supplied patterns?**
-A: The server only compiles patterns to validate them (≤100 entries, ≤256 chars, must compile); it never runs them against input. Matching happens in the owner's own SDK process on the owner's own rules, so a catastrophic pattern only slows down its author. The real fix would be RE2 or a match timeout, which would add a dependency.
-
-**Q: Your dashboard writes regexes in JavaScript and the SDK runs them in Python. How do you keep them consistent?**
-A: One JSON file of presets feeds both test suites. Each pattern must compile, match its example, and miss its safe example in both `RegExp` and Python `re`, and it must pass the backend's `parse_config`. The e2e script also reads the `pipe_to_shell` pattern from that file instead of retyping it.
-
-**Q: You added Discord alerts. How do you make sure a broken webhook never costs you the email?**
-A: `MultiPublisher` calls each publisher in its own `try/except` and logs only the publisher class and exception type. SNS runs first, the webhook has a 3 s timeout, and publish failures never fail the ingest request, which still returns 200. Property 36 generates failure patterns across publishers and checks every healthy one still gets every alert.
-
-**Q: How do you stop a webhook parameter from turning your Lambda into an SSRF primitive?**
-A: The URL is parsed with `urlsplit` and must be `https`, with a host exactly `discord.com`, `discordapp.com`, or `hooks.slack.com`, and no userinfo or port. A substring check would accept `discord.com.evil.com` or `user@discord.com`. A rejected URL logs one warning without the URL and sends nothing.
-
-**Q: What does `NoEcho` on the webhook parameter actually protect?**
-A: It masks the value in `describe-stacks`, stack events, and the console, and the URL never goes in the repo or `samconfig.toml`. It does not encrypt it: the URL is plaintext in the Lambda's environment config, readable by anyone with `lambda:GetFunctionConfiguration`. Secrets Manager would close that at the cost of an extra IAM policy and a per-call read. Later deploys must pass `UsePreviousValue`, or the change set silently resets it to empty.
-
-**Q: Tell me about a bug a property test found.**
-A: Property 33 compares the wrapped tool against an independently written reference rule. Hypothesis found a `def tool(*a, **kw)` called with `command=['rm']`: the SDK reported the positional string instead of the named one. The root cause was `inspect.Signature.bind_partial().arguments`, which nests `**kwargs` under the parameter name (`{'kw': {...}}`). The tool was always blocked; only the reported string and `target` were wrong. I fixed it test-first in `_bind` by lifting those keys to the top level with `setdefault`, so a real parameter of the same name wins.
-
-**Q: Where does the demo API key live and why that way?**
-A: In `~/.agentwatch_key`, mode 0600, outside the repo. The original key once lived only in a terminal tab and was lost. Every script reads the file into an env var and hashes it in-process in Python, so neither the key nor its hash appears in argv, output, or files, and a test checks that statically. The scripts check the file is readable and non-empty, not its mode. The cut `agentwatch init` CLI would create it with `os.open(..., 0o600)` to avoid a create-then-chmod window; that's a next step.
-
-**Q: What would you add next?**
-A: The two cut v2 groups. First a per-minute LLM rate limit, a sliding window in the SDK so a tight loop gets stopped before it hits the daily cap. Then `agentwatch init`, which writes the key file with 0600 and prints the 3-line snippet. After that, the webhook URL in Secrets Manager and Streams-based at-least-once alerts.
-
 ### Behavioral and story
 
 **Q: Why this project?**
@@ -530,7 +453,7 @@ A: I had seen classmates lose real money to agent loops and paste `.env` files i
 A: The transactional, idempotent event write conditioned on the key verifier. It makes three hard things true at once: retries cannot double count, a wrong key cannot write, and the event and the total can never disagree. And it is tested by a property, not by hoping.
 
 **Q: What would you do with another month?**
-A: Finish the cut v2 groups first: a per-minute LLM rate limit and an `agentwatch init` CLI that writes the key to a 0600 file. Then real accounts with Cognito and key rotation, Streams-based alerts, the webhook URL in Secrets Manager, a server-side spend series, and a TypeScript SDK. In that order, because each one is a demo moment or a trust moment.
+A: Ship the v2 spec fully, then real accounts with Cognito and key rotation, Streams-based alerts, a server-side spend series, a TypeScript SDK, and an anomaly rule for new tools and paths. In that order, because each one is a demo moment or a trust moment.
 
 ---
 
@@ -538,14 +461,12 @@ A: Finish the cut v2 groups first: a per-minute LLM rate limit and an `agentwatc
 
 - **Owner**: `(ownerId, Key_Hash)`; no account, no password.
 - **Key_Hash**: `sha256(api_key)`, sent as a header. **Key_Verifier**: `sha256(Key_Hash)`, stored.
-- **Agent_Record**: the `META` item per agent: owner, verifier, guardrails, first/last seen, model, running total (v2: `paused`, `pausedAt`).
-- **Guardrail_Config**: `{dailySpendCapUsd, blockedPaths}` (v2 adds `blockedCommands`).
-- **Pause_Episode** (v2): the span from the first blocked call while paused to the next status read with `paused: false`; one `paused` event per episode.
-- **Command_String** (v2): a str argument, or an all-str list/tuple joined by spaces, with whitespace collapsed.
+- **Agent_Record**: the `META` item per agent: owner, verifier, guardrails, first/last seen, model, running total (v2: `paused`).
+- **Guardrail_Config**: `{dailySpendCapUsd, blockedPaths}` (v2 adds `blockedCommands`, `maxLlmCallsPerMinute`, optional `redactSecrets`, `allowedDomains`).
 - **Config_Response**: guardrails plus the pricing table, fetched by the SDK.
 - **Rolling_24h_Spend / Local_Spend_Total**: server sum over the last day / the SDK's running estimate between syncs.
 - **Sync_Interval**: 60 s. **Control_Interval** (v2): 5 s for the pause state.
 - **Absolute_Path / Normalized_Path**: lexical absolute (keeps symlinks) / `realpath` (resolves them). **Case_Fold**: NFC then `casefold()`.
 - **Name_Entry / Directory_Entry**: a blocked entry without / with a separator.
-- **Violation_Type**: `spend_cap`, `blocked_path` (v2 adds `paused`, `blocked_command`).
+- **Violation_Type**: `spend_cap`, `blocked_path` (v2 adds `paused`, `blocked_command`, `rate_limit`, `secret_redacted`, `blocked_domain`).
 - **Unreported_Agent**: created by a rules save, no event yet; shows "not yet reported".
