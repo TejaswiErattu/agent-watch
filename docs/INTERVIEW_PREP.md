@@ -700,3 +700,10 @@ Format per task:
 **Technical:** Bars and the axis stay in an SVG with `preserveAspectRatio="none"`. Labels and block counts moved to an `aria-hidden` HTML overlay, positioned in percent of the same viewBox coordinates, so they render at normal font scale. Edge labels anchor inward with `translateX(0 | -50% | -100%)`. Tradeoff: two layers have to agree on coordinates, so both are computed from one `geom` array.
 **Q:** Why does `preserveAspectRatio="none"` distort text? **A:** It scales x and y independently, and `<text>` glyphs are scaled with everything else, so a wide container squashes or stretches the font.
 **Q:** Why is the overlay `aria-hidden`? **A:** The same information is already on each bar's `<title>` and the `svg` label, so screen readers would hear it twice.
+
+## 11.1 WebhookPublisher and MultiPublisher
+**Conceptual:** Students live in Discord, so a block should land there within seconds, not just in email. Adding a second channel must never cost the first one: one dead webhook can't hide the email.
+**Technical:** `WebhookPublisher` uses `urllib.request` (Lambda has no `requests`), a 3 s timeout, and a host allowlist parsed with `urlsplit`: https only, host exactly `discord.com`/`discordapp.com`/`hooks.slack.com`, no userinfo, no port. A rejected URL logs one warning without the URL and never sends. `MultiPublisher` wraps each publish in its own try/except and logs only class and exception type. Tradeoff: publishes run sequentially, so a hung webhook adds up to 3 s to that ingest request.
+**Q:** Why allowlist webhook hosts? **A:** Otherwise a mistyped or malicious parameter turns the Lambda into a generic HTTP poster, an SSRF-style primitive from inside your AWS account.
+**Q:** Why reject `user@discord.com` and `discord.com.evil.com`? **A:** Prefix or substring checks get fooled by userinfo and subdomain tricks. Parsing the URL and comparing the exact hostname doesn't.
+**Q:** Why treat the webhook URL as a secret? **A:** Anyone with it can post to the channel. It never goes in logs, `repr`, the repo, or `samconfig.toml`.

@@ -167,8 +167,8 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 29.1, 29.4_
     - Commit: `fix(dashboard): render spend chart text undistorted`
 
-- [ ] 11. Webhook alerts (Discord and Slack)
-  - [ ] 11.1 `WebhookPublisher` and `MultiPublisher`
+- [ ] 11. Webhook alerts (Discord and Slack) (back in scope 2026-10-17 by Tejaswi, Discord target; 11.3 is hers)
+  - [x] 11.1 `WebhookPublisher` and `MultiPublisher`
     - Write the failing tests first. `backend/tests/test_alerts_webhook.py` with a fake opener recording `(url, data, headers, timeout)`: Discord hosts send `{"content": text}`, Slack sends `{"text": text}`, `http://`, other hosts, `discord.com.evil.com`, and `user@discord.com` are rejected with one `webhook_url_rejected` warning that does not contain the URL, and no request; non-2xx raises; text is capped at 1900 chars; timeout is 3.0. `MultiPublisher` calls every publisher once, isolates a raising one, logs the class and exception type only. Add Property 36 in `backend/tests/test_properties_fanout.py` and Property 37 in `backend/tests/test_properties_webhook.py`.
     - Implement per the design in `alerts.py` (standard library only).
     - _Requirements: 30.3, 30.4, 30.5, 30.6, 30.7_

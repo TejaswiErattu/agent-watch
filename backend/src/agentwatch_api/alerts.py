@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import urllib.parse
+import urllib.request
 
 from .validation import Event
 
@@ -81,3 +83,68 @@ class SnsPublisher:
             import boto3
             self._client = boto3.client("sns")
         self._client.publish(TopicArn=self.topic_arn, Subject=subject, Message=body)
+
+
+# ---- v2 group 11: webhooks and fan-out (Req 30) ----
+
+WEBHOOK_HOSTS = {"discord.com": "discord", "discordapp.com": "discord", "hooks.slack.com": "slack"}
+WEBHOOK_TIMEOUT_S = 3.0
+WEBHOOK_TEXT_MAX = 1900  # Discord's content limit is 2000; leave headroom
+
+
+def _classify(url: str) -> str | None:
+    """'discord' / 'slack' for an https URL on an allowed host, else None. Rejects userinfo and ports."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return None
+    if parts.scheme != "https" or "@" in parts.netloc or port is not None:
+        return None
+    return WEBHOOK_HOSTS.get(parts.hostname or "")
+
+
+class WebhookPublisher:
+    """POSTs alert text to a Discord or Slack incoming webhook. The URL is a secret: never logged or repr'd."""
+
+    def __init__(self, url: str, opener=None):
+        self._kind = _classify(url)
+        if self._kind is None:
+            log.warning(json.dumps({"msg": "webhook_url_rejected"}))
+        self._url = url
+        self._opener = opener or urllib.request.urlopen
+
+    def __repr__(self) -> str:
+        return f"WebhookPublisher(kind={self._kind!r})"
+
+    def publish(self, subject: str, body: str) -> None:
+        if self._kind is None:
+            return
+        text = f"{subject}\n{body}"[:WEBHOOK_TEXT_MAX]
+        payload = {"content": text} if self._kind == "discord" else {"text": text}
+        req = urllib.request.Request(
+            self._url, data=json.dumps(payload).encode(), method="POST",
+            headers={"content-type": "application/json", "user-agent": "agentwatch"})
+        with self._opener(req, timeout=WEBHOOK_TIMEOUT_S) as r:
+            if not 200 <= r.status < 300:
+                raise RuntimeError(f"webhook status {r.status}")
+
+
+class MultiPublisher:
+    """Calls every publisher once; one failing channel never stops the others (Req 30.6)."""
+
+    def __init__(self, publishers):
+        self._pubs = list(publishers)
+
+    @property
+    def publishers(self) -> list:
+        return list(self._pubs)
+
+    def publish(self, subject: str, body: str) -> None:
+        for p in self._pubs:
+            try:
+                p.publish(subject, body)
+            except Exception as e:
+                log.warning(json.dumps({"msg": "alert_publish_failed", "publisher": type(p).__name__,
+                                        "error": type(e).__name__}))
+
