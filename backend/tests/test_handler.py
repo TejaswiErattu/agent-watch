@@ -149,6 +149,43 @@ def test_deps_built_lazily_once_from_env(monkeypatch):
     assert api._deps.publisher.topic_arn == "arn:aws:sns:us-west-2:123456789012:alerts"
 
 
+WEBHOOK = "https://discord.com/api/webhooks/1/SECRETTOKEN"  # synthetic
+
+
+def _build_deps(monkeypatch, webhook):
+    monkeypatch.setattr(api, "_deps", None)
+    monkeypatch.setattr(api, "DynamoStore", lambda name: InMemoryStore())
+    monkeypatch.setenv("TABLE_NAME", "t")
+    monkeypatch.setenv("TOPIC_ARN", "arn:aws:sns:us-west-2:123456789012:alerts")
+    if webhook is None:
+        monkeypatch.delenv("ALERT_WEBHOOK_URL", raising=False)
+    else:
+        monkeypatch.setenv("ALERT_WEBHOOK_URL", webhook)
+    return api._get_deps()
+
+
+def test_deps_with_webhook_fan_out_to_sns_and_webhook(monkeypatch):
+    from agentwatch_api.alerts import MultiPublisher, WebhookPublisher
+    d = _build_deps(monkeypatch, WEBHOOK)
+    assert isinstance(d.publisher, MultiPublisher)
+    sns, wh = d.publisher.publishers
+    assert isinstance(sns, SnsPublisher) and sns.topic_arn.endswith(":alerts")
+    assert isinstance(wh, WebhookPublisher)
+
+
+@pytest.mark.parametrize("webhook", [None, "", "   "])
+def test_deps_without_webhook_sns_only(monkeypatch, webhook):
+    d = _build_deps(monkeypatch, webhook)
+    assert isinstance(d.publisher, SnsPublisher)
+
+
+def test_webhook_url_never_logged_by_handler(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    _build_deps(monkeypatch, WEBHOOK)
+    call(http_event("GET /agents/{agentId}/config", agent_id="bot"))
+    assert "SECRETTOKEN" not in caplog.text
+
+
 def test_existing_config_returned_through_handler(store):
     from agentwatch_api.service import new_record
     from agentwatch_api.auth import Credentials

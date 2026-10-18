@@ -33,6 +33,20 @@ Prerequisites: AWS CLI credentials for us-west-2, SAM CLI, Python 3.11, and Node
 2. Dashboard: connect the repo in AWS Amplify Hosting (platform `WEB`). The root `amplify.yml` is a monorepo spec with `appRoot: dashboard`. Set the env var `NEXT_PUBLIC_API_URL` to the `ApiUrl`. Amplify runs `npm ci` and `npm run build` and serves `out/`.
 3. CORS allows only `DashboardOrigin`. For local dashboard development against the deployed API, redeploy with `DashboardOrigin=http://localhost:3000`.
 
+### Webhook alerts
+
+Alerts can also go to a Discord or Slack channel, alongside the email. It's optional; leave it unset and only SNS email is used.
+
+1. Create an incoming webhook. Discord: Server Settings, Integrations, Webhooks, New Webhook, Copy Webhook URL. Slack: create an app with Incoming Webhooks enabled and add one to a channel.
+2. Treat the URL as a secret: anyone with it can post to your channel. Put it in an env var in your own terminal only, for example `export DISCORD_WEBHOOK_URL=...` (paste it at the prompt; never into a file, `samconfig.toml`, or chat).
+3. Deploy once with it as the `AlertWebhookUrl` parameter. It is `NoEcho`, so CloudFormation masks it:
+   ```bash
+   sam deploy --parameter-overrides AlertEmail=[email] DashboardOrigin=https://main.<app-id>.amplifyapp.com AlertWebhookUrl="$DISCORD_WEBHOOK_URL"
+   ```
+   Later change sets must keep it with `UsePreviousValue` (for example `ParameterKey=AlertWebhookUrl,UsePreviousValue=true` with `aws cloudformation create-change-set`), or it resets to empty.
+
+Only `https://discord.com`, `https://discordapp.com`, and `https://hooks.slack.com` URLs are accepted. Any other value logs one `webhook_url_rejected` warning (without the URL) and sends nothing. A failing webhook never blocks the email.
+
 ## Run the demos
 
 ```bash

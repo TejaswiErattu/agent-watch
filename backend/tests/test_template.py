@@ -195,7 +195,8 @@ def test_live_stack_identity_preserved(tpl):
     table = res(tpl, "EventTable")["Properties"]
     assert "TableName" not in table  # setting a name forces replacement
     params = tpl["Parameters"]
-    assert set(params) == {"AlertEmail", "DashboardOrigin"}
+    # v2 11.2 adds AlertWebhookUrl (Req 30.1); the two live parameters are unchanged.
+    assert set(params) == {"AlertEmail", "DashboardOrigin", "AlertWebhookUrl"}
     assert params["AlertEmail"] == {
         "Type": "String",
         "Description": "Email address that receives guardrail alerts (confirm the SNS subscription once).",
@@ -209,3 +210,25 @@ def test_live_stack_identity_preserved(tpl):
 
 def test_samconfig_region():
     assert 'region = "us-west-2"' in SAMCONFIG.read_text()
+
+
+# ---- v2 11.2: webhook parameter (Req 30.1, 30.8) ----
+
+
+def test_alert_webhook_url_parameter(tpl):
+    p = tpl["Parameters"]["AlertWebhookUrl"]
+    assert p["Type"] == "String"
+    assert p["Default"] == ""
+    assert p["NoEcho"] is True
+
+
+def test_alert_webhook_url_env(tpl):
+    env = tpl["Globals"]["Function"]["Environment"]["Variables"]
+    assert env["ALERT_WEBHOOK_URL"] == {"Ref": "AlertWebhookUrl"}
+    # Not a template Output: an output would print the URL in describe-stacks.
+    assert not any("AlertWebhookUrl" in str(o) for o in tpl["Outputs"].values())
+
+
+def test_samconfig_has_no_webhook():
+    text = SAMCONFIG.read_text()
+    assert "AlertWebhookUrl" not in text and "parameter_overrides" not in text
