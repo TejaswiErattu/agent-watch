@@ -312,7 +312,8 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 37.4_
     - Commit: `test(demo): e2e v2`
 
-  - [ ] 17.4 Interview prep and codebase guide refresh
+  - [x] 17.4 Interview prep and codebase guide refresh
+    - DONE 2026-10-18 (branch `docs/group-17-interview`). Scope note: only shipped features are covered. The sliding window, the 0600 key file via `init`, the host allowlist, and idempotent redaction are handled as written below, except that rate limit, CLI, and redaction (cut groups 12, 13, 14) appear only as "what would you add next". The 0600 question covers the existing `~/.agentwatch_key` the scripts read. Block-to-email and block-to-Discord times are "not recorded yet, measured in 17.5".
     - Add 2 to 3 questions per completed v2 task to `docs/INTERVIEW_PREP.md` (any that the session handoff hook missed), and update `docs/CODEBASE_GUIDE.md`: the v2 features section, the route table, the data model, the tech stack rows, the numbers table, and 8 to 10 new interview questions (control plane vs. rules plane, once-per-episode reporting, regex guard tradeoffs, sliding window, fan-out isolation, host allowlist, 0600 key file, idempotent redaction).
     - _Requirements: 37.6_
     - Commit: `docs: interview prep and codebase guide for v2`
