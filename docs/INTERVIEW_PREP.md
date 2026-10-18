@@ -684,20 +684,26 @@ Format per task:
 **Technical:** Buckets are half-open `(start, start+1h]`, so the window matches `now-24h < ts <= now` and each event lands in exactly one bucket. A seeded randomized test checks that the bucket total equals the event total. Paging stops on an old page, a null cursor, or 20 pages. Tradeoff: up to 40 requests per refresh for a very busy agent, accepted to avoid a new route and a deploy.
 **Q:** Why can a DynamoDB-backed page be empty but still carry a cursor? **A:** `Limit` caps the items read before the filter expression runs. A page can read 100 items, filter all of them out, and still return a `LastEvaluatedKey`.
 **Q:** Why cap the pages? **A:** It bounds the cost and latency of a refresh. A runaway agent can't make the dashboard hammer the API, which shares the stage-wide throttle with the SDK.
+**Q:** Why bucket on the client instead of adding a server route? **A:** No backend change means no deploy and no new IAM surface during feature work. A server-side hourly series is the next step once agents produce more events than 20 pages hold.
 
 ## 10.2–10.3 Spend chart and summary tile
 **Conceptual:** A spike or a cap hit should be visible at a glance. The tile shows the server's authoritative 24 h spend against the cap. The chart shows when the spend happened and where the blocks landed.
 **Technical:** The chart is hand-written inline SVG, with no chart library. The y-axis max is at least cap/24, so a quiet day doesn't blow tiny bars up to full height. One `Promise.all` refresh runs on load, every 30 s, and after a save or pause, and the interval is cleared on unmount. Tradeoff: one failed call fails the whole refresh, but the tile never shows mixed-time data.
 **Q:** How do you make an SVG chart accessible? **A:** Give the `svg` a `role="img"` with a label, add a `<title>` to each bar, and use `role="progressbar"` with `aria-valuenow` on the cap bar. Real validation still needs a screen-reader pass.
+**Q:** Why not use a chart library? **A:** No new dependency and deterministic output in jsdom, so tests just count `<rect>` elements. 24 bars and an axis don't need a library.
+**Q:** Why can one failed request fail the whole refresh? **A:** The tile and chart come from four calls. Showing a new spend next to an old cap or pause state would be misleading, so `Promise.all` either updates everything or shows one error and keeps the last full view.
 
 ## 10.4–10.5 Timeline rows and stale marker
 **Conceptual:** Every block type should read as a plain sentence, and stale agents should stand out in the inventory, so a student can scan for problems without opening raw JSON.
 **Technical:** `describeEvent` has one branch per Violation_Type and reads `meta` fields defensively (`typeof` checks), since `meta` is free-form. Details shows `JSON.stringify(meta, null, 2)` in a `<pre>`, which React escapes. Stale means last activity is strictly older than 24 h.
 **Q:** Is rendering event `meta` from the API an XSS risk? **A:** Not here. React escapes text children, and there's no `dangerouslySetInnerHTML`, so a `<script>` in `meta` displays as text.
+**Q:** Why read `meta` fields with `typeof` checks? **A:** `meta` is client-controlled and free-form, so a field might be missing or a different type. A defensive read gives a generic row instead of a crashed timeline.
+**Q:** Why is "stale" strictly older than 24 h? **A:** It matches the rolling spend window, so an agent marked stale also has no spend in the tile. One boundary rule across the page avoids an agent that looks both active and idle.
 
 ## 10.7–10.8 Spend chart label fixes
 **Conceptual:** The chart had to stretch to any card width, but the text inside it stretched too, and the last hour label ran off the right edge. Bars can be distorted without anyone noticing; text can't.
 **Technical:** Bars and the axis stay in an SVG with `preserveAspectRatio="none"`. Labels and block counts moved to an `aria-hidden` HTML overlay, positioned in percent of the same viewBox coordinates, so they render at normal font scale. Edge labels anchor inward with `translateX(0 | -50% | -100%)`. Tradeoff: two layers have to agree on coordinates, so both are computed from one `geom` array.
+**Q:** Why did these bugs only show up on Amplify? **A:** jsdom doesn't lay out or render, so the tests checked structure, not pixels. The 10.6 checkpoint on the real dashboard caught them, and each fix added a structural test (no `<text>` in the stretched SVG, edge-anchored labels) so they can't come back.
 **Q:** Why does `preserveAspectRatio="none"` distort text? **A:** It scales x and y independently, and `<text>` glyphs are scaled with everything else, so a wide container squashes or stretches the font.
 **Q:** Why is the overlay `aria-hidden`? **A:** The same information is already on each bar's `<title>` and the `svg` label, so screen readers would hear it twice.
 
@@ -713,6 +719,12 @@ Format per task:
 **Technical:** `AlertWebhookUrl` is a `NoEcho` String parameter with an empty default, mapped to `ALERT_WEBHOOK_URL` in `Globals.Function`. `_get_deps` builds `MultiPublisher([Sns, Webhook])` when the var is non-blank, otherwise plain `SnsPublisher` (unchanged v1 behavior). The deploy reads it from the operator's shell env. Tradeoff: `NoEcho` masks the value in CloudFormation, but it's still plaintext in the Lambda's environment config; Secrets Manager would hide it there too, at a cost and an extra IAM policy.
 **Q:** What does `NoEcho` actually protect? **A:** It masks the value in `describe-stacks`, events, and the console. It does not encrypt it in the Lambda env or hide it from anyone with `lambda:GetFunctionConfiguration`.
 **Q:** Why must later deploys pass `UsePreviousValue`? **A:** Without it, a change set falls back to the parameter default (empty), which silently turns the webhook off.
+
+## 17.1 README, ARCHITECTURE, SUBMISSION for v2
+**Conceptual:** Docs are part of the product surface for judges and future users. They have to say exactly what shipped and what didn't, so nobody assumes protection that doesn't exist.
+**Technical:** `test_readme.py` pins the must-say facts: shipped exceptions are checked against `sdk/agentwatch/__init__.py`, cut features may appear only under "Not in this release", and a scan rejects live keys, 64-hex hashes, and webhook-shaped URLs. Tradeoff: substring checks pin facts, not prose quality, which is still reviewed by hand.
+**Q:** Why test documentation at all? **A:** Docs drift silently. A test that ties claims to the code (exception names, routes) turns a stale README into a red build.
+**Q:** How do you document cut scope honestly? **A:** Name it once, in one place ("Not in this release" and "Next steps"), and test that it never appears as shipped anywhere else.
 
 ## 17.2 DEMO_SCRIPT v2
 **Conceptual:** A live demo is a test plan run in front of judges. The script fixes the order of moments, the exact labels to click, and the lines the terminal should print, so a rehearsal catches drift before the camera does.
@@ -733,3 +745,9 @@ Format per task:
 **Technical:** `inspect.Signature.bind_partial().arguments` returns `**kwargs` as `{'kw': {...}}`. `_bind` now lifts that dict to the top level with `setdefault`, so a real parameter with the same name wins. Tradeoff: the fix lives in one helper instead of each caller, which keeps `_named_paths` and `_named_commands` unchanged.
 **Q:** When a property test fails, how do you decide whether the test or the code is wrong? **A:** Go back to the requirement. Req 28.5 says named command args come first, so the reference was right and the implementation drifted.
 **Q:** Why add example tests when a property test already covers it? **A:** The example pins the exact shrunk case with a readable name, and it fails fast before Hypothesis even starts.
+
+## 17.4 Interview prep and codebase guide refresh
+**Conceptual:** The codebase guide is the top-down story for an interviewer, so it has to match what actually shipped. v2 cut two groups, and a guide that still listed them would be the first thing a sharp reviewer catches.
+**Technical:** The guide gained a v2 route table, a data model table, and stack rows for the webhook, `NoEcho`, and `re`. The numbers table now has the current suite counts and the observed 3 s pause-to-stop. Every route and Violation_Type was checked against `handlers/api.py` and `validation.py`. Timings not yet measured are marked "not recorded yet" rather than estimated. Tradeoff: the cut features stay mentioned once, as next steps, so the story is complete without overclaiming.
+**Q:** How do you keep architecture docs honest under scope cuts? **A:** Derive the tables from the source (the route dict, the validator's type list) and mark anything not measured as not measured. Never fill a number in from memory.
+**Q:** What's the difference between a number you measured and one you designed for? **A:** The 5 s poll is a design bound; the 3 s pause-to-stop is an observation from one live run. The guide lists both separately so neither gets mistaken for the other.
