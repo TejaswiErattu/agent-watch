@@ -641,9 +641,17 @@ def _short(s: str) -> str:
 def _bind(sig, args, kwargs) -> dict:
     if sig is not None:
         try:
-            return dict(sig.bind_partial(*args, **kwargs).arguments)
+            bound = dict(sig.bind_partial(*args, **kwargs).arguments)
         except TypeError:
             pass
+        else:
+            # bind_partial nests **kwargs under the VAR_KEYWORD name ({'kw': {...}}); lift those
+            # keys to the top level so keyword-passed names count as named. Real params win.
+            for p in sig.parameters.values():
+                if p.kind is inspect.Parameter.VAR_KEYWORD and isinstance(bound.get(p.name), dict):
+                    for k, v in bound.pop(p.name).items():
+                        bound.setdefault(k, v)
+            return bound
     return dict(kwargs)
 
 
