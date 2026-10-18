@@ -90,8 +90,12 @@ def event_cost(event: Event) -> float:
     return round_cost(estimate_cost(event.item["model"], event.item["inputTokens"], event.item["outputTokens"]))
 
 
-def ingest_event(store: Store, creds: Credentials, body, now: datetime, publisher: Publisher | None = None) -> Result:
-    """POST /events. Steps follow the design's ingest_event list."""
+def ingest_event(store: Store, creds: Credentials, body, now: datetime, publisher: Publisher | None = None,
+                 alert_owner_ids: frozenset[str] | None = None) -> Result:
+    """POST /events. Steps follow the design's ingest_event list.
+
+    `alert_owner_ids`: if non-empty, only these owners' blocked events are alerted (all are still stored).
+    """
     # 1. validate
     event = validate_event(body, now)
     if isinstance(event, ValidationError):
@@ -120,7 +124,8 @@ def ingest_event(store: Store, creds: Credentials, body, now: datetime, publishe
     store.bump_last_seen(event.agent_id, event.ts)
 
     # 7. alert only for a newly stored blocked event; a publish failure never fails the request
-    if event.type == "blocked" and outcome == "stored" and publisher is not None:
+    owner_ok = not alert_owner_ids or event.owner_id in alert_owner_ids
+    if event.type == "blocked" and outcome == "stored" and publisher is not None and owner_ok:
         publish_alert(publisher, event)
 
     # 8. respond

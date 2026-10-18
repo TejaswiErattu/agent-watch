@@ -195,8 +195,9 @@ def test_live_stack_identity_preserved(tpl):
     table = res(tpl, "EventTable")["Properties"]
     assert "TableName" not in table  # setting a name forces replacement
     params = tpl["Parameters"]
-    # v2 11.2 adds AlertWebhookUrl (Req 30.1); the two live parameters are unchanged.
-    assert set(params) == {"AlertEmail", "DashboardOrigin", "AlertWebhookUrl"}
+    # v2 11.2 adds AlertWebhookUrl (Req 30.1); the audit fix adds AlertOwnerIds. The two live
+    # parameters are unchanged.
+    assert set(params) == {"AlertEmail", "DashboardOrigin", "AlertWebhookUrl", "AlertOwnerIds"}
     assert params["AlertEmail"] == {
         "Type": "String",
         "Description": "Email address that receives guardrail alerts (confirm the SNS subscription once).",
@@ -232,3 +233,13 @@ def test_alert_webhook_url_env(tpl):
 def test_samconfig_has_no_webhook():
     text = SAMCONFIG.read_text()
     assert "AlertWebhookUrl" not in text and "parameter_overrides" not in text
+
+
+# ---- audit fix (PR A): AlertOwnerIds ----
+
+
+def test_alert_owner_ids_parameter_and_env(tpl):
+    p = tpl["Parameters"]["AlertOwnerIds"]
+    assert p["Type"] == "String" and p["Default"] == ""
+    env = tpl["Globals"]["Function"]["Environment"]["Variables"]
+    assert env["ALERT_OWNER_IDS"] == {"Ref": "AlertOwnerIds"}

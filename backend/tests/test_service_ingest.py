@@ -244,3 +244,29 @@ def test_raising_publisher_still_200_and_stored():
     r = ingest_event(s, CREDS, body("blocked"), NOW, publisher=p)
     assert r == Result(200, {"eventId": "0" * 32, "costUsd": 0.0, "duplicate": False})
     assert ("bot", event_sk(TS, "0" * 32)) in s.items and len(p.calls) == 1
+
+
+# ---- audit fix (PR A): alert owner allowlist ----
+
+
+@pytest.mark.parametrize("allow", [None, frozenset()])
+def test_empty_allowlist_publishes_for_every_owner(allow):
+    s, p = InMemoryStore(), FakePublisher()
+    r = ingest_event(s, CREDS, body("blocked"), NOW, publisher=p, alert_owner_ids=allow)
+    assert r.status == 200 and len(p.calls) == 1
+
+
+def test_allowlisted_owner_publishes():
+    s, p = InMemoryStore(), FakePublisher()
+    ingest_event(s, CREDS, body("blocked"), NOW, publisher=p, alert_owner_ids=frozenset({"tejaswi"}))
+    assert len(p.calls) == 1
+
+
+def test_other_owner_is_stored_but_not_alerted():
+    s, p = InMemoryStore(), FakePublisher()
+    other = Credentials("stranger", "c" * 64)
+    r = ingest_event(s, other, body("blocked", ownerId="stranger"), NOW, publisher=p,
+                     alert_owner_ids=frozenset({"tejaswi"}))
+    assert r == Result(200, {"eventId": "0" * 32, "costUsd": 0.0, "duplicate": False})
+    assert ("bot", event_sk(TS, "0" * 32)) in s.items  # the event is still stored
+    assert p.calls == []

@@ -395,3 +395,42 @@ def test_status_forbidden_through_handler(store):
     for route, body in STATUS_ROUTES:
         assert call(http_event(route, body, agent_id="bot", headers=other)) == (403, {"error": "forbidden"})
     assert store.snapshot() == snap
+
+
+# ---- audit fix (PR A): ALERT_OWNER_IDS ----
+
+
+def _deps_with_owners(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("ALERT_OWNER_IDS", raising=False)
+    else:
+        monkeypatch.setenv("ALERT_OWNER_IDS", value)
+    return _build_deps(monkeypatch, None)
+
+
+@pytest.mark.parametrize("value,expected", [
+    (None, frozenset()),
+    ("", frozenset()),
+    ("  ,  ", frozenset()),
+    ("tejaswi", frozenset({"tejaswi"})),
+    (" tejaswi , other ,", frozenset({"tejaswi", "other"})),
+])
+def test_alert_owner_ids_parsed_from_env(monkeypatch, value, expected):
+    assert _deps_with_owners(monkeypatch, value).alert_owner_ids == expected
+
+
+def test_handler_passes_allowlist_to_ingest(monkeypatch):
+    calls = []
+
+    class Rec:
+        def publish(self, subject, body):
+            calls.append(subject)
+
+    s = InMemoryStore()
+    monkeypatch.setattr(api, "_deps", api.Deps(store=s, publisher=Rec(), alert_owner_ids=frozenset({"someone-else"})))
+    blocked = {**event_body(), "type": "blocked", "violationType": "blocked_path", "attemptedPath": ".env"}
+    status, _ = call(http_event("POST /events", blocked))
+    assert status == 200 and calls == []
+    monkeypatch.setattr(api, "_deps", api.Deps(store=s, publisher=Rec(), alert_owner_ids=frozenset({"tejaswi"})))
+    status, _ = call(http_event("POST /events", {**blocked, "eventId": "1" * 32}))
+    assert status == 200 and len(calls) == 1

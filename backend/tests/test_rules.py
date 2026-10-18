@@ -162,3 +162,13 @@ def test_stored_v1_guardrails_round_trip_through_item_to_record():
     rec = item_to_record(item)
     assert rec.guardrails.blocked_commands == ()
     assert rec.paused is False
+
+
+# ---- audit fix (PR A): repeat counts that overflow re's limits are a 400, not a 500 ----
+
+
+@pytest.mark.parametrize("pattern", ["a{4294967296}", "a{99999999999999999999}", "x{1,4294967296}"])
+def test_blocked_commands_overflowing_repeat_is_validation_error(pattern):
+    r = parse_config({**V1, "blockedCommands": ["sudo", pattern]})
+    assert isinstance(r, ValidationError)
+    assert r.field == "blockedCommands" and "entry 1" in r.reason

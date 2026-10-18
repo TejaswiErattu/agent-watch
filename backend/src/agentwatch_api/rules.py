@@ -40,7 +40,7 @@ def _parse_commands(cmds: Any) -> tuple[str, ...] | ValidationError:
             return ValidationError("blockedCommands", f"entries must be at most {MAX_COMMAND_LEN} chars")
         try:
             re.compile(p, re.IGNORECASE)
-        except re.error:
+        except (re.error, OverflowError):  # OverflowError: a repeat count past re's limit, e.g. a{4294967296}
             return ValidationError("blockedCommands", f"entry {i} is not a valid regular expression")
     return tuple(cmds)
 

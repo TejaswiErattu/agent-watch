@@ -31,9 +31,15 @@ UNAUTHORIZED = {"error": "unauthorized"}
 class Deps:
     store: Store
     publisher: Publisher
+    # Empty: alert for every owner (v1/v2 behavior). Non-empty: alert only for these owners.
+    alert_owner_ids: frozenset[str] = frozenset()
 
 
 _deps: Deps | None = None
+
+
+def _owner_ids(raw: str) -> frozenset[str]:
+    return frozenset(s.strip() for s in raw.split(",") if s.strip())
 
 
 def _get_deps() -> Deps:
@@ -43,7 +49,8 @@ def _get_deps() -> Deps:
         webhook = os.environ.get("ALERT_WEBHOOK_URL", "").strip()
         if webhook:  # Req 30.2: fan out to SNS and the webhook; otherwise SNS only
             publisher = MultiPublisher([publisher, WebhookPublisher(webhook)])
-        _deps = Deps(store=DynamoStore(os.environ["TABLE_NAME"]), publisher=publisher)
+        _deps = Deps(store=DynamoStore(os.environ["TABLE_NAME"]), publisher=publisher,
+                     alert_owner_ids=_owner_ids(os.environ.get("ALERT_OWNER_IDS", "")))
     return _deps
 
 
@@ -82,7 +89,8 @@ def _post_events(deps, creds, event, log_ctx):
     if isinstance(body, dict):
         log_ctx["agent_id"] = _valid_or_none(body.get("agentId"))
     now = datetime.now(timezone.utc)
-    return service.ingest_event(deps.store, creds, body, now, publisher=deps.publisher)
+    return service.ingest_event(deps.store, creds, body, now, publisher=deps.publisher,
+                                alert_owner_ids=deps.alert_owner_ids)
 
 
 def _get_agents(deps, creds, event, log_ctx):
