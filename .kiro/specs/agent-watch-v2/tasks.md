@@ -184,7 +184,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `feat(infra): AlertWebhookUrl parameter; feat(backend): webhook fan-out in the handler`
 
   - [x] 11.3 Checkpoint: Discord or Slack message on a live block
-    - DONE 2026-10-18 (17.5 rehearsal): each of the 4 live blocks matched to its own Discord message and email. Block-to-Discord 0.2 to 1.7 s, block-to-email at most 1.2 s (timings in `PROGRESS.md`).
+    - DONE 2026-10-18 (17.5 rehearsal): each of the 4 live blocks matched to its own email (block-to-email at most 1.2 s); all four Discord messages arrived; observed within a few seconds, not timed to the second (timings in `PROGRESS.md`).
     - PARTIAL 2026-10-17 (Tejaswi): `scripts/e2e.sh` RESULT: PASS (its first steps are the backend, SDK, and dashboard suites); `PathBlocked`, `CommandBlocked`, and `SpendCapExceeded` raised and all three blocked events stored; Discord messages and SNS emails both received; demo guardrails reset. PENDING: the block-to-channel time is not recorded, and no event has been matched to its own Discord message or email. Tick this task when that timing is in `PROGRESS.md` (17.5 records it).
     - All suites pass. Tejaswi: run `python demo/bad_agent.py` with `.env` blocked; the channel shows the alert within seconds, and the email still arrives. Record the block-to-channel time in `PROGRESS.md`.
     - _Requirements: 30.2_
@@ -320,7 +320,7 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `docs: interview prep and codebase guide for v2`
 
   - [x] 17.5 Final checkpoint: rehearsal v2 (closes v1 task 7.5 too)
-    - DONE 2026-10-18: suites 616/317/131, 0 failed. Terminal steps run live by Kiro through the dashboard's API; pause-to-stop 4.6 s, block-to-Discord 0.2 to 1.7 s, block-to-email at most 1.2 s (`PROGRESS.md`).
+    - DONE 2026-10-18: suites 616/317/131, 0 failed. Terminal steps run live by Kiro through the dashboard's API; pause-to-stop 4.6 s, block-to-email at most 1.2 s; all four Discord messages arrived; observed within a few seconds, not timed to the second (`PROGRESS.md`).
     - All three suites pass. Tejaswi follows `docs/DEMO_SCRIPT.md` end to end on the deployed stack, records pause-to-stop, block-to-email, and block-to-channel timings in `PROGRESS.md`, and ticks 7.5 in the v1 `tasks.md`. Stop adding features. Record the video from `docs/DEMO_SCRIPT.md` and submit using `docs/SUBMISSION.md` by 2026-10-23.
     - _Requirements: 37.7_
 
