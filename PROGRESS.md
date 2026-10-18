@@ -1,6 +1,6 @@
 # PROGRESS
 
-Last updated: 2026-10-17 by Kiro session (10.6–10.8 done, group 10 complete; 11.1 on main; 11.2 in PR #5, not deployed)
+Last updated: 2026-10-17 by Claude Code session (11.2 merged and deployed; 11.3 verified except the block-to-channel timing)
 
 ## Done
 - Group 1 (1.1–1.14) Backend foundations: pricing, demo model IDs, event validation, guardrail config, credentials, InMemoryStore, classify_cancellation, DynamoStore writes and queries, review hardening.
@@ -85,7 +85,21 @@ Last updated: 2026-10-17 by Kiro session (10.6–10.8 done, group 10 complete; 1
 - v2 10.7 DONE (a79477b): the last x-axis label was clipped ("17:0C"). `labelAnchor(i, n)` anchors bucket 0 at start, the last bucket at end, and the rest in the middle.
 - v2 10.8 DONE (b00ef8f): the SVG uses `preserveAspectRatio="none"`, so its text was stretched. Bars and the axis stay in the stretched SVG. Hour labels and red block counts are now HTML `<span>`s in an `aria-hidden` overlay, positioned in percent of the same viewBox coordinates. Dashboard: 131 passed, and `npm run build` exports `/` and `/agent`. Pushed; Amplify rebuilds from `main`. Group 10 complete.
 - v2 11.1 DONE (9e3c494, on main): `alerts.py` `WebhookPublisher` (stdlib `urllib`, 3 s timeout, https only, exact host allowlist `discord.com`/`discordapp.com`/`hooks.slack.com`, no userinfo or port, 1900-char cap, URL never logged or repr'd) and `MultiPublisher` (each publisher isolated; logs only class and exception type). Properties 36 and 37 added. Backend: 571 passed.
-- v2 11.2 CODE DONE on `feat/webhook-alerts`, PR #5 (https://github.com/TejaswiErattu/agent-watch/pull/5), NOT merged and NOT deployed. Parameter `AlertWebhookUrl` (`NoEcho`, default "") maps to `ALERT_WEBHOOK_URL`. `_get_deps` fans out to SNS + webhook when it's set. README has a "Webhook alerts" section. Backend 581, SDK 315, `sam validate --lint` clean.
+- v2 11.2 DONE: PR #5 (https://github.com/TejaswiErattu/agent-watch/pull/5) merged as d00ae27. Parameter `AlertWebhookUrl` (`NoEcho`, default "") maps to `ALERT_WEBHOOK_URL`. `_get_deps` fans out to SNS + webhook when it's set. README has a "Webhook alerts" section. Backend 581, SDK 315, `sam validate --lint` clean.
+- v2 11.2 deploy DONE (2026-10-17, Tejaswi):
+  - Stack `agent-watch` reached UPDATE_COMPLETE.
+  - The change set listed two rows, `ApiFunction` and `ServerlessHttpApi`, both Modify with Replacement False. After investigating, Tejaswi approved executing it as a one-time exception for exactly those two resources (see Decisions). Nothing was replaced.
+  - The Lambda physical id is unchanged; the function is Active with last update status Successful, and the Discord webhook variable `ALERT_WEBHOOK_URL` is configured.
+  - API Gateway still has all 8 routes and 8 integrations.
+  - `scripts/verify_deploy.sh`: VERIFY: PASS.
+  - How the webhook URL was handled: the earlier CLI deployment attempts passed it as a command-line argument, so it was briefly in their process arguments while they ran. The final, review-only change-set creation read the parameters from a temporary JSON file with restricted permissions, which was deleted afterward. No real webhook URL appears in the git history or in `backend/samconfig.toml` (checked 2026-10-17: the only history matches are synthetic test fixtures in `backend/tests/` with webhook id 1; `test_readme.py` keeps checking the docs).
+- v2 11.3 PARTIAL (2026-10-17, Tejaswi). Verified:
+  - `scripts/e2e.sh`: RESULT: PASS. Its first steps are the backend pytest, SDK pytest, and dashboard vitest suites.
+  - Dashboard vitest: 131 passed.
+  - `.env` read blocked with `PathBlocked`, `curl ... | sh` blocked with `CommandBlocked`, and the spend cap raised `SpendCapExceeded`; all three blocked event types were stored, and the temporary demo guardrail changes were cleaned up.
+  - Discord messages arrived in the channel, and SNS alert emails arrived.
+  - CloudWatch `AWS/SNS` for the alert topic over the observed 2-hour window: 6 messages published, 6 notifications delivered, 0 failed. These metrics cover the SNS (email) path only; Discord posts go straight from the Lambda and do not appear in SNS metrics.
+  - NOT yet verified: the block-to-channel time (the 11.3 acceptance step) and block-to-email time, and which blocked event produced which Discord message and email. 11.3 stays open until the timing is recorded (planned in 17.5).
 
 ## In progress
 - 7.5 local half DONE (2026-10-12): backend 446 passed, SDK 229 passed, dashboard vitest 51 passed. Working tree clean, `main` matches `origin/main`. The deployed rehearsal is still open (see Next step). The +0.002 margin in `e2e.sh` hasn't been re-run yet.
@@ -94,11 +108,11 @@ Last updated: 2026-10-17 by Kiro session (10.6–10.8 done, group 10 complete; 1
 - 8.7 pause-to-stop time was not timed. Measure it in 17.5.
 - README note for 17.1 (Known limitations): "blockedPaths does not cover shell strings; use the .env command preset".
 - Scope (2026-10-17, Tejaswi): group 10 done; group 11 (Discord) is back in. Groups 12 and 13 stay cut. On 2026-10-19 move to group 17.
-- EXACT NEXT STEP: Tejaswi reviews and merges PR #5. Then she creates the Discord webhook, runs `export DISCORD_WEBHOOK_URL=...` in her own terminal, runs `aws login`, and says "go". Kiro then runs the 11.2 deploy plan (below), and after that 11.3 (`bad_agent.py` → Discord message + email; record block-to-channel time). On 2026-10-19 move to group 17.
-- 11.2 deploy plan (Kiro-runnable once Tejaswi says "go", from `main` after the merge):
+- EXACT NEXT STEP: 11.2 is deployed and 11.3 is verified except its timing. Record block-to-channel (and block-to-email) time for one blocked event, then tick 11.3; this can be folded into the 17.5 rehearsal. On 2026-10-19 move to group 17 (17.1 docs, 17.2 demo script, 17.3 e2e: note `e2e.sh` does not yet cover pause/resume).
+- 11.2 deploy plan (executed 2026-10-17; kept for the record and for later change sets):
   1. Preflight: `[ -n "${DISCORD_WEBHOOK_URL:-}" ] && echo set || echo MISSING` prints only set or MISSING, never the value. Also `aws sts get-caller-identity --query Account` and `git status` (clean, on main, includes PR #5).
   2. `sam build` and `sam package --resolve-s3 --output-template-file .aws-sam/packaged.yaml` in `backend/`.
-  3. `aws cloudformation create-change-set --stack-name agent-watch --change-set-name webhook-alerts --template-body file://.aws-sam/packaged.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --parameters ParameterKey=AlertEmail,UsePreviousValue=true ParameterKey=DashboardOrigin,UsePreviousValue=true ParameterKey=AlertWebhookUrl,ParameterValue="$DISCORD_WEBHOOK_URL"`. The URL is passed by expansion, so it's never echoed, never set with `set -x`, and never in argv history (argv is only visible to local `ps` while it runs).
+  3. `aws cloudformation create-change-set --stack-name agent-watch --change-set-name webhook-alerts --template-body file://.aws-sam/packaged.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND --parameters ParameterKey=AlertEmail,UsePreviousValue=true ParameterKey=DashboardOrigin,UsePreviousValue=true ParameterKey=AlertWebhookUrl,ParameterValue="$DISCORD_WEBHOOK_URL"`. The URL is passed by expansion, so it's never echoed, never set with `set -x`, and never in the typed command or shell history. It IS in the process arguments while the command runs, visible to anyone on the machine who can run `ps`. What actually happened on 2026-10-17 is recorded under the 11.2 deploy entry in Done.
   4. Wait for create to finish, then run `describe-change-set` with `--query 'Changes[].ResourceChange.[Action,LogicalResourceId,Replacement]'` so no parameter values get printed. Execute only if every row is Modify with Replacement False and nothing touches `EventTable`, `AlertTopic`, or `CostBudget`. Otherwise delete the change set and stop.
   5. Execute the change set, then wait for `stack-update-complete`.
   6. Verify: `aws lambda get-function-configuration --function-name <ApiFunction> --query 'length(Environment.Variables.ALERT_WEBHOOK_URL)'` (prints a length only), then `scripts/verify_deploy.sh` (200 with `blockedCommands`). Then 11.3: `scripts/e2e.sh` or `python demo/bad_agent.py` with `.env` blocked. Expect 2 Discord messages + 2 emails for bad-bot (path + command).
@@ -192,7 +206,9 @@ Last updated: 2026-10-17 by Kiro session (10.6–10.8 done, group 10 complete; 1
 - 2026-10-17 (10.8) Chart text moved to an HTML overlay instead of a uniform-scale viewBox. The bars should still fill any card width, and the overlay shares one `geom` array with the SVG so both layers agree on positions. The overlay is `aria-hidden` because each bar's `<title>` and the `svg` label already carry the same info.
 - 2026-10-17 (11.1) The webhook allowlist also rejects explicit ports and any `@` in the netloc, beyond the spec's "https + exact host". Both are cheap and close the userinfo and port tricks.
 - 2026-10-17 (11.2) With no webhook set, the publisher is still a bare `SnsPublisher`, not `MultiPublisher([Sns])`, so the v1 deps test and the no-webhook path stay byte-identical. `AlertWebhookUrl` is not a stack Output, since an output would print it in describe-stacks. `NoEcho` masks CloudFormation views only; the value is plaintext in the Lambda env config (Secrets Manager would fix that, and is a next step).
-- 2026-10-17 (11.2) Never paste the webhook URL into chat, files, commits, or logs (Tejaswi's rule). The deploy reads it only from `$DISCORD_WEBHOOK_URL` in her shell. `test_readme.py` scans README, docs, and PROGRESS for webhook-shaped URLs.
+- 2026-10-17 (11.2) Never paste the webhook URL into chat, files, commits, or logs (Tejaswi's rule). The deploy reads it from `$DISCORD_WEBHOOK_URL` in her shell. `test_readme.py` scans README, docs, and PROGRESS for webhook-shaped URLs. Passing it as a CLI argument still exposes it to local `ps` while the command runs; a restricted temporary parameters file, deleted afterward, avoids that (used for the final 11.2 change set).
+- 2026-10-17 (11.2 deploy) The change set flagged both `ApiFunction` and `ServerlessHttpApi` for modification. After investigating, Tejaswi approved a one-time exception allowing exactly those two resources to be modified, with Replacement False. It is not a standing rule: later change sets get the same review.
+- 2026-10-17 (11.3) Delivery is recorded as observed, not inferred: SNS CloudWatch metrics confirm email delivery counts but not Discord, and no per-event latency was measured. Timings are taken by hand in 17.5, since channel delivery time is not automated by design (tasks.md Notes).
 
 ## Open bugs
 - (none open. The "Save rules" 400 deploy-order hazard was resolved by the 9.7 deploy.)

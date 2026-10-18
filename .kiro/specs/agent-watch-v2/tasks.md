@@ -175,13 +175,16 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `feat(backend): webhook publisher and alert fan-out`
 
   - [x] 11.2 Wire the webhook through the handler and the template (code done on `feat/webhook-alerts`; merge and deploy are Tejaswi's)
+    - DONE: PR #5 merged (d00ae27) and deployed 2026-10-17. Stack `agent-watch` UPDATE_COMPLETE; the change set modified only `ApiFunction` and `ServerlessHttpApi`, both Replacement False (approved by Tejaswi as a one-time exception for exactly those two). Lambda physical id unchanged, state Active, last update Successful, `ALERT_WEBHOOK_URL` set; API Gateway still has 8 routes and 8 integrations; `scripts/verify_deploy.sh` VERIFY: PASS. The earlier CLI attempts passed the webhook URL as a process argument (briefly visible to local `ps`); the final review-only change set read it from a restricted temporary JSON file, deleted afterward (details in `PROGRESS.md`).
     - Write the failing tests first. `test_handler.py`: with `ALERT_WEBHOOK_URL` set, `_get_deps` builds a `MultiPublisher` with an `SnsPublisher` and a `WebhookPublisher`; unset or empty gives only SNS (reset `_deps` between cases). `test_template.py`: parameter `AlertWebhookUrl` with `Default: ""` and `NoEcho: true`; `Globals.Function.Environment.Variables.ALERT_WEBHOOK_URL` is `!Ref AlertWebhookUrl`; still exactly two policies. `test_readme.py`: README has a "Webhook alerts" section mentioning Discord, Slack, and `AlertWebhookUrl`, and `samconfig.toml` contains no `AlertWebhookUrl`.
     - Implement the handler change, the template parameter and env var, and the README section (how to create a Discord or Slack incoming webhook; deploy with `--parameter-overrides AlertWebhookUrl=...`; later change sets pass `UsePreviousValue`).
     - Branch `feat/webhook-alerts`, PR via the GitHub MCP server, Tejaswi approves and deploys with the URL passed once on the command line (never typed into a file).
+    - Note (2026-10-17): the line above is the original deployment guidance, kept as written. The actual deployment differed. Earlier CLI attempts passed the URL on the command line as planned, which also put it briefly in their process arguments (visible to local `ps`). The final, review-only change set read it from a restricted temporary JSON parameters file, deleted afterward. See the DONE note above and `PROGRESS.md`.
     - _Requirements: 30.1, 30.2, 30.8, 30.9_
     - Commit: `feat(infra): AlertWebhookUrl parameter; feat(backend): webhook fan-out in the handler`
 
   - [ ] 11.3 Checkpoint: Discord or Slack message on a live block
+    - PARTIAL 2026-10-17 (Tejaswi): `scripts/e2e.sh` RESULT: PASS (its first steps are the backend, SDK, and dashboard suites); `PathBlocked`, `CommandBlocked`, and `SpendCapExceeded` raised and all three blocked events stored; Discord messages and SNS emails both received; demo guardrails reset. PENDING: the block-to-channel time is not recorded, and no event has been matched to its own Discord message or email. Tick this task when that timing is in `PROGRESS.md` (17.5 records it).
     - All suites pass. Tejaswi: run `python demo/bad_agent.py` with `.env` blocked; the channel shows the alert within seconds, and the email still arrives. Record the block-to-channel time in `PROGRESS.md`.
     - _Requirements: 30.2_
 
