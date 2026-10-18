@@ -14,11 +14,21 @@ import { formatSpend } from "@/lib/format";
 // Re-exported so existing imports from this module keep working.
 export { formatSpend };
 
-export interface InventoryTableProps {
-  agents: InventoryItem[];
+const STALE_MS = 24 * 3_600_000;
+
+// Last activity strictly older than 24 h (Req 29.9).
+export function isStale(lastSeen: string | null, now: number = Date.now()): boolean {
+  if (lastSeen === null) return false;
+  const t = Date.parse(lastSeen);
+  return !Number.isNaN(t) && now - t > STALE_MS;
 }
 
-export function InventoryTable({ agents }: InventoryTableProps) {
+export interface InventoryTableProps {
+  agents: InventoryItem[];
+  now?: number;
+}
+
+export function InventoryTable({ agents, now }: InventoryTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -48,7 +58,14 @@ export function InventoryTable({ agents }: InventoryTableProps) {
                 {unreported ? (
                   <span className="text-gray-500">not yet reported</span>
                 ) : (
-                  a.lastSeen
+                  <>
+                    {a.lastSeen}
+                    {isStale(a.lastSeen, now) ? (
+                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                        stale
+                      </span>
+                    ) : null}
+                  </>
                 )}
               </TableCell>
               <TableCell>{formatSpend(a.totalSpendUsd)}</TableCell>

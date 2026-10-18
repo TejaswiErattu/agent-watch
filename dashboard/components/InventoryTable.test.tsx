@@ -70,3 +70,24 @@ describe("InventoryTable Status column", () => {
     expect(statusCell.textContent).toBe(expected);
   });
 });
+
+describe("InventoryTable stale marker", () => {
+  const NOW = Date.parse("2026-10-17T15:00:00.000Z");
+  const lastCell = () => within(screen.getByText("bot1").closest("tr")!).getAllByRole("cell")[2];
+
+  it("shows 'stale' when last activity is older than 24 h", () => {
+    render(<InventoryTable agents={[{ ...reported, lastSeen: "2026-10-16T14:59:59.000Z" }]} now={NOW} />);
+    expect(lastCell()).toHaveTextContent("stale");
+  });
+
+  it("does not show 'stale' for recent activity", () => {
+    render(<InventoryTable agents={[{ ...reported, lastSeen: "2026-10-17T14:00:00.000Z" }]} now={NOW} />);
+    expect(lastCell()).not.toHaveTextContent("stale");
+  });
+
+  it("leaves 'not yet reported' unchanged", () => {
+    render(<InventoryTable agents={[unreported]} now={NOW} />);
+    const cell = within(screen.getByText("bot2").closest("tr")!).getAllByRole("cell")[2];
+    expect(cell.textContent).toBe("not yet reported");
+  });
+});
