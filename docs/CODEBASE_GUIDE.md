@@ -279,9 +279,9 @@ Deploy facts worth knowing: stack `agent-watch` in us-west-2; `samconfig.toml` s
 | SDK dependencies | 1 (`requests`) |
 | Config and spend sync interval | 60 s |
 | Pause poll (Control_Interval) | 5 s |
-| Pause-to-stop, observed live | about 3 s (e2e 2026-10-18, script limit 20 s) |
-| Block-to-email, observed live | not recorded yet, measured in 17.5 |
-| Block-to-Discord, observed live | not recorded yet, measured in 17.5 |
+| Pause-to-stop, observed live | about 3 s (e2e 2026-10-18); 4.6 s in the 17.5 rehearsal (PUT to stored `paused` event; script limit 20 s) |
+| Block-to-email, observed live | at most 1.2 s, all 4 blocks (17.5 rehearsal 2026-10-18; Gmail receive time, whole seconds) |
+| Block-to-Discord, observed live | all four Discord messages arrived; observed within a few seconds, not timed to the second (17.5 rehearsal 2026-10-18) |
 | Blocked-command patterns | up to 100, each 1 to 256 chars; 9 dashboard presets |
 | Webhook timeout / text cap | 3 s / 1900 chars |
 | Alerts per e2e run | 4 (path, command, paused, spend cap) |
