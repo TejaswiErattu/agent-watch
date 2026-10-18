@@ -104,3 +104,78 @@ def test_webhook_url_never_in_repo_config_or_docs():
     assert "AlertWebhookUrl" not in samconfig and "webhook" not in samconfig.lower()
     for path in [README, *DOCS.glob("*.md"), ROOT / "PROGRESS.md"]:
         assert not WEBHOOK_URL_RE.search(path.read_text()), path.name
+
+
+# ---- v2 17.1: README, ARCHITECTURE, SUBMISSION (Req 37.1, 37.2, 37.5) ----
+# Groups 12 (rate limit) and 13 (CLI) were cut, so their features must appear only as
+# excluded, never as shipped. The exception list is the one the SDK actually exports.
+
+SHIPPED_EXCEPTIONS = ("PathBlocked", "SpendCapExceeded", "AgentPaused", "CommandBlocked", "GuardrailBlocked")
+CUT_FEATURES = ("maxLlmCallsPerMinute", "RateLimitExceeded", "agentwatch init", "agentwatch doctor")
+
+
+def test_readme_documents_shipped_v2_features():
+    text = README.read_text()
+    for s in ("blockedCommands", "Pause agent", "Confirm pause", "Resume agent", "Add presets",
+              "Webhook alerts", "Discord", "SNS"):
+        assert s in text, s
+    for name in SHIPPED_EXCEPTIONS:
+        assert f"`agentwatch.{name}`" in text or f"`{name}`" in text, name
+
+
+def test_readme_exports_match_the_sdk():
+    init = (ROOT / "sdk" / "agentwatch" / "__init__.py").read_text()
+    for name in SHIPPED_EXCEPTIONS:
+        assert f'"{name}"' in init, name           # the README never names an exception the SDK lacks
+    assert "RateLimitExceeded" not in init
+
+
+def test_readme_names_cut_features_only_as_excluded():
+    text = README.read_text()
+    excluded = _section(text, "Not in this release")
+    for s in ("maxLlmCallsPerMinute", "agentwatch init"):
+        assert s in excluded, s
+    assert "not implemented" in excluded.lower()
+    outside = text.replace(excluded, "")
+    for s in CUT_FEATURES:
+        assert s not in outside, f"{s} appears outside 'Not in this release'"
+
+
+def test_readme_known_limitations_v2():
+    body = _section(README.read_text(), "Known limitations").lower()
+    assert "over-block" in body and "blockedcommands" in body       # 37.1: regex over-blocking
+    assert "pause" in body and "5 s" in body                        # 37.1: pause propagation
+    assert "env_file" in body                                       # blockedPaths does not cover shell strings
+    assert "plaintext" in body and "lambda" in body                 # NoEcho does not hide the env value
+
+
+def test_readme_webhook_secret_never_on_the_command_line():
+    body = _section(README.read_text(), "Webhook alerts")
+    assert 'AlertWebhookUrl="$' not in body and "ParameterValue=\"$" not in body   # argv is visible to ps
+    assert "never into a file" not in body
+    assert "file://" in body and "0600" in body and "rm " in body   # restricted temp parameters file, deleted
+
+
+def test_readme_documents_verification_scripts():
+    body = _section(README.read_text(), "Verify a deployment")
+    assert "scripts/verify_deploy.sh" in body and "scripts/e2e.sh" in body
+    assert "alert" in body.lower()                                  # e2e sends real alerts
+
+
+def test_architecture_covers_v2():
+    text = (DOCS / "ARCHITECTURE.md").read_text()
+    assert "GET /agents/{agentId}/status" in text and "PUT /agents/{agentId}/status" in text
+    assert "control plane" in text.lower() and "rules plane" in text.lower()
+    assert "MultiPublisher" in text and "WebhookPublisher" in text
+
+
+def test_submission_v2_moments_and_next_steps():
+    text = (DOCS / "SUBMISSION.md").read_text()
+    what = _section(text, "What it does")
+    for s in ("Pause", "CommandBlocked", "spend chart", "Discord"):
+        assert s.lower() in what.lower(), s
+    nxt = _section(text, "Next steps").lower()
+    for shipped in ("kill switch", "shell-command guard", "webhook alerts", "discord"):
+        assert shipped not in nxt, shipped                          # Next steps drops what shipped
+    for cut in ("rate limit", "cli"):
+        assert cut in nxt, cut                                      # cut features stay future work

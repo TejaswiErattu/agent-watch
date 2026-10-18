@@ -290,7 +290,9 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - Commit: `feat(infra): DynamoDB Streams alert function`
 
 - [ ] 17. Feature freeze (2026-10-19): docs, smoke test, rehearsal
-  - [ ] 17.1 README, ARCHITECTURE, SUBMISSION updates
+  - [x] 17.1 README, ARCHITECTURE, SUBMISSION updates
+    - Scope note (2026-10-17, Tejaswi): groups 12 (rate limit) and 13 (CLI) stay cut, and optional groups 14 to 16 were not built. The criteria below are kept as written. For this task, `maxLlmCallsPerMinute` and the `agentwatch` CLI are documented only as excluded (README "Not in this release", SUBMISSION "Next steps"), never as shipped. "The five new exception names that shipped" means the two that actually shipped in v2 (`AgentPaused`, `CommandBlocked`), alongside v1's `PathBlocked`, `SpendCapExceeded`, and `GuardrailBlocked`; redaction scope is not a limitation because redaction did not ship. Req 37.1 is satisfied for the shipped features only.
+    - DONE (branch `docs/group-17-readme`): `test_readme.py` gained 8 tests: shipped v2 features and exceptions (checked against `sdk/agentwatch/__init__.py`), cut features only under "Not in this release", the v2 Known limitations, webhook guidance that never puts the URL on a command line, the verification scripts, ARCHITECTURE status routes and control vs. rules plane, and SUBMISSION moments and next steps. The secret scan still passes.
     - Write the failing tests first. `test_readme.py`: README documents `blockedCommands`, `maxLlmCallsPerMinute`, pause, the five new exception names that shipped, the `agentwatch` CLI, webhooks, and the new Known limitations (regex over-blocking, pause propagation, redaction scope if shipped); ARCHITECTURE mentions the status routes and the control plane; SUBMISSION's "What it does" lists the new moments and the "Next steps" list drops what shipped. The secret scan still passes.
     - Write the docs. Keep every statement true to what actually shipped (skip optional groups that did not).
     - _Requirements: 37.1, 37.2, 37.5_
