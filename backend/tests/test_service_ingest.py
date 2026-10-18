@@ -246,27 +246,48 @@ def test_raising_publisher_still_200_and_stored():
     assert ("bot", event_sk(TS, "0" * 32)) in s.items and len(p.calls) == 1
 
 
-# ---- audit fix (PR A): alert owner allowlist ----
+# ---- audit fix (PR A): alert allowlist of owner/agent pairs ----
+# An owner-only list is bypassable: owner ids aren't bound to a key, so anyone can post as
+# ownerId "tejaswi" with a NEW agent id and their own key, and that agent gets created.
+# An agent id, once claimed, is bound to its key, so the pair is what proves identity.
 
 
 @pytest.mark.parametrize("allow", [None, frozenset()])
-def test_empty_allowlist_publishes_for_every_owner(allow):
+def test_empty_allowlist_publishes_for_every_agent(allow):
     s, p = InMemoryStore(), FakePublisher()
-    r = ingest_event(s, CREDS, body("blocked"), NOW, publisher=p, alert_owner_ids=allow)
+    r = ingest_event(s, CREDS, body("blocked"), NOW, publisher=p, alert_agents=allow)
     assert r.status == 200 and len(p.calls) == 1
 
 
-def test_allowlisted_owner_publishes():
+def test_allowlisted_pair_publishes():
     s, p = InMemoryStore(), FakePublisher()
-    ingest_event(s, CREDS, body("blocked"), NOW, publisher=p, alert_owner_ids=frozenset({"tejaswi"}))
+    ingest_event(s, CREDS, body("blocked"), NOW, publisher=p, alert_agents=frozenset({"tejaswi/bot"}))
     assert len(p.calls) == 1
 
 
-def test_other_owner_is_stored_but_not_alerted():
+def test_bypass_known_owner_new_agent_with_own_key_is_stored_but_not_alerted():
+    """Review of PR #14: the allowlisted owner id plus a fresh agent id and an attacker key."""
+    allow = frozenset({"tejaswi/bad-bot"})
+    s, p = InMemoryStore(), FakePublisher()
+
+    # The real agent, claimed by the real key.
+    real = ingest_event(s, CREDS, body("blocked", agentId="bad-bot"), NOW, publisher=p, alert_agents=allow)
+    assert real.status == 200 and len(p.calls) == 1
+    assert "bad-bot" in p.calls[0][0]
+
+    # The attacker: same public owner id, a new agent id, their own key. The agent is created.
+    attacker = Credentials("tejaswi", "d" * 64)
+    spam = ingest_event(s, attacker, body("blocked", agentId="spam-1", eid="1" * 32), NOW,
+                        publisher=p, alert_agents=allow)
+    assert spam == Result(200, {"eventId": "1" * 32, "costUsd": 0.0, "duplicate": False})
+    assert s.get_agent("spam-1") is not None                      # newly created
+    assert ("spam-1", event_sk(TS, "1" * 32)) in s.items          # and its event stored
+    assert len(p.calls) == 1                                      # but NOT alerted
+
+
+def test_allowlisted_agent_id_under_another_owner_is_not_alerted():
     s, p = InMemoryStore(), FakePublisher()
     other = Credentials("stranger", "c" * 64)
-    r = ingest_event(s, other, body("blocked", ownerId="stranger"), NOW, publisher=p,
-                     alert_owner_ids=frozenset({"tejaswi"}))
-    assert r == Result(200, {"eventId": "0" * 32, "costUsd": 0.0, "duplicate": False})
-    assert ("bot", event_sk(TS, "0" * 32)) in s.items  # the event is still stored
+    ingest_event(s, other, body("blocked", ownerId="stranger", agentId="bad-bot"), NOW, publisher=p,
+                 alert_agents=frozenset({"tejaswi/bad-bot"}))
     assert p.calls == []

@@ -397,14 +397,14 @@ def test_status_forbidden_through_handler(store):
     assert store.snapshot() == snap
 
 
-# ---- audit fix (PR A): ALERT_OWNER_IDS ----
+# ---- audit fix (PR A): ALERT_AGENTS ----
 
 
-def _deps_with_owners(monkeypatch, value):
+def _deps_with_agents(monkeypatch, value):
     if value is None:
-        monkeypatch.delenv("ALERT_OWNER_IDS", raising=False)
+        monkeypatch.delenv("ALERT_AGENTS", raising=False)
     else:
-        monkeypatch.setenv("ALERT_OWNER_IDS", value)
+        monkeypatch.setenv("ALERT_AGENTS", value)
     return _build_deps(monkeypatch, None)
 
 
@@ -412,11 +412,17 @@ def _deps_with_owners(monkeypatch, value):
     (None, frozenset()),
     ("", frozenset()),
     ("  ,  ", frozenset()),
-    ("tejaswi", frozenset({"tejaswi"})),
-    (" tejaswi , other ,", frozenset({"tejaswi", "other"})),
+    ("tejaswi/bad-bot", frozenset({"tejaswi/bad-bot"})),
+    (" tejaswi/bad-bot , tejaswi/demo-bot ,", frozenset({"tejaswi/bad-bot", "tejaswi/demo-bot"})),
 ])
-def test_alert_owner_ids_parsed_from_env(monkeypatch, value, expected):
-    assert _deps_with_owners(monkeypatch, value).alert_owner_ids == expected
+def test_alert_agents_parsed_from_env(monkeypatch, value, expected):
+    assert _deps_with_agents(monkeypatch, value).alert_agents == expected
+
+
+def test_old_owner_only_env_var_is_ignored(monkeypatch):
+    monkeypatch.setenv("ALERT_OWNER_IDS", "tejaswi")
+    assert _deps_with_agents(monkeypatch, None).alert_agents == frozenset()
+    assert not hasattr(api.Deps, "alert_owner_ids")
 
 
 def test_handler_passes_allowlist_to_ingest(monkeypatch):
@@ -427,10 +433,11 @@ def test_handler_passes_allowlist_to_ingest(monkeypatch):
             calls.append(subject)
 
     s = InMemoryStore()
-    monkeypatch.setattr(api, "_deps", api.Deps(store=s, publisher=Rec(), alert_owner_ids=frozenset({"someone-else"})))
+    # Right owner, wrong agent: the owner alone is not enough.
+    monkeypatch.setattr(api, "_deps", api.Deps(store=s, publisher=Rec(), alert_agents=frozenset({"tejaswi/other-bot"})))
     blocked = {**event_body(), "type": "blocked", "violationType": "blocked_path", "attemptedPath": ".env"}
     status, _ = call(http_event("POST /events", blocked))
     assert status == 200 and calls == []
-    monkeypatch.setattr(api, "_deps", api.Deps(store=s, publisher=Rec(), alert_owner_ids=frozenset({"tejaswi"})))
+    monkeypatch.setattr(api, "_deps", api.Deps(store=s, publisher=Rec(), alert_agents=frozenset({"tejaswi/bot"})))
     status, _ = call(http_event("POST /events", {**blocked, "eventId": "1" * 32}))
     assert status == 200 and len(calls) == 1

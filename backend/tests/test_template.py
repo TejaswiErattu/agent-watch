@@ -195,9 +195,9 @@ def test_live_stack_identity_preserved(tpl):
     table = res(tpl, "EventTable")["Properties"]
     assert "TableName" not in table  # setting a name forces replacement
     params = tpl["Parameters"]
-    # v2 11.2 adds AlertWebhookUrl (Req 30.1); the audit fix adds AlertOwnerIds. The two live
+    # v2 11.2 adds AlertWebhookUrl (Req 30.1); the audit fix adds AlertAgents. The two live
     # parameters are unchanged.
-    assert set(params) == {"AlertEmail", "DashboardOrigin", "AlertWebhookUrl", "AlertOwnerIds"}
+    assert set(params) == {"AlertEmail", "DashboardOrigin", "AlertWebhookUrl", "AlertAgents"}
     assert params["AlertEmail"] == {
         "Type": "String",
         "Description": "Email address that receives guardrail alerts (confirm the SNS subscription once).",
@@ -235,11 +235,13 @@ def test_samconfig_has_no_webhook():
     assert "AlertWebhookUrl" not in text and "parameter_overrides" not in text
 
 
-# ---- audit fix (PR A): AlertOwnerIds ----
+# ---- audit fix (PR A): AlertAgents ----
 
 
-def test_alert_owner_ids_parameter_and_env(tpl):
-    p = tpl["Parameters"]["AlertOwnerIds"]
+def test_alert_agents_parameter_and_env(tpl):
+    p = tpl["Parameters"]["AlertAgents"]
     assert p["Type"] == "String" and p["Default"] == ""
+    assert "owner/agent" in p["Description"]
     env = tpl["Globals"]["Function"]["Environment"]["Variables"]
-    assert env["ALERT_OWNER_IDS"] == {"Ref": "AlertOwnerIds"}
+    assert env["ALERT_AGENTS"] == {"Ref": "AlertAgents"}
+    assert "AlertOwnerIds" not in tpl["Parameters"] and "ALERT_OWNER_IDS" not in env
