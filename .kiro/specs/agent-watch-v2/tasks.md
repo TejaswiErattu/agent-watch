@@ -298,7 +298,8 @@ Keep 6 to 8 leaf tasks per chat. After each group's checkpoint, open a fresh cha
     - _Requirements: 37.1, 37.2, 37.5_
     - Commit: `feat(docs): v2 README, architecture, submission`
 
-  - [ ] 17.2 DEMO_SCRIPT v2
+  - [x] 17.2 DEMO_SCRIPT v2
+    - DONE (branch `docs/group-17-demo-script`): on-camera order is problem, 3 lines, inventory, rules, path + shell block, pause, spend cap with the chart, how it's built. The `agentwatch init` step is dropped (group 13 cut, same scope note as 17.1). Both bad-bot rules are saved before the first run so the `curl … | sh` command is never executed for real.
     - Write the failing tests first. `test_readme.py`: DEMO_SCRIPT mentions `--loop 20 --sleep 2`, "Pause agent", "Confirm pause", `CommandBlocked`, the chart, and the webhook channel; prep steps mention resuming both agents.
     - Rewrite `docs/DEMO_SCRIPT.md`: prep (clear rules, resume agents, `aws login` right before recording), the on-camera order (problem, 3 lines + `agentwatch init`, inventory, path block + email + channel, shell block, pause moment with the loop, spend cap with the chart, how it's built), expected lines, troubleshooting (a stale pause, a pattern that over-blocks, no channel message).
     - _Requirements: 37.3_
