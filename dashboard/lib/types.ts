@@ -53,6 +53,7 @@ export interface TimelineItem {
   attemptedPath: string | null;
   // Optional so an older backend without the field still renders.
   attemptedCommand?: string | null;
+  attemptedUrl?: string | null;
   meta: Record<string, unknown> | null;
 }
 

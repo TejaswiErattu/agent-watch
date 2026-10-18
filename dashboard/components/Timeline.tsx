@@ -4,6 +4,7 @@ import * as React from "react";
 import { getTimeline, type TimelineQuery } from "@/lib/api";
 import type { Credentials } from "@/lib/credentials";
 import type { EventType, TimelineItem } from "@/lib/types";
+import { describeEvent, formatSpend, relativeTime } from "@/lib/format";
 
 type Filter = "" | EventType;
 
@@ -12,20 +13,39 @@ export interface TimelineProps {
   agentId: string;
 }
 
-function describeEvent(e: TimelineItem): string {
-  switch (e.type) {
-    case "llm_call":
-      return `LLM call ${e.model ?? ""} (in ${e.inputTokens ?? 0}, out ${e.outputTokens ?? 0})`;
-    case "tool_call":
-      return `Tool ${e.tool ?? ""} -> ${e.target ?? ""}`;
-    case "blocked":
-      if (e.violationType === "blocked_command") {
-        return `Blocked command ${e.attemptedCommand ?? ""}`;
-      }
-      return `Blocked ${e.violationType ?? ""} ${e.attemptedPath ?? ""}`;
-    default:
-      return e.type ?? "event";
-  }
+function EventRow({ e }: { e: TimelineItem }) {
+  const [open, setOpen] = React.useState(false);
+  const hasMeta = e.meta !== null && Object.keys(e.meta).length > 0;
+  return (
+    <li className="space-y-1 p-3 text-sm">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-gray-500" title={e.ts ?? undefined} data-testid="event-time">
+          {e.ts ? relativeTime(e.ts) : ""}
+        </span>
+        <span>{describeEvent(e)}</span>
+        {e.type === "llm_call" && e.costUsd !== null ? (
+          <span className="text-gray-700" data-testid="event-cost">
+            {formatSpend(e.costUsd)}
+          </span>
+        ) : null}
+        {hasMeta ? (
+          <button
+            type="button"
+            className="text-xs text-blue-600 hover:underline"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Hide details" : "Details"}
+          </button>
+        ) : null}
+      </div>
+      {open ? (
+        <pre className="overflow-x-auto rounded bg-gray-50 p-2 text-xs">
+          {JSON.stringify(e.meta, null, 2)}
+        </pre>
+      ) : null}
+    </li>
+  );
 }
 
 export function Timeline({ creds, agentId }: TimelineProps) {
@@ -101,10 +121,7 @@ export function Timeline({ creds, agentId }: TimelineProps) {
       ) : null}
       <ul className="divide-y rounded-md border">
         {events.map((e, i) => (
-          <li key={e.eventId ?? i} className="p-3 text-sm">
-            <span className="text-gray-500">{e.ts}</span>{" "}
-            <span>{describeEvent(e)}</span>
-          </li>
+          <EventRow key={e.eventId ?? i} e={e} />
         ))}
       </ul>
       <div ref={sentinelRef} aria-hidden className="h-1" />

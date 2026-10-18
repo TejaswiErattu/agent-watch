@@ -10,6 +10,7 @@ vi.mock("@/lib/api", async () => {
 });
 
 import { Timeline } from "./Timeline";
+import { describeEvent } from "@/lib/format";
 import type { Credentials } from "@/lib/credentials";
 
 const creds: Credentials = { ownerId: "alice", keyHash: "a".repeat(64) };
@@ -55,7 +56,7 @@ describe("Timeline", () => {
   it("renders mixed events in the returned order", async () => {
     getTimeline.mockResolvedValue({
       events: [
-        ev({ type: "blocked", attemptedPath: ".env" }),
+        ev({ type: "blocked", violationType: "blocked_path", attemptedPath: ".env" }),
         ev({ type: "tool_call", tool: "read_file" }),
         ev({ type: "llm_call", model: "claude" }),
       ],
@@ -94,7 +95,7 @@ describe("Timeline", () => {
     await waitFor(() => expect(getTimeline).toHaveBeenCalledTimes(1));
 
     getTimeline.mockResolvedValue({
-      events: [ev({ type: "blocked", attemptedPath: ".env" })],
+      events: [ev({ type: "blocked", violationType: "blocked_path", attemptedPath: ".env" })],
       nextCursor: null,
     });
     await user.selectOptions(screen.getByLabelText(/filter/i), "blocked");
@@ -135,5 +136,69 @@ describe("Timeline", () => {
     // No extra call.
     await new Promise((r) => setTimeout(r, 20));
     expect(getTimeline).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Timeline rows (10.4)", () => {
+  it("shows the cost on llm_call rows only", async () => {
+    getTimeline.mockResolvedValue({
+      events: [
+        ev({ type: "llm_call", model: "claude", costUsd: 0.0006 }),
+        ev({ type: "tool_call", tool: "read_file", costUsd: null }),
+      ],
+      nextCursor: null,
+    });
+    render(<Timeline creds={creds} agentId="bot1" />);
+    const costs = await screen.findAllByTestId("event-cost");
+    expect(costs).toHaveLength(1);
+    expect(costs[0]).toHaveTextContent("$0.0006");
+  });
+
+  it("shows relative time with the exact ts as the title", async () => {
+    const ts = new Date(Date.now() - 2 * 60_000).toISOString();
+    getTimeline.mockResolvedValue({ events: [ev({ ts })], nextCursor: null });
+    render(<Timeline creds={creds} agentId="bot1" />);
+    const cell = await screen.findByTestId("event-time");
+    expect(cell).toHaveTextContent("2 min ago");
+    expect(cell).toHaveAttribute("title", ts);
+  });
+
+  it("Details toggles the formatted meta", async () => {
+    const user = userEvent.setup();
+    getTimeline.mockResolvedValue({
+      events: [ev({ type: "blocked", violationType: "blocked_path", attemptedPath: ".env", meta: { tool: "read_file", entry: ".env" } })],
+      nextCursor: null,
+    });
+    const { container } = render(<Timeline creds={creds} agentId="bot1" />);
+    const btn = await screen.findByRole("button", { name: "Details" });
+    expect(container.querySelector("pre")).toBeNull();
+    await user.click(btn);
+    const pre = container.querySelector("pre")!;
+    expect(pre.textContent).toBe(JSON.stringify({ tool: "read_file", entry: ".env" }, null, 2));
+    await user.click(screen.getByRole("button", { name: "Hide details" }));
+    expect(container.querySelector("pre")).toBeNull();
+  });
+
+  it("has no Details button when meta is empty", async () => {
+    getTimeline.mockResolvedValue({ events: [ev({ meta: null }), ev({ meta: {} })], nextCursor: null });
+    render(<Timeline creds={creds} agentId="bot1" />);
+    await screen.findAllByTestId("event-time");
+    expect(screen.queryByRole("button", { name: "Details" })).toBeNull();
+  });
+});
+
+describe("describeEvent covers every Violation_Type", () => {
+  const b = (p: Partial<TimelineItem>) => ev({ type: "blocked", ...p });
+  it.each([
+    [b({ violationType: "blocked_path", attemptedPath: ".env" }), "Blocked path .env"],
+    [b({ violationType: "spend_cap", attemptedCostUsd: 0.001055 }), "Spend cap: blocked a call costing about $0.0011"],
+    [b({ violationType: "paused", meta: { action: "llm_call", model: "claude" } }), "Paused: blocked llm_call claude"],
+    [b({ violationType: "paused", meta: { action: "tool_call", tool: "read_file" } }), "Paused: blocked tool_call read_file"],
+    [b({ violationType: "blocked_command", attemptedCommand: "rm -rf /" }), "Blocked command rm -rf /"],
+    [b({ violationType: "rate_limit", meta: { callsInWindow: 31, maxPerMinute: 30, model: "m" } }), "Rate limit: 31 calls in 60 s (max 30)"],
+    [b({ violationType: "secret_redacted", meta: { total: 2, kinds: ["aws"], model: "m" } }), "Redacted 2 secret(s) before the LLM call"],
+    [b({ violationType: "blocked_domain", attemptedUrl: "https://evil.example" }), "Blocked domain https://evil.example"],
+  ])("%#", (e, text) => {
+    expect(describeEvent(e)).toBe(text);
   });
 });
