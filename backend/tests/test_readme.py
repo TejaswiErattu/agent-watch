@@ -179,3 +179,32 @@ def test_submission_v2_moments_and_next_steps():
         assert shipped not in nxt, shipped                          # Next steps drops what shipped
     for cut in ("rate limit", "cli"):
         assert cut in nxt, cut                                      # cut features stay future work
+
+
+def _bash_blocks(body: str) -> list[str]:
+    return re.findall(r"```bash\n(.*?)```", body, re.DOTALL)
+
+
+def test_readme_change_set_is_reviewed_approved_then_executed():
+    body = _section(README.read_text(), "Webhook alerts")
+    assert "only if nothing is replaced" not in body                 # Modify without replacement can still be unsafe
+    review = body.index("Review the complete change set")
+    approve = body.index("Get approval for this change set")
+    execute = body.index("execute-change-set")
+    assert review < approve < execute                               # prepare, review, approve, then execute
+    assert "approved for this deployment" in body                   # compared against an explicit list
+    for s in ("Action", "Replacement", "Scope", "Details"):
+        assert s in body, s                                         # the review query shows the full change rows
+    assert "--include-property-values" in body                      # warned against: it can print the URL
+    assert "one-time exception" in body and "not a standing authorization" in body
+    prepare = _bash_blocks(body[:review])
+    assert prepare and not any("execute-change-set" in b for b in prepare)   # preparing never executes
+
+
+def test_readme_webhook_temp_file_cleaned_on_failure():
+    body = _section(README.read_text(), "Webhook alerts")
+    prepare = next(b for b in _bash_blocks(body) if "mktemp" in b)
+    assert "trap 'rm -f \"$PARAMS\"' EXIT" in prepare               # removed if interrupted
+    assert "set -e" not in prepare                                  # zsh skips the EXIT trap when set -e ends a subshell
+    cleanup = prepare.index('rm -f "$PARAMS"                     #')
+    assert prepare.index("create-change-set") < cleanup              # removed right after the call, success or failure

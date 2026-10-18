@@ -102,24 +102,50 @@ Alerts can also go to a Discord or Slack channel, alongside the email. It's opti
    ```bash
    read -rs DISCORD_WEBHOOK_URL && export DISCORD_WEBHOOK_URL
    ```
-3. Don't pass it as a command-line argument (for example `--parameter-overrides AlertWebhookUrl=...`): while the command runs, its arguments are visible to anyone on the machine who can run `ps`. Instead, write the parameters to a temporary file that only you can read, create the change set from it, and delete the file. From `backend/`:
+3. **Prepare the change set.** Don't pass the URL as a command-line argument (for example `--parameter-overrides AlertWebhookUrl=...`): while the command runs, its arguments are visible to anyone on the machine who can run `ps`. Instead, write the parameters to a temporary file that only you can read, and create the change set from it. The block runs in a subshell. It deletes the file right after the AWS call returns, whether the call succeeded or failed, and a trap deletes it if the block is interrupted first. It doesn't rely on `set -e`, because zsh (the macOS default shell) skips the `EXIT` trap when `set -e` ends a subshell. From `backend/`:
    ```bash
    sam build && sam package --resolve-s3 --output-template-file .aws-sam/packaged.yaml
-   PARAMS="$(mktemp)"   # created with mode 0600: readable only by you
-   python3 - "$PARAMS" <<'PY'
+   (
+     PARAMS="$(mktemp)" || exit 1        # created with mode 0600: readable only by you
+     trap 'rm -f "$PARAMS"' EXIT         # removes it if the block is interrupted
+     trap 'exit 1' HUP INT TERM          # turn a signal into an exit, so the EXIT trap runs
+     python3 - "$PARAMS" <<'PY'
    import json, os, sys
    json.dump([{"ParameterKey": "AlertEmail", "UsePreviousValue": True},
               {"ParameterKey": "DashboardOrigin", "UsePreviousValue": True},
               {"ParameterKey": "AlertWebhookUrl", "ParameterValue": os.environ["DISCORD_WEBHOOK_URL"]}],
              open(sys.argv[1], "w"))
    PY
-   aws cloudformation create-change-set --stack-name agent-watch --change-set-name webhook-alerts \
-     --template-body file://.aws-sam/packaged.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
-     --parameters "file://$PARAMS"
-   rm -f "$PARAMS"
+     rc=$?
+     if [ "$rc" -eq 0 ]; then
+       aws cloudformation create-change-set --stack-name agent-watch --change-set-name webhook-alerts \
+         --template-body file://.aws-sam/packaged.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
+         --parameters "file://$PARAMS" --query Id --output text
+       rc=$?
+     fi
+     rm -f "$PARAMS"                     # removed as soon as the call returns, success or failure
+     if [ "$rc" -eq 0 ]; then
+       aws cloudformation wait change-set-create-complete --stack-name agent-watch --change-set-name webhook-alerts
+       rc=$?
+     fi
+     exit "$rc"
+   )
    ```
-   The value is read from the environment inside Python, so it never appears in a command's arguments. Review the change set with `aws cloudformation describe-change-set --stack-name agent-watch --change-set-name webhook-alerts --query 'Changes[].ResourceChange.[Action,LogicalResourceId,Replacement]'` (this prints no parameter values), and execute it with `aws cloudformation execute-change-set` only if nothing is replaced.
-4. Later change sets keep it with `ParameterKey=AlertWebhookUrl,UsePreviousValue=true`, or it resets to empty.
+   The value is read from the environment inside Python, so it never appears in a command's arguments or output. Creating a change set changes nothing in the stack.
+4. **Review the complete change set.** Before anyone executes it, list every change, with no parameter values:
+   ```bash
+   aws cloudformation describe-change-set --stack-name agent-watch --change-set-name webhook-alerts \
+     --query 'Changes[].ResourceChange.{Action:Action,Resource:LogicalResourceId,Type:ResourceType,Replacement:Replacement,Scope:Scope,Changed:Details[].Target.[Attribute,Name,RequiresRecreation]}'
+   ```
+   Don't add `--include-property-values`: it prints before and after values, which can include the webhook URL. Compare the output with a list of resources approved for this deployment, written down before the review: for each one, the expected action (Add, Modify, or Remove), the expected `Replacement` value, and which properties may change. "Nothing is replaced" is not enough: a Modify with `Replacement` False can still change an unexpected resource, its IAM permissions, or its configuration. If any row is missing from the approved list, has a different action or replacement flag, or changes properties that were not expected, don't execute it: delete it with `aws cloudformation delete-change-set --stack-name agent-watch --change-set-name webhook-alerts` and investigate.
+5. **Get approval for this change set.** The stack owner approves the reviewed output of this specific change set. An approval covers that change set only. For example, the 2026-10-17 webhook deployment's change set modified `ApiFunction` and `ServerlessHttpApi`, both `Replacement` False. It was executed under a one-time exception approved for exactly that deployment. That approval is not a standing authorization for those resources: every later change set gets its own review and approval.
+6. **Execute only after approval**, as a separate step:
+   ```bash
+   aws cloudformation execute-change-set --stack-name agent-watch --change-set-name webhook-alerts
+   aws cloudformation wait stack-update-complete --stack-name agent-watch
+   ```
+   Then run `scripts/verify_deploy.sh` (see "Verify a deployment").
+7. Later change sets keep the URL with `ParameterKey=AlertWebhookUrl,UsePreviousValue=true`, or it resets to empty.
 
 The parameter is `NoEcho`, so CloudFormation masks it in its own views. Only `https://discord.com`, `https://discordapp.com`, and `https://hooks.slack.com` URLs are accepted. Any other value logs one `webhook_url_rejected` warning (without the URL) and sends nothing. A failing webhook never blocks the email. Webhook text is capped at 1900 characters.
 
