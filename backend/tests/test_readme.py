@@ -400,3 +400,62 @@ def test_demo_script_config_check_offline(tmp_path, status, paths, with_pattern,
     assert (r.returncode == 0) is expect_ok, out
     assert out.startswith("OK:") if expect_ok else out.startswith("STOP:")
     assert key not in out and hashlib.sha256(key.encode()).hexdigest() not in out   # nothing secret printed
+
+
+# ---- AlertAgents deploy docs: an update must never clear the alert allowlist ----
+# A hand-written parameters file that leaves a parameter out resets it to its default, and
+# AlertAgents defaults to empty (every agent alerts). The template is the source of truth.
+
+
+def _template_parameters() -> list[str]:
+    tpl = (ROOT / "backend" / "template.yaml").read_text()
+    block = re.search(r"^Parameters:\n(.*?)^\S", tpl, re.MULTILINE | re.DOTALL).group(1)
+    return re.findall(r"^  (\w+):\s*$", block, re.MULTILINE)
+
+
+def test_template_parameters_are_the_four_documented():
+    assert _template_parameters() == ["AlertEmail", "DashboardOrigin", "AlertWebhookUrl", "AlertAgents"]
+
+
+def test_readme_use_previous_value_rule_names_every_parameter():
+    body = _section(README.read_text(), "Deploy")
+    rule = next(line for line in body.splitlines() if line.startswith("Every later change set must pass `UsePreviousValue`"))
+    for name in _template_parameters():
+        assert f"`{name}`" in rule, name
+
+
+def test_readme_parameters_file_lists_every_parameter(tmp_path):
+    # Runs only the Python heredoc of the prepare block, with a dummy URL, and reads the file it writes.
+    block = _prepare_block()
+    script = re.search(r"<<'PY'\n(.*?)\nPY\n", block, re.DOTALL).group(1)
+    (tmp_path / "params.py").write_text(script)
+    out = tmp_path / "params.json"
+    env = {**os.environ, "DISCORD_WEBHOOK_URL": f"https://discord.com/api/webhooks/1/{DUMMY}"}
+    r = subprocess.run([sys.executable, "-I", str(tmp_path / "params.py"), str(out)], env=env,
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and DUMMY not in r.stdout + r.stderr
+    params = {p["ParameterKey"]: p for p in json.loads(out.read_text())}
+    assert sorted(params) == sorted(_template_parameters())            # nothing falls back to a default
+    for kept in ("AlertEmail", "DashboardOrigin", "AlertAgents"):
+        assert params[kept] == {"ParameterKey": kept, "UsePreviousValue": True}, kept
+    assert params["AlertWebhookUrl"] == {"ParameterKey": "AlertWebhookUrl",          # the one value being set,
+                                         "ParameterValue": env["DISCORD_WEBHOOK_URL"]}  # read from the environment
+    assert len(json.loads(out.read_text())) == 4                      # no duplicate keys
+
+
+def test_readme_alert_allowlist_section():
+    body = _section(README.read_text(), "Alert allowlist (`AlertAgents`)")
+    for s in ("owner/agent", "ALERT_AGENTS", "every agent alerts", "still stored", "UsePreviousValue",
+              "clears the allowlist", "infrastructure change", "changes nothing in AWS"):
+        assert s in body, s
+    assert "ParameterKey=AlertAgents,ParameterValue=" in body and "splits the value" in body
+    tpl = (ROOT / "backend" / "template.yaml").read_text()
+    assert re.search(r"AlertAgents:\n\s+Type: String\n\s+Default: \"\"", tpl)   # "empty by default" matches the template
+    assert "tejaswi/" not in body                                       # placeholders, not the live list
+    later = _section(README.read_text(), "Webhook alerts")
+    assert "Keep `AlertAgents` the same way" in later
+
+
+def test_architecture_documents_alert_allowlist():
+    body = _section((DOCS / "ARCHITECTURE.md").read_text(), "Alert fan-out")
+    assert "ALERT_AGENTS" in body and "owner/agent" in body and "Empty means every agent alerts" in body
