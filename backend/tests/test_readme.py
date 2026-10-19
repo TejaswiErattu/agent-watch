@@ -459,3 +459,28 @@ def test_readme_alert_allowlist_section():
 def test_architecture_documents_alert_allowlist():
     body = _section((DOCS / "ARCHITECTURE.md").read_text(), "Alert fan-out")
     assert "ALERT_AGENTS" in body and "owner/agent" in body and "Empty means every agent alerts" in body
+
+
+# ---- audit record (replaces PR #17 after the rollback): history kept, nothing reverted claimed as current ----
+
+
+def test_progress_audit_record_after_rollback():
+    text = (ROOT / "PROGRESS.md").read_text()
+    done = _section(text, "Done")
+    audit = done[done.index("- Audit fixes (2026-10-18"):done.index("- Rollback 2026-10-18")]
+    for s in ("PR #14", "PR #15", "PR #16", "AlertOwnerIds", "owner/agent", "alert-agents",
+              "not re-checked against the live stack", "not 11.3 evidence", "backend 638"):
+        assert s in audit, s
+    assert "tejaswi/" not in audit                                      # the live allowlist value is not repeated
+    assert "recorded in open PR #17" not in text                        # the record now lives in PROGRESS
+    assert "next: record the video" not in text.splitlines()[2]         # the header names no reverted next step
+    nxt = next(l for l in text.splitlines() if l.startswith("- EXACT NEXT STEP"))
+    assert "11.3" in nxt and "PR #17" in nxt and "record the video" not in nxt
+
+
+def test_interview_prep_audit_questions():
+    body = _section((DOCS / "INTERVIEW_PREP.md").read_text(), "Audit fixes: alert abuse (PR #14)")
+    assert body.count("**Q:**") == 3
+    for s in ("owner/agent pairs instead of owner ids", "allowed_mentions", "refuse redirects"):
+        assert s in body, s
+    assert "never redirects" not in body                               # unverified claim about Discord and Slack
