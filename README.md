@@ -58,7 +58,7 @@ All four run in the SDK before the call or tool runs. Wrapped calls raise a subc
 
 ### Alerts
 
-When the API stores a new blocked event, it publishes one alert to SNS (email). If the `AlertWebhookUrl` stack parameter is set, the same alert also goes to the Discord or Slack webhook through a fan-out publisher: each channel is isolated, so a failing webhook never stops the email, and failures are logged by exception type only. Alert text includes the agent id, violation type, time, and the attempt (path, command, or spend), with control characters escaped. A duplicate event sends nothing.
+When the API stores a new blocked event, it publishes one alert to SNS (email). If the `AlertWebhookUrl` stack parameter is set, the same alert also goes to the Discord or Slack webhook through a fan-out publisher: each channel is isolated, so a failing webhook never stops the email, and failures are logged by exception type only. Alert text includes the agent id, violation type, time, and the attempt (path, command, or spend), with control characters escaped. A duplicate event sends nothing. If the `AlertAgents` stack parameter lists `owner/agent` pairs, only those agents' blocked events send alerts (see "Alert allowlist").
 
 ### Dashboard
 
@@ -103,7 +103,7 @@ Prerequisites: AWS CLI credentials for us-west-2, SAM CLI, Python 3.11, and Node
 2. Dashboard: connect the repo in AWS Amplify Hosting (platform `WEB`). The root `amplify.yml` is a monorepo spec with `appRoot: dashboard`. Set the env var `NEXT_PUBLIC_API_URL` to the `ApiUrl`. Amplify runs `npm ci` and `npm run build` and serves `out/`.
 3. CORS allows only `DashboardOrigin`. For local dashboard development against the deployed API, redeploy with `DashboardOrigin=http://localhost:3000`.
 
-Every later change set must pass `UsePreviousValue` for `AlertEmail`, `DashboardOrigin`, and `AlertWebhookUrl`, so no parameter falls back to its default.
+Every later change set must pass `UsePreviousValue` for `AlertEmail`, `DashboardOrigin`, `AlertWebhookUrl`, and `AlertAgents`, so no parameter falls back to its default. On an existing stack, `sam deploy` does this for you: it passes `UsePreviousValue` for every parameter you don't list in `--parameter-overrides` (per the SAM CLI source, checked in version 1.167.0). A parameters file you pass to `aws cloudformation create-change-set` yourself, as in "Webhook alerts", gets no such help: the CloudFormation API reference says a parameter you don't specify gets its template default. So that file must list all four.
 
 ### Webhook alerts
 
@@ -128,6 +128,7 @@ Alerts can also go to a Discord or Slack channel, alongside the email. It's opti
    import json, os, sys
    json.dump([{"ParameterKey": "AlertEmail", "UsePreviousValue": True},
               {"ParameterKey": "DashboardOrigin", "UsePreviousValue": True},
+              {"ParameterKey": "AlertAgents", "UsePreviousValue": True},
               {"ParameterKey": "AlertWebhookUrl", "ParameterValue": os.environ["DISCORD_WEBHOOK_URL"]}],
              open(sys.argv[1], "w"))
    PY
@@ -160,9 +161,18 @@ Alerts can also go to a Discord or Slack channel, alongside the email. It's opti
    aws cloudformation wait stack-update-complete --stack-name agent-watch
    ```
    Then run `scripts/verify_deploy.sh` (see "Verify a deployment").
-7. Later change sets keep the URL with `ParameterKey=AlertWebhookUrl,UsePreviousValue=true`, or it resets to empty.
+7. Later change sets keep the URL with `ParameterKey=AlertWebhookUrl,UsePreviousValue=true`, or it resets to empty. Keep `AlertAgents` the same way, or the alert allowlist resets to empty (see "Alert allowlist").
 
 The parameter is `NoEcho`, so CloudFormation masks it in its own views. Only `https://discord.com`, `https://discordapp.com`, and `https://hooks.slack.com` URLs are accepted. Any other value logs one `webhook_url_rejected` warning (without the URL) and sends nothing. A failing webhook never blocks the email. Webhook text is capped at 1900 characters.
+
+### Alert allowlist (`AlertAgents`)
+
+`AlertAgents` is a comma-separated list of `owner/agent` pairs, for example `<owner-id>/bad-bot,<owner-id>/demo-bot`. The Lambda reads it as `ALERT_AGENTS`. When the list is set, only those agents' blocked events send an email or a webhook message. Blocked events from any other agent are still stored, but send no alert. The list holds pairs, not owner ids, because an owner id isn't bound to a key: anyone can create a new agent id under your owner id with their own key. An agent id, once claimed, is bound to its key.
+
+- **Empty (the default) means every agent alerts.** The API URL is public, so with an empty list anyone who creates an agent can make your stack send alerts with text they choose.
+- **Keep it on every update.** `sam deploy` keeps it unless you list it in `--parameter-overrides`. A parameters file must include `{"ParameterKey": "AlertAgents", "UsePreviousValue": true}`. Leaving it out of a parameters file clears the allowlist: the omitted parameter gets its template default, which is empty, and alerts open up to every agent again.
+- **Changing it is an infrastructure change.** Put the new list in the parameters file as `"ParameterValue"`, not in the CLI shorthand `ParameterKey=AlertAgents,ParameterValue=...`, which splits the value at its commas. Then review, approve, and execute that change set like any other. Editing this README changes nothing in AWS.
+- If your stack predates `AlertAgents`, it has no previous value to keep, so on that first update pass a `"ParameterValue"` instead of `UsePreviousValue` (SAM CLI drops `UsePreviousValue` for parameters new to a stack for this reason). An empty value keeps every agent alerting.
 
 ## Run the demos
 
