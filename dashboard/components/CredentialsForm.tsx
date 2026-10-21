@@ -30,7 +30,7 @@ export function CredentialsForm({ onSaved, error }: CredentialsFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-sm space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-1">
         <label htmlFor="ownerId" className="text-sm font-medium">
           Owner ID

@@ -138,7 +138,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
           aria-describedby={capError ? "cap-error" : undefined}
         />
         {capError ? (
-          <p id="cap-error" role="alert" className="text-sm text-red-700">
+          <p id="cap-error" role="alert" className="text-sm text-danger">
             {capError}
           </p>
         ) : null}
@@ -148,7 +148,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
         <span className="text-sm font-medium">Blocked paths</span>
         <ul className="space-y-1">
           {paths.map((p) => (
-            <li key={p} className="flex items-center justify-between gap-2 text-sm">
+            <li key={p} className="flex items-center justify-between gap-2 rounded-xl bg-surface-raised py-1 pl-3 pr-1 text-sm">
               <span className="min-w-0 break-all">{p}</span>
               <Button
                 type="button"
@@ -162,8 +162,8 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
             </li>
           ))}
         </ul>
-        <div className="flex items-end gap-2">
-          <div className="space-y-1">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-0 flex-1 space-y-1">
             <label htmlFor="newPath" className="text-sm font-medium">
               Add path
             </label>
@@ -184,8 +184,8 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
         <span className="text-sm font-medium">Blocked commands (regex, case-insensitive)</span>
         <ul className="space-y-1">
           {commands.map((c) => (
-            <li key={c} className="flex items-center justify-between gap-2 text-sm">
-              <code className="break-all">{c}</code>
+            <li key={c} className="flex items-center justify-between gap-2 rounded-xl bg-surface-raised py-1 pl-3 pr-1 text-sm">
+              <code className="min-w-0 break-all text-accent">{c}</code>
               <Button
                 type="button"
                 variant="ghost"
@@ -199,7 +199,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
           ))}
         </ul>
         <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1">
+          <div className="min-w-0 flex-1 space-y-1">
             <label htmlFor="newCommand" className="text-sm font-medium">
               Add pattern
             </label>
@@ -221,7 +221,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
 
       {error ? <Alert variant="destructive">{error}</Alert> : null}
       {saved && !error ? (
-        <p className="text-sm text-green-700">Saved.</p>
+        <p className="text-sm text-success">Saved.</p>
       ) : null}
 
       <Button type="button" onClick={handleSave} disabled={!loaded}>

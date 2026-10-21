@@ -14,6 +14,9 @@ import { SpendChart } from "@/components/SpendChart";
 import { Alert } from "@/components/ui/alert";
 import { AuthError, getConfig, getSpend, getStatus, getTimeline } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { AppShell } from "@/components/AppShell";
+import { Activity, Gauge, KeyRound, ListChecks, ShieldCheck } from "lucide-react";
 import { bucketSpend, fetchWindow, HOUR_MS } from "@/lib/spend";
 import type { SpendBucket, SpendResponse, StatusResponse } from "@/lib/types";
 
@@ -91,34 +94,47 @@ function AgentDetail() {
 
   if (!creds) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
-        <h1 className="text-2xl font-semibold">Agent Watch</h1>
-        <p className="mt-2 mb-6 text-sm text-gray-600">
-          Enter your credentials to view this agent.
-        </p>
-        <CredentialsForm onSaved={() => setCreds(loadCredentials())} />
-      </main>
+      <AppShell active="agent" agentId={agentId}>
+        <Card className="mx-auto max-w-md">
+          <div className="mb-4 flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-accent"
+            >
+              <KeyRound className="h-4 w-4" />
+            </span>
+            <h1 className="text-xl font-semibold">Agent Watch</h1>
+          </div>
+          <p className="mb-4 text-sm text-muted">Enter your credentials to view this agent.</p>
+          <CredentialsForm onSaved={() => setCreds(loadCredentials())} />
+        </Card>
+      </AppShell>
     );
   }
 
   if (!agentId) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
-        <p className="text-sm">No agent selected.</p>
-        <Link href="/" className="text-blue-600 hover:underline">
-          Back to inventory
-        </Link>
-      </main>
+      <AppShell active="agent" ownerId={creds.ownerId}>
+        <Card className="space-y-2">
+          <p className="text-sm">No agent selected.</p>
+          <Link href="/" className="text-sm text-accent hover:underline">
+            Back to inventory
+          </Link>
+        </Card>
+      </AppShell>
     );
   }
 
   const status = overview?.status ?? null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-8">
+    <AppShell active="agent" ownerId={creds.ownerId} agentId={agentId}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="min-w-0 break-all text-2xl font-semibold">{agentId}</h1>
-        <Link href="/" className="text-sm text-blue-600 hover:underline">
+        <h1 className="min-w-0 break-all text-2xl font-bold tracking-tight md:text-3xl">{agentId}</h1>
+        <Link
+          href="/"
+          className="inline-flex h-7 items-center rounded-full border border-strong px-3 text-xs font-medium text-foreground hover:bg-surface-raised"
+        >
           Back to inventory
         </Link>
       </div>
@@ -128,8 +144,7 @@ function AgentDetail() {
           Clear credentials
         </Button>
       ) : null}
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Overview</h2>
+      <Card title="Overview" icon={Gauge} className="space-y-4">
         <AgentSummary
           spend={overview?.spend ?? null}
           capUsd={overview?.capUsd ?? null}
@@ -137,38 +152,40 @@ function AgentDetail() {
           lastSeen={overview?.lastSeen ?? null}
         />
         {overview ? <SpendChart buckets={overview.buckets} capUsd={overview.capUsd} /> : null}
-      </section>
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Status</h2>
-        {status ? (
-          <>
-            <p className="text-sm">
-              Pause state:{" "}
-              <span data-testid="pause-state" className="font-medium">
-                {status.paused ? "Paused" : "Active"}
-              </span>
-              {status.paused && status.pausedAt ? (
-                <span className="text-gray-500"> since {status.pausedAt}</span>
-              ) : null}
-            </p>
-            <PauseButton
-              creds={creds}
-              agentId={agentId}
-              status={status}
-              onChanged={() => void refresh()}
-            />
-          </>
-        ) : null}
-      </section>
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Rules</h2>
-        <RulesEditor creds={creds} agentId={agentId} onSaved={() => void refresh()} />
-      </section>
-      <section className="space-y-3">
-        <h2 className="text-lg font-medium">Timeline</h2>
+      </Card>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card title="Status" icon={Activity}>
+          {status ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                Pause state:{" "}
+                <span
+                  data-testid="pause-state"
+                  className={status.paused ? "font-medium text-danger" : "font-medium text-success"}
+                >
+                  {status.paused ? "Paused" : "Active"}
+                </span>
+                {status.paused && status.pausedAt ? (
+                  <span className="text-muted"> since {status.pausedAt}</span>
+                ) : null}
+              </p>
+              <PauseButton
+                creds={creds}
+                agentId={agentId}
+                status={status}
+                onChanged={() => void refresh()}
+              />
+            </div>
+          ) : null}
+        </Card>
+        <Card title="Rules" icon={ShieldCheck}>
+          <RulesEditor creds={creds} agentId={agentId} onSaved={() => void refresh()} />
+        </Card>
+      </div>
+      <Card title="Timeline" icon={ListChecks}>
         <Timeline creds={creds} agentId={agentId} />
-      </section>
-    </main>
+      </Card>
+    </AppShell>
   );
 }
 
