@@ -23,6 +23,16 @@ export function relativeTime(ts: string, now: number = Date.now()): string {
   return `${Math.floor(h / 24)} d ago`;
 }
 
+// Short display name for a model id: drops a region prefix (us./eu./apac.), the
+// "anthropic." vendor prefix, a trailing -YYYYMMDD date, and a -v1:0 style
+// version. "us.anthropic.claude-haiku-4-5-20251001-v1:0" -> "claude-haiku-4-5".
+// Anything that doesn't match that shape, or would shorten to "", is returned unchanged.
+const MODEL_ID_RE = /^(?:(?:us|eu|apac)\.)?(?:anthropic\.)?(.+?)(?:-\d{8})?(?:-v\d+(?::\d+)?)?$/;
+export function shortModel(id: string): string {
+  const m = MODEL_ID_RE.exec(id);
+  return m && m[1] ? m[1] : id;
+}
+
 function metaNum(e: TimelineItem, key: string): string {
   const v = e.meta?.[key];
   return typeof v === "number" ? String(v) : "?";

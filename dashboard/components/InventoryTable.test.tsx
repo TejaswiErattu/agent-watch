@@ -124,3 +124,27 @@ describe("InventoryTable wrapping", () => {
     expect(link.closest("table")!.parentElement!.className).toMatch(/\boverflow-auto\b/);
   });
 });
+
+describe("InventoryTable Model column", () => {
+  const full = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+  it("shows the short name on one line, with the full id on hover and for screen readers", () => {
+    render(<InventoryTable agents={[{ ...reported, model: full }]} />);
+    const shown = screen.getByTestId("model-short");
+    expect(shown).toHaveTextContent("claude-haiku-4-5");
+    expect(shown.className).toMatch(/\bwhitespace-nowrap\b/);
+    expect(shown).toHaveAttribute("title", full);
+    expect(shown).toHaveAttribute("aria-hidden", "true");
+    const sr = screen.getByText(full);
+    expect(sr.className).toMatch(/\bsr-only\b/);
+    // The cell's accessible text is the full id, once.
+    expect(sr.closest("td")!.textContent).toBe(`claude-haiku-4-5${full}`);
+  });
+
+  it("an id that is already short renders once, without an sr-only copy", () => {
+    render(<InventoryTable agents={[{ ...reported, model: "claude-sonnet-4-5" }]} />);
+    const el = screen.getByText("claude-sonnet-4-5");
+    expect(el).toHaveAttribute("title", "claude-sonnet-4-5");
+    expect(el.closest("td")!.querySelector(".sr-only")).toBeNull();
+  });
+});
