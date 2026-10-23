@@ -4,19 +4,22 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50",
+  // Focus: 2px accent ring with an offset in the page color, so it reads on any card.
+  "inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-gray-900 text-white hover:bg-gray-800",
-        outline: "border border-gray-300 bg-white hover:bg-gray-100",
-        ghost: "hover:bg-gray-100",
-        destructive: "bg-red-600 text-white hover:bg-red-500",
+        // Dark text on the accent (7.53:1); white would be about 2.4:1.
+        default: "bg-accent text-background hover:bg-accent-strong",
+        outline: "border border-strong bg-transparent text-foreground hover:bg-surface-raised",
+        ghost: "text-foreground hover:bg-surface-raised",
+        destructive: "bg-danger text-background hover:bg-danger/90",
       },
       size: {
         default: "h-9 px-4 py-2",
         sm: "h-8 px-3",
         icon: "h-9 w-9",
+        pill: "h-7 rounded-full px-3 text-xs",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

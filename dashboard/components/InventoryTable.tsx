@@ -43,7 +43,7 @@ export function InventoryTable({ agents, now }: InventoryTableProps) {
       <TableBody>
         {agents.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={5} className="py-6 text-center text-gray-600">
+            <TableCell colSpan={5} className="py-6 text-center text-muted">
               No agents for these credentials. Check the key, or run an agent once.
             </TableCell>
           </TableRow>
@@ -55,7 +55,7 @@ export function InventoryTable({ agents, now }: InventoryTableProps) {
               <TableCell>
                 <Link
                   href={`/agent?id=${encodeURIComponent(a.agentId)}`}
-                  className="font-medium text-blue-600 hover:underline"
+                  className="break-all rounded font-medium text-accent hover:underline"
                 >
                   {a.agentId}
                 </Link>
@@ -63,22 +63,22 @@ export function InventoryTable({ agents, now }: InventoryTableProps) {
               <TableCell>{a.model ?? ""}</TableCell>
               <TableCell>
                 {unreported ? (
-                  <span className="text-gray-500">not yet reported</span>
+                  <span className="text-muted">not yet reported</span>
                 ) : (
                   <>
                     {a.lastSeen}
                     {isStale(a.lastSeen, now) ? (
-                      <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                      <span className="ml-2 rounded-full bg-amber/15 px-2 py-0.5 text-xs font-medium text-amber">
                         stale
                       </span>
                     ) : null}
                   </>
                 )}
               </TableCell>
-              <TableCell>{formatSpend(a.totalSpendUsd)}</TableCell>
+              <TableCell className="font-medium">{formatSpend(a.totalSpendUsd)}</TableCell>
               <TableCell>
                 {a.paused === true ? (
-                  <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                  <span className="rounded-full bg-danger/15 px-2 py-0.5 text-xs font-medium text-danger">
                     Paused
                   </span>
                 ) : (

@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+// Self-hosted at build time by next/font, so the static export needs no runtime font request.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Agent Watch",
@@ -12,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-background text-foreground antialiased">
+    <html lang="en" className={inter.variable}>
+      <body className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground antialiased">
         {children}
       </body>
     </html>

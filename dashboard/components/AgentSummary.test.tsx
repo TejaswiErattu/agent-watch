@@ -25,13 +25,15 @@ describe("AgentSummary", () => {
     expect(screen.getByTestId("summary-cap")).toHaveTextContent("of $0.0100 cap");
     const bar = screen.getByRole("progressbar");
     expect(bar).toHaveAttribute("aria-valuenow", "25");
-    expect(screen.getByTestId("cap-bar").className).not.toMatch(/red/);
+    expect(screen.getByTestId("cap-bar").className).not.toMatch(/danger/);
+    expect(screen.queryByText("over cap")).toBeNull();
   });
 
   it("clamps at 100 and turns red at or over the cap", () => {
     render(<AgentSummary spend={spend(0.02)} capUsd={0.01} status={active} lastSeen={null} now={NOW} />);
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
-    expect(screen.getByTestId("cap-bar").className).toMatch(/bg-red/);
+    expect(screen.getByTestId("cap-bar").className).toMatch(/\bbg-danger\b/);
+    expect(screen.getByText("over cap")).toBeInTheDocument();
   });
 
   it("capPercent handles exact cap and a zero cap", () => {

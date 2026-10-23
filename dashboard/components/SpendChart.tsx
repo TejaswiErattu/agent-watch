@@ -78,9 +78,41 @@ export function SpendChart({ buckets, capUsd }: SpendChartProps) {
           role="img"
           aria-label="LLM spend per hour, last 24 hours"
         >
-          <line data-axis x1={PAD_L} y1={baseY} x2={W} y2={baseY} stroke="#9ca3af" strokeWidth={1} />
+          {/* Faint gridlines at 25/50/75% of the plot height. */}
+          {[0.25, 0.5, 0.75].map((f) => (
+            <line
+              key={f}
+              x1={PAD_L}
+              y1={PAD_T + plotH * (1 - f)}
+              x2={W}
+              y2={PAD_T + plotH * (1 - f)}
+              className="stroke-muted/20"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          <line
+            data-axis
+            x1={PAD_L}
+            y1={baseY}
+            x2={W}
+            y2={baseY}
+            className="stroke-muted"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
           {geom.map(({ b, h, x, label }) => (
-            <rect key={b.start} data-bar x={x} y={baseY - h} width={barW} height={h} fill="#2563eb">
+            <rect
+              key={b.start}
+              data-bar
+              x={x}
+              y={baseY - h}
+              width={barW}
+              height={h}
+              rx={1.5}
+              // An hour with blocked actions is drawn in danger red; otherwise the accent with a soft glow.
+              className={b.blocked > 0 ? "fill-danger" : "fill-accent drop-shadow-glow"}
+            >
               <title>{`${label}: ${formatSpend(b.costUsd)}, ${b.blocked} blocked`}</title>
             </rect>
           ))}
@@ -92,7 +124,7 @@ export function SpendChart({ buckets, capUsd }: SpendChartProps) {
               {b.blocked > 0 ? (
                 <span
                   data-blocked-marker
-                  className="absolute text-[10px] font-semibold leading-none text-red-600"
+                  className="absolute text-[11px] font-semibold leading-none text-danger"
                   style={{
                     left: pct(x + barW / 2, W),
                     top: pct(baseY - h - 2, H),
@@ -106,7 +138,7 @@ export function SpendChart({ buckets, capUsd }: SpendChartProps) {
                 <span
                   data-hour-label
                   data-anchor={anchor}
-                  className="absolute whitespace-nowrap text-[9px] leading-none text-gray-500"
+                  className="absolute whitespace-nowrap text-[11px] leading-none text-muted"
                   style={{
                     left: pct(labelX, W),
                     top: pct(H - 2, H),
@@ -121,9 +153,9 @@ export function SpendChart({ buckets, capUsd }: SpendChartProps) {
         </div>
       </div>
       {empty ? (
-        <figcaption className="text-sm text-gray-500">No LLM calls in the last 24 hours</figcaption>
+        <figcaption className="text-sm text-muted">No LLM calls in the last 24 hours</figcaption>
       ) : (
-        <figcaption className="text-xs text-gray-500">
+        <figcaption className="text-xs text-muted">
           Bars: LLM spend per hour. Red numbers: blocked actions in that hour.
         </figcaption>
       )}

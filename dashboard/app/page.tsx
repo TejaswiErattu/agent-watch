@@ -13,6 +13,9 @@ import { InventoryTable } from "@/components/InventoryTable";
 import { AddAgentForm } from "@/components/AddAgentForm";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
+import { AppShell } from "@/components/AppShell";
+import { KeyRound, LayoutGrid, Search } from "lucide-react";
 
 const POLL_MS = 30_000;
 
@@ -68,30 +71,51 @@ export default function Home() {
 
   if (!creds || authFailed) {
     return (
-      <main className="mx-auto max-w-5xl p-8">
-        <h1 className="text-2xl font-semibold">Agent Watch</h1>
-        <p className="mt-2 mb-6 text-sm text-gray-600">
-          Enter your owner ID and API key to see your agents.
-        </p>
-        <CredentialsForm
-          onSaved={handleSaved}
-          error={authFailed ? "Credentials not accepted" : undefined}
-        />
-      </main>
+      <AppShell active="inventory">
+        <Hero />
+        <Card title="Credentials" icon={KeyRound} className="mx-auto max-w-md">
+          <p className="mb-4 text-sm text-muted">
+            Enter your owner ID and API key to see your agents.
+          </p>
+          <CredentialsForm
+            onSaved={handleSaved}
+            error={authFailed ? "Credentials not accepted" : undefined}
+          />
+        </Card>
+      </AppShell>
     );
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Agent Watch</h1>
+    <AppShell
+      active="inventory"
+      ownerId={creds.ownerId}
+      actions={
         <Button variant="outline" onClick={handleClear}>
           Clear credentials
         </Button>
-      </div>
-      <AddAgentForm />
+      }
+    >
+      <Hero />
+      <Card title="Open an agent" icon={Search}>
+        <AddAgentForm />
+      </Card>
       {error ? <Alert variant="destructive">{error}</Alert> : null}
-      <InventoryTable agents={agents} />
-    </main>
+      <Card title="Inventory" icon={LayoutGrid}>
+        <InventoryTable agents={agents} />
+      </Card>
+    </AppShell>
+  );
+}
+
+// Pure-CSS gradient hero (no image files): orange to amber radial glow, dark text.
+function Hero() {
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-hero p-6 text-background shadow-glow md:p-8">
+      <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Agent Watch</h1>
+      <p className="mt-2 text-sm font-medium md:text-base">
+        See, control, and cap what your AI agents do.
+      </p>
+    </div>
   );
 }
