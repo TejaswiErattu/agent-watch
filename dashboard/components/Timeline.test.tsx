@@ -213,7 +213,21 @@ describe("Timeline long text (audit fix)", () => {
     });
     render(<Timeline creds={creds} agentId="bot1" />);
     const el = await screen.findByText(`Blocked path ${long}`);
-    expect(el.className).toMatch(/\bbreak-all\b/);
+    expect(el.className).toContain("[overflow-wrap:anywhere]");
+    expect(el.className).not.toMatch(/\bbreak-all\b/);
     expect(el.className).toMatch(/\bmin-w-0\b/);
+  });
+
+  it("keeps the token counts of an llm_call row on one line", async () => {
+    getTimeline.mockResolvedValue({
+      events: [ev({ type: "llm_call", model: "claude-haiku-4-5", inputTokens: 50, outputTokens: 74, costUsd: 0.0004 })],
+      nextCursor: null,
+    });
+    render(<Timeline creds={creds} agentId="bot1" />);
+    const tokens = await screen.findByTestId("event-tokens");
+    expect(tokens).toHaveTextContent("(in 50, out 74)");
+    expect(tokens.className).toMatch(/\bwhitespace-nowrap\b/);
+    // The visible row text is unchanged.
+    expect(tokens.parentElement).toHaveTextContent("LLM call claude-haiku-4-5 (in 50, out 74)");
   });
 });

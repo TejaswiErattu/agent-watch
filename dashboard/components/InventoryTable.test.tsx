@@ -106,3 +106,21 @@ describe("InventoryTable empty state (audit fix)", () => {
     expect(screen.queryByText(/no agents for these credentials/i)).not.toBeInTheDocument();
   });
 });
+
+describe("InventoryTable wrapping", () => {
+  it("keeps short agent ids and model ids on one line", () => {
+    render(<InventoryTable agents={[{ ...reported, agentId: "demo-bot", model: "claude-haiku-4-5" }]} />);
+    expect(screen.getByRole("link", { name: "demo-bot" }).className).toMatch(/\bwhitespace-nowrap\b/);
+    expect(screen.getByText("claude-haiku-4-5").className).toMatch(/\bwhitespace-nowrap\b/);
+  });
+
+  it("a 128-char agent id can wrap, so it can't push the page wider than 375px", () => {
+    const long = "a".repeat(128);
+    render(<InventoryTable agents={[{ ...reported, agentId: long }]} />);
+    const link = screen.getByRole("link", { name: long });
+    expect(link.className).toContain("[overflow-wrap:anywhere]");
+    expect(link.className).not.toMatch(/\bwhitespace-nowrap\b|\bbreak-all\b/);
+    // Anything still too wide scrolls inside the table wrapper, never the page.
+    expect(link.closest("table")!.parentElement!.className).toMatch(/\boverflow-auto\b/);
+  });
+});

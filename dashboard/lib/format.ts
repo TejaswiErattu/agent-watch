@@ -33,11 +33,18 @@ function metaStr(e: TimelineItem, key: string): string {
   return typeof v === "string" ? v : "";
 }
 
+// The "(in N, out M)" suffix of an llm_call row, rendered on its own so it never
+// splits across lines. Null for other event types.
+export function tokenSuffix(e: TimelineItem): string | null {
+  if (e.type !== "llm_call") return null;
+  return `(in ${e.inputTokens ?? 0}, out ${e.outputTokens ?? 0})`;
+}
+
 // One line per event, with one branch per Violation_Type (Req 29.8).
 export function describeEvent(e: TimelineItem): string {
   switch (e.type) {
     case "llm_call":
-      return `LLM call ${e.model ?? ""} (in ${e.inputTokens ?? 0}, out ${e.outputTokens ?? 0})`;
+      return `LLM call ${e.model ?? ""} ${tokenSuffix(e)}`;
     case "tool_call":
       return `Tool ${e.tool ?? ""} -> ${e.target ?? ""}`;
     case "blocked":

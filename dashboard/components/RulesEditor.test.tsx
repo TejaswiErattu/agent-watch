@@ -292,7 +292,8 @@ describe("RulesEditor safety (audit fixes)", () => {
     getConfig.mockResolvedValue({ guardrails: { dailySpendCapUsd: null, blockedPaths: [long] } });
     render(<RulesEditor creds={creds} agentId="bot1" />);
     const el = await screen.findByText(long);
-    expect(el.className).toMatch(/\bbreak-all\b/);
+    expect(el.className).toContain("[overflow-wrap:anywhere]");
+    expect(el.className).not.toMatch(/\bbreak-all\b/);
     expect(el.className).toMatch(/\bmin-w-0\b/);
   });
 });

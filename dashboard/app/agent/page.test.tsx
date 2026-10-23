@@ -183,7 +183,8 @@ describe("agent page audit fixes", () => {
     searchParams = new URLSearchParams(`id=${long}`);
     render(<AgentPage />);
     const h1 = await screen.findByRole("heading", { level: 1, name: long });
-    expect(h1.className).toMatch(/\bbreak-all\b/);
+    expect(h1.className).toContain("[overflow-wrap:anywhere]");
+    expect(h1.className).not.toMatch(/\bbreak-all\b/);
     expect(h1.className).toMatch(/\bmin-w-0\b/);
     expect(h1.parentElement!.className).toMatch(/\bflex-wrap\b/);
   });

@@ -130,7 +130,7 @@ function AgentDetail() {
   return (
     <AppShell active="agent" ownerId={creds.ownerId} agentId={agentId}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="min-w-0 break-all text-2xl font-bold tracking-tight md:text-3xl">{agentId}</h1>
+        <h1 className="min-w-0 text-2xl font-bold tracking-tight [overflow-wrap:anywhere] md:text-3xl">{agentId}</h1>
         <Link
           href="/"
           className="inline-flex h-7 items-center rounded-full border border-strong px-3 text-xs font-medium text-foreground hover:bg-surface-raised"
