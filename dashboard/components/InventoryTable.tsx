@@ -23,6 +23,13 @@ export function isStale(lastSeen: string | null, now: number = Date.now()): bool
   return !Number.isNaN(t) && now - t > STALE_MS;
 }
 
+// Short values stay on one line (no "demo" / "-bot" split). A value longer than a
+// column can hold may wrap, but only between characters of that one long string.
+export const NOWRAP_MAX = 24;
+export function cellWrap(value: string): string {
+  return value.length <= NOWRAP_MAX ? "whitespace-nowrap" : "[overflow-wrap:anywhere]";
+}
+
 export interface InventoryTableProps {
   agents: InventoryItem[];
   now?: number;
@@ -55,12 +62,14 @@ export function InventoryTable({ agents, now }: InventoryTableProps) {
               <TableCell>
                 <Link
                   href={`/agent?id=${encodeURIComponent(a.agentId)}`}
-                  className="break-all rounded font-medium text-accent hover:underline"
+                  className={`rounded font-medium text-accent hover:underline ${cellWrap(a.agentId)}`}
                 >
                   {a.agentId}
                 </Link>
               </TableCell>
-              <TableCell>{a.model ?? ""}</TableCell>
+              <TableCell>
+                <span className={cellWrap(a.model ?? "")}>{a.model ?? ""}</span>
+              </TableCell>
               <TableCell>
                 {unreported ? (
                   <span className="text-muted">not yet reported</span>

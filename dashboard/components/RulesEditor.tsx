@@ -149,7 +149,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
         <ul className="space-y-1">
           {paths.map((p) => (
             <li key={p} className="flex items-center justify-between gap-2 rounded-xl bg-surface-raised py-1 pl-3 pr-1 text-sm">
-              <span className="min-w-0 break-all">{p}</span>
+              <span className="min-w-0 [overflow-wrap:anywhere]">{p}</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -185,7 +185,7 @@ export function RulesEditor({ creds, agentId, onSaved }: RulesEditorProps) {
         <ul className="space-y-1">
           {commands.map((c) => (
             <li key={c} className="flex items-center justify-between gap-2 rounded-xl bg-surface-raised py-1 pl-3 pr-1 text-sm">
-              <code className="min-w-0 break-all text-accent">{c}</code>
+              <code className="min-w-0 text-accent [overflow-wrap:anywhere]">{c}</code>
               <Button
                 type="button"
                 variant="ghost"

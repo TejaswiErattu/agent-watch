@@ -4,7 +4,7 @@ import * as React from "react";
 import { getTimeline, type TimelineQuery } from "@/lib/api";
 import type { Credentials } from "@/lib/credentials";
 import type { EventType, TimelineItem } from "@/lib/types";
-import { describeEvent, formatSpend, relativeTime } from "@/lib/format";
+import { describeEvent, formatSpend, relativeTime, tokenSuffix } from "@/lib/format";
 
 type Filter = "" | EventType;
 
@@ -19,6 +19,25 @@ function dotClass(e: TimelineItem): string {
   return "bg-accent";
 }
 
+// Words stay whole; only one unbroken long string (a path, a long id) wraps.
+// The token counts are their own nowrap span, so "out 74" never splits. The
+// visible text is exactly describeEvent(e).
+function EventText({ e }: { e: TimelineItem }) {
+  const full = describeEvent(e);
+  const suffix = tokenSuffix(e);
+  if (suffix === null || !full.endsWith(suffix)) {
+    return <span className="min-w-0 [overflow-wrap:anywhere]">{full}</span>;
+  }
+  return (
+    <span className="min-w-0 [overflow-wrap:anywhere]">
+      {full.slice(0, full.length - suffix.length)}
+      <span className="whitespace-nowrap" data-testid="event-tokens">
+        {suffix}
+      </span>
+    </span>
+  );
+}
+
 function EventRow({ e }: { e: TimelineItem }) {
   const [open, setOpen] = React.useState(false);
   const hasMeta = e.meta !== null && Object.keys(e.meta).length > 0;
@@ -30,7 +49,7 @@ function EventRow({ e }: { e: TimelineItem }) {
           <span className="text-muted" title={e.ts ?? undefined} data-testid="event-time">
             {e.ts ? relativeTime(e.ts) : ""}
           </span>
-          <span className="min-w-0 break-all">{describeEvent(e)}</span>
+          <EventText e={e} />
           {e.type === "llm_call" && e.costUsd !== null ? (
             <span className="font-medium text-foreground" data-testid="event-cost">
               {formatSpend(e.costUsd)}

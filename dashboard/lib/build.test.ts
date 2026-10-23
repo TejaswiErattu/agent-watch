@@ -19,3 +19,20 @@ describe("amplify build config", () => {
     expect(yml).toContain("npm run build");
   });
 });
+
+// break-all splits ordinary words ("demo" / "-bot"); wrapping uses overflow-wrap:anywhere instead.
+describe("no break-all in dashboard source", () => {
+  it("app/ and components/ never use break-all", async () => {
+    const { readdirSync, statSync } = await import("node:fs");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((f) => {
+        const p = resolve(dir, f);
+        return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(f) && !/\.test\./.test(f) ? [p] : [];
+      });
+    const root = resolve(__dirname, "..");
+    const hits = [...walk(resolve(root, "app")), ...walk(resolve(root, "components"))].filter((p) =>
+      readFileSync(p, "utf-8").includes("break-all")
+    );
+    expect(hits).toEqual([]);
+  });
+});

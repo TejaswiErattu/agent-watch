@@ -48,7 +48,7 @@ export function AppShell({ active, ownerId, agentId, actions, children }: AppShe
       </aside>
       <div className="min-w-0 flex-1">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 md:px-8">
-          <p className="min-w-0 break-all text-sm text-muted">
+          <p className="min-w-0 text-sm text-muted [overflow-wrap:anywhere]">
             {ownerId ? (
               <>
                 Hi, <span className="font-medium text-foreground">{ownerId}</span>
