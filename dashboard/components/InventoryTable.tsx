@@ -9,7 +9,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { formatSpend } from "@/lib/format";
+import { formatSpend, shortModel } from "@/lib/format";
 
 // Re-exported so existing imports from this module keep working.
 export { formatSpend };
@@ -28,6 +28,27 @@ export function isStale(lastSeen: string | null, now: number = Date.now()): bool
 export const NOWRAP_MAX = 24;
 export function cellWrap(value: string): string {
   return value.length <= NOWRAP_MAX ? "whitespace-nowrap" : "[overflow-wrap:anywhere]";
+}
+
+// Short model name on one line, full id on hover (title) and for screen readers
+// (sr-only). When the short name is the full id, one span is enough.
+function ModelName({ id }: { id: string }) {
+  const short = shortModel(id);
+  if (short === id) {
+    return (
+      <span className="whitespace-nowrap" title={id || undefined}>
+        {id}
+      </span>
+    );
+  }
+  return (
+    <>
+      <span className="whitespace-nowrap" title={id} aria-hidden="true" data-testid="model-short">
+        {short}
+      </span>
+      <span className="sr-only">{id}</span>
+    </>
+  );
 }
 
 export interface InventoryTableProps {
@@ -68,7 +89,7 @@ export function InventoryTable({ agents, now }: InventoryTableProps) {
                 </Link>
               </TableCell>
               <TableCell>
-                <span className={cellWrap(a.model ?? "")}>{a.model ?? ""}</span>
+                <ModelName id={a.model ?? ""} />
               </TableCell>
               <TableCell>
                 {unreported ? (
